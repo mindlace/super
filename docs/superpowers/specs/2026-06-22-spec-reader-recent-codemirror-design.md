@@ -78,7 +78,15 @@ the current fixed `grid-cols-[20rem_1fr]` layout.
 
 ## 3. Editor: preview left, CodeMirror right
 
-- **Layout swap:** the rendered preview moves to the **left** column, the editor to the **right**.
+- **Layout swap & asymmetric split:** the rendered preview moves to the **left** column, the
+  editor to the **right**. The split is **not** 50/50: raw markdown reads best at a fixed,
+  bounded width, while the rendered preview benefits from more room. So the editor column is
+  **capped at a maximum width** (default ~`48rem`, tunable) and the **preview absorbs all surplus
+  horizontal space** once the editor hits that cap. On narrower viewports the two share space down
+  to a sensible editor **min width** (~`22rem`) before the editor stops shrinking. (Implementation:
+  flex layout — preview `flex-1`; editor `flex-1` with `max-width`/`min-width` — rather than a
+  fixed two-column grid.) CodeMirror **line-wrapping is on**, so long lines wrap within the capped
+  width instead of scrolling horizontally.
 - **CodeMirror 6** replaces the `<textarea>`: an `EditorView` mounted into a div, with
   `@codemirror/lang-markdown` for highlighting and a **dark theme matching the app**
   (`EditorView.theme` over a neutral-900 background, not the default one-dark grey).
@@ -113,7 +121,8 @@ the `/open` deep-link are all unchanged.
 - **Manual end-to-end (real browser):** the list shows titles with captions, only last-24h
   entries, newest first; long titles wrap to multiple lines (no truncation); the sidebar divider
   drags to resize and the width persists across reload; selecting opens preview-left /
-  CodeMirror-right; CodeMirror highlights markdown in the dark theme; scroll-sync still tracks
+  CodeMirror-right; at wide widths the editor stops growing at its cap and the preview takes the
+  surplus; CodeMirror highlights markdown in the dark theme; scroll-sync still tracks
   both ways; editing autosaves (`saving…`→`saved`); an external change still reloads with a toast;
   an `/open?path=` deep-link opens the right doc.
 
