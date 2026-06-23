@@ -57,8 +57,6 @@ async function makeEntry(
   const raw = await readFile(path, 'utf8').catch(() => '');
   const st = await stat(path);
   const mtime = st.mtimeMs;
-  const fileDate = parseFilenameDateMs(filename);
-  const mtimeSec = Math.floor(mtime / 1000) * 1000;
   return {
     path,
     filename,
@@ -67,7 +65,7 @@ async function makeEntry(
     worktree,
     type: typeLabel(subdir),
     mtime,
-    recency: Math.max(mtimeSec, fileDate)
+    recency: Math.max(mtime, parseFilenameDateMs(filename))
   };
 }
 
@@ -98,6 +96,7 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
     }
   }
 
+  // secondary sort by type is a stable display tiebreaker for equal-recency entries
   out.sort((a, b) => b.recency - a.recency || b.type.localeCompare(a.type));
   return out;
 }

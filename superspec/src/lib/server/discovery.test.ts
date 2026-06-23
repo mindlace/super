@@ -97,7 +97,8 @@ describe('scanSpecs', () => {
 
   it('extracts titles with heading, first-line, and filename fallbacks', async () => {
     const list = await scanSpecs(root);
-    expect(byName(list, '2026-06-20-foo-design.md')?.title).toBe('Foo Spec');
+    const specFoo = list.find((e) => e.filename === '2026-06-20-foo-design.md' && e.type === 'spec');
+    expect(specFoo?.title).toBe('Foo Spec');
     expect(byName(list, '2026-06-22-baz-design.md')?.title).toBe('no heading here');
     expect(byName(list, 'zzz-untitled.md')?.title).toBe('zzz-untitled.md');
   });
