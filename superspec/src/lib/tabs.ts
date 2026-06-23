@@ -12,6 +12,7 @@ export interface Tab {
   caption: string;
   path: string;
   active: boolean;
+  closeable: boolean;
   plans: PlanLink[];
 }
 
@@ -19,7 +20,11 @@ export function planLabel(index: number): string {
   return index === 0 ? 'plan' : `plan ${index + 1}`;
 }
 
-export function buildTabs(groups: DisplayGroup[], selectedPath: string | null): Tab[] {
+export function buildTabs(
+  groups: DisplayGroup[],
+  selectedPath: string | null,
+  openedPaths: Set<string> = new Set()
+): Tab[] {
   return groups.map((g) => {
     const plans: PlanLink[] = g.children.map((c, i) => ({
       label: planLabel(i),
@@ -32,6 +37,7 @@ export function buildTabs(groups: DisplayGroup[], selectedPath: string | null): 
       caption: captionFor(g),
       path: g.parent.path,
       active,
+      closeable: openedPaths.has(g.parent.path),
       plans
     };
   });

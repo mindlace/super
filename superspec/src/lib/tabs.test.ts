@@ -78,4 +78,17 @@ describe('buildTabs', () => {
   it('returns an empty array for no groups', () => {
     expect(buildTabs([], null)).toEqual([]);
   });
+
+  it('marks a tab closeable only when its path is in openedPaths', () => {
+    const opened = group(entry({ filename: 'opened-design.md', title: 'Opened' }));
+    const normal = group(entry({ filename: 'normal-design.md', title: 'Normal' }));
+    const tabs = buildTabs([opened, normal], null, new Set([opened.parent.path]));
+    expect(tabs[0].closeable).toBe(true);
+    expect(tabs[1].closeable).toBe(false);
+  });
+
+  it('defaults closeable to false when openedPaths is omitted', () => {
+    const [tab] = buildTabs([group(entry({ filename: 's-design.md' }))], null);
+    expect(tab.closeable).toBe(false);
+  });
 });

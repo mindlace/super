@@ -1,8 +1,9 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
+import { listDirs, listMarkdown } from './fswalk';
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?:-(\d{2})(\d{2}))?/;
 
@@ -29,25 +30,7 @@ function typeLabel(subdir: string): string {
   return subdir;
 }
 
-async function listDirs(path: string): Promise<string[]> {
-  try {
-    const entries = await readdir(path, { withFileTypes: true });
-    return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  } catch {
-    return [];
-  }
-}
-
-async function listMarkdown(dir: string): Promise<string[]> {
-  try {
-    const entries = await readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
-  } catch {
-    return [];
-  }
-}
-
-async function makeEntry(
+export async function makeEntry(
   dir: string,
   filename: string,
   project: string,
