@@ -5,6 +5,7 @@
   import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
   import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
   import { markdown } from '@codemirror/lang-markdown';
+  import { languages } from '@codemirror/language-data';
   import { tags } from '@lezer/highlight';
   import { renderMarkdown } from '$lib/render';
 
@@ -72,12 +73,29 @@
   );
 
   const mdHighlight = HighlightStyle.define([
+    // Markdown structure
     { tag: tags.heading, color: '#93c5fd', fontWeight: 'bold' },
     { tag: tags.strong, color: '#fde68a', fontWeight: 'bold' },
     { tag: tags.emphasis, color: '#fcd34d', fontStyle: 'italic' },
     { tag: tags.link, color: '#7dd3fc', textDecoration: 'underline' },
     { tag: tags.url, color: '#7dd3fc' },
     { tag: tags.monospace, color: '#fca5a5' },
+    // Code tokens inside fenced blocks
+    { tag: tags.keyword, color: '#c792ea' },
+    { tag: tags.controlKeyword, color: '#c792ea' },
+    { tag: tags.moduleKeyword, color: '#c792ea' },
+    { tag: tags.string, color: '#c3e88d' },
+    { tag: tags.special(tags.string), color: '#c3e88d' },
+    { tag: tags.regexp, color: '#c3e88d' },
+    { tag: tags.comment, color: '#7d8590', fontStyle: 'italic' },
+    { tag: tags.number, color: '#f78c6c' },
+    { tag: [tags.bool, tags.null, tags.atom], color: '#ff9cac' },
+    { tag: [tags.typeName, tags.className], color: '#ffcb6b' },
+    { tag: tags.propertyName, color: '#82aaff' },
+    { tag: tags.function(tags.variableName), color: '#82aaff' },
+    { tag: tags.variableName, color: '#eeffff' },
+    { tag: [tags.operator, tags.punctuation], color: '#89ddff' },
+    // List / quote markup — recolored in Task 5
     { tag: tags.list, color: '#a3a3a3' },
     { tag: tags.quote, color: '#a3a3a3', fontStyle: 'italic' }
   ]);
@@ -90,7 +108,7 @@
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown(),
+          markdown({ codeLanguages: languages }),
           EditorView.lineWrapping,
           syntaxHighlighting(mdHighlight),
           highlightActiveLine(),
