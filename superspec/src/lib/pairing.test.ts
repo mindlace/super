@@ -89,6 +89,17 @@ describe('pairAndGroup', () => {
     expect(groups.every((g) => g.children.length === 0)).toBe(true);
   });
 
+  it('attaches the plan to the newest spec when two specs share a pair key', () => {
+    const older = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', recency: 10 });
+    const newer = entry({ filename: '2026-06-21-foo-design.md', type: 'spec', recency: 50 });
+    const plan = entry({ filename: '2026-06-22-foo.md', type: 'plan', recency: 30 });
+    const groups = pairAndGroup([older, newer, plan]);
+    const newerGroup = groups.find((g) => g.parent.filename === '2026-06-21-foo-design.md');
+    const olderGroup = groups.find((g) => g.parent.filename === '2026-06-20-foo-design.md');
+    expect(newerGroup?.children.map((c) => c.filename)).toEqual(['2026-06-22-foo.md']);
+    expect(olderGroup?.children).toEqual([]);
+  });
+
   it('sorts groups by group recency desc and children by recency desc', () => {
     const specA = entry({ filename: '2026-06-20-a-design.md', type: 'spec', project: 'A', recency: 10 });
     const planA1 = entry({ filename: '2026-06-20-a.md', type: 'plan', project: 'A', recency: 50 });
