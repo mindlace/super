@@ -106,7 +106,7 @@ describe('scanSpecs', () => {
   });
 
   it('does not re-surface a main spec that has no matching worktree plan', async () => {
-    // projA's foo spec is on main but its only worktree plan copy is a merged dup.
+    // projA's foo spec is on main but no live worktree plan matches its slug.
     const list = await scanSpecs(root);
     expect(list.some((e) => e.filename === '2026-06-20-foo-design.md')).toBe(false);
   });
