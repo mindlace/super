@@ -18,7 +18,7 @@ beforeAll(async () => {
   const aWtSpecs = join(root, 'projA/.claude/worktrees/wt1/docs/superpowers/specs');
   const aWtPlans = join(root, 'projA/.claude/worktrees/wt1/docs/superpowers/plans');
   await write(aWtSpecs, '2026-06-21-bar-design.md', '# Bar\n');
-  await write(aWtPlans, '2026-06-21-bar-design.md', '# Bar Plan\n');
+  await write(aWtPlans, '2026-06-21-bar.md', '# Bar Plan\n');
 
   // projB main checkout: a doc that only lives on main (escape-hatch scope).
   const bMainSpecs = join(root, 'projB/docs/superpowers/specs');
@@ -39,10 +39,10 @@ afterAll(async () => {
 
 describe('resolveDoc', () => {
   it('matches a bare name without .md and attaches sibling plans for a spec', async () => {
-    const g = await resolveDoc('2026-06-21-bar', root);
+    const g = await resolveDoc('2026-06-21-bar-design', root);
     expect(g?.parent.filename).toBe('2026-06-21-bar-design.md');
     expect(g?.parent.type).toBe('spec');
-    expect(g?.children.map((c) => c.filename)).toEqual(['2026-06-21-bar-design.md']);
+    expect(g?.children.map((c) => c.filename)).toEqual(['2026-06-21-bar.md']);
     expect(g?.children[0].type).toBe('plan');
   });
 
@@ -70,7 +70,7 @@ describe('resolveDoc', () => {
   });
 
   it('returns a childless group when the matched doc is a plan', async () => {
-    const g = await resolveDoc('plans/2026-06-21-bar-design.md', root);
+    const g = await resolveDoc('2026-06-21-bar', root);
     expect(g?.parent.type).toBe('plan');
     expect(g?.children).toEqual([]);
   });

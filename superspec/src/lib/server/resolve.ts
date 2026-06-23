@@ -2,7 +2,7 @@ import { resolve as resolvePath, join, sep } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import { listDirs, listMarkdown } from './fswalk';
 import { makeEntry } from './discovery';
-import { pairAndGroup, normalizedSlug, type DisplayGroup } from '../pairing';
+import { pairAndGroup, type DisplayGroup } from '../pairing';
 import type { SpecEntry } from '../types';
 
 interface Candidate {
@@ -46,34 +46,9 @@ export async function resolveDoc(
 
   const qMd = q.endsWith('.md') ? q : `${q}.md`;
   const abs = resolvePath(qMd);
-  const qSlug = normalizedSlug(qMd);
 
   const candidates = await collectCandidates(root);
-
-  // Filter for matches - separated by type to handle spec preference
-  const pathMatches = candidates.filter((c) => {
-    // Absolute path match
-    if (c.path === abs) return true;
-    // Suffix path match (e.g., "specs/file.md")
-    if (c.path.endsWith(sep + qMd)) return true;
-    return false;
-  });
-
-  const slugMatches = candidates.filter((c) => {
-    // Normalized slug match (e.g., "2026-06-21-bar" matches "2026-06-21-bar-design.md")
-    return normalizedSlug(c.filename) === qSlug;
-  });
-
-  // Use path matches if available, otherwise try slug matches
-  // For slug matches, prefer specs over plans
-  let matches = pathMatches.length > 0 ? pathMatches : slugMatches;
-  if (matches === slugMatches && matches.length > 1) {
-    const specs = matches.filter((c) => c.subdir === 'specs');
-    if (specs.length > 0) {
-      matches = specs;
-    }
-  }
-
+  const matches = candidates.filter((c) => c.path === abs || c.path.endsWith(sep + qMd));
   if (matches.length === 0) return null;
 
   // Newest match wins; build entries only for matches (limits stat/read IO).
