@@ -51,8 +51,14 @@ describe('captionFor', () => {
     expect(captionFor(g)).toBe('wt1 · proj · analysis');
   });
 
-  it('drops an empty branch segment', () => {
+  it('labels a branch-less main spec as main', () => {
     const g = group(entry({ filename: 's-design.md', type: 'spec', project: 'proj', worktree: null }));
-    expect(captionFor(g)).toBe('proj');
+    expect(captionFor(g)).toBe('main · proj');
+  });
+
+  it('keeps a worktree child branch on a main spec rather than main', () => {
+    const parent = entry({ filename: 's-design.md', type: 'spec', project: 'proj', worktree: null, onMain: true });
+    const child = entry({ filename: 'p.md', type: 'plan', project: 'proj', worktree: 'wtX' });
+    expect(captionFor(group(parent, [child]))).toBe('wtX · proj');
   });
 });
