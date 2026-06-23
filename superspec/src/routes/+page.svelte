@@ -44,6 +44,7 @@
 
   async function loadSpecs() {
     const res = await fetch('/api/specs');
+    if (!res.ok) return;
     specs = await res.json();
   }
 
