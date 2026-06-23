@@ -1,2 +1,5 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
+
+:root { color-scheme: dark; }
+html, body { background-color: #171717; }
