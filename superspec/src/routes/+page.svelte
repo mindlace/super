@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Editor from '$lib/components/Editor.svelte';
+  import Toast from '$lib/components/Toast.svelte';
   import type { ProjectGroup } from '$lib/types';
 
   let groups = $state<ProjectGroup[]>([]);
@@ -11,6 +12,8 @@
   let saveStatus = $state<'idle' | 'saving' | 'saved'>('idle');
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let toast = $state<string | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   async function loadGroups() {
     const res = await fetch('/api/specs');
@@ -49,7 +52,30 @@
     saveTimer = setTimeout(save, 1000);
   }
 
-  onMount(loadGroups);
+  function showToast(message: string) {
+    toast = message;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast = null), 3000);
+  }
+
+  async function pollExternalChange() {
+    if (!selectedPath || saveStatus === 'saving') return;
+    const res = await fetch(`/api/spec?path=${encodeURIComponent(selectedPath)}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.mtime > knownMtime) {
+      content = data.content;
+      knownMtime = data.mtime;
+      saveStatus = 'idle';
+      showToast('Reloaded — file changed on disk');
+    }
+  }
+
+  onMount(() => {
+    loadGroups();
+    const id = setInterval(pollExternalChange, 3000);
+    return () => clearInterval(id);
+  });
 </script>
 
 <div class="grid h-screen grid-cols-[20rem_1fr] bg-neutral-900 text-neutral-200">
@@ -70,3 +96,4 @@
     {/if}
   </main>
 </div>
+<Toast message={toast} />
