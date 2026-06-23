@@ -106,3 +106,4 @@ that writes to disk.
 - Creating or deleting specs from the app.
 - Authentication (localhost-only, single user).
 - launchd auto-start.
+
