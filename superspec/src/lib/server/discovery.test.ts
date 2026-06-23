@@ -35,6 +35,12 @@ beforeAll(async () => {
   await write(bWtSpecs, '2026-06-22-recency-design.md', '# Recency\n');
   const old = new Date(2020, 0, 1).getTime() / 1000;
   await utimes(join(bWtSpecs, '2026-06-22-recency-design.md'), old, old);
+
+  // projC: spec landed on main, plan still in a worktree -> spec is re-surfaced.
+  const cSpecs = join(root, 'projC/docs/superpowers/specs');
+  const cWtPlans = join(root, 'projC/.claude/worktrees/wt3/docs/superpowers/plans');
+  await write(cSpecs, '2026-06-19-qux-design.md', '# Qux Spec\n');
+  await write(cWtPlans, '2026-06-23-qux.md', '# Qux Plan\n');
 });
 
 afterAll(async () => {
@@ -87,9 +93,30 @@ describe('scanSpecs', () => {
     expect(planBar).toBeTruthy();
   });
 
-  it('excludes main-checkout specs and never tags an entry as main', async () => {
+  it('re-surfaces a main spec when a live worktree plan matches it by slug', async () => {
     const list = await scanSpecs(root);
-    expect(list.every((e) => e.worktree !== null)).toBe(true);
+    const quxSpec = list.find((e) => e.filename === '2026-06-19-qux-design.md');
+    expect(quxSpec?.type).toBe('spec');
+    expect(quxSpec?.onMain).toBe(true);
+    expect(quxSpec?.worktree).toBeNull();
+    expect(quxSpec?.project).toBe('projC');
+    const quxPlan = list.find((e) => e.filename === '2026-06-23-qux.md');
+    expect(quxPlan?.type).toBe('plan');
+    expect(quxPlan?.worktree).toBe('wt3');
+  });
+
+  it('does not re-surface a main spec that has no matching worktree plan', async () => {
+    // projA's foo spec is on main but no live worktree plan matches its slug.
+    const list = await scanSpecs(root);
+    expect(list.some((e) => e.filename === '2026-06-20-foo-design.md')).toBe(false);
+  });
+
+  it('never tags an ordinary worktree entry as main', async () => {
+    const list = await scanSpecs(root);
+    for (const e of list) {
+      if (e.onMain) expect(e.worktree).toBeNull();
+      else expect(e.worktree).not.toBeNull();
+    }
   });
 
   it('excludes a worktree file once it also exists in the main checkout', async () => {

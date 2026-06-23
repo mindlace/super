@@ -11,7 +11,8 @@ function entry(part: Partial<SpecEntry> & { filename: string }): SpecEntry {
     worktree: part.worktree ?? null,
     type: part.type ?? 'spec',
     mtime: part.recency ?? 1000,
-    recency: part.recency ?? 1000
+    recency: part.recency ?? 1000,
+    onMain: part.onMain
   };
 }
 
@@ -112,5 +113,37 @@ describe('pairAndGroup', () => {
       '2026-06-21-a.md' // 40
     ]);
     expect(groups[1].parent.filename).toBe('2026-06-20-b-design.md');
+  });
+
+  it('nests a worktree plan under a re-surfaced main spec', () => {
+    const spec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true, recency: 10 });
+    const plan = entry({ filename: '2026-06-23-qux.md', type: 'plan', worktree: 'wt3', recency: 50 });
+    const groups = pairAndGroup([spec, plan]);
+    expect(ids(groups)).toEqual([
+      { parent: '2026-06-19-qux-design.md', children: ['2026-06-23-qux.md'] }
+    ]);
+  });
+
+  it('drops a re-surfaced main spec that ends up childless', () => {
+    const spec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true });
+    const groups = pairAndGroup([spec]);
+    expect(groups).toEqual([]);
+  });
+
+  it('keeps an ordinary childless worktree spec', () => {
+    const spec = entry({ filename: '2026-06-19-solo-design.md', type: 'spec', worktree: 'wt1' });
+    const groups = pairAndGroup([spec]);
+    expect(groups.map((g) => g.parent.filename)).toEqual(['2026-06-19-solo-design.md']);
+  });
+
+  it('prefers a worktree spec over a re-surfaced main spec for the same plan', () => {
+    const mainSpec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true, recency: 10 });
+    const wtSpec = entry({ filename: '2026-06-22-qux-design.md', type: 'spec', worktree: 'wt3', recency: 40 });
+    const plan = entry({ filename: '2026-06-23-qux.md', type: 'plan', worktree: 'wt3', recency: 50 });
+    const groups = pairAndGroup([mainSpec, wtSpec, plan]);
+    // newest spec wins the plan; the now-childless main spec is dropped.
+    expect(ids(groups)).toEqual([
+      { parent: '2026-06-22-qux-design.md', children: ['2026-06-23-qux.md'] }
+    ]);
   });
 });

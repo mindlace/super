@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { SpecEntry } from '$lib/types';
   import type { DisplayGroup } from '$lib/pairing';
+  import { captionFor } from '$lib/caption';
 
   let {
     groups,
@@ -11,10 +11,6 @@
     selectedPath: string | null;
     onSelect: (path: string) => void;
   } = $props();
-
-  function caption(s: SpecEntry): string {
-    return [s.project, s.worktree, s.type].filter(Boolean).join(' · ');
-  }
 </script>
 
 <nav class="h-full overflow-y-auto bg-neutral-950 p-2 text-sm">
@@ -36,7 +32,7 @@
             >{group.parent.title}</span
           >
           <span class="mt-0.5 block break-words text-xs text-neutral-500"
-            >{caption(group.parent)}</span
+            >{captionFor(group)}</span
           >
         </button>
         {#if group.children.length > 0}

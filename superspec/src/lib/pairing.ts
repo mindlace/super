@@ -60,6 +60,7 @@ export function pairAndGroup(specs: SpecEntry[]): DisplayGroup[] {
     const children = (childrenBySpec.get(s) ?? [])
       .slice()
       .sort((a, b) => b.recency - a.recency);
+    if (s.onMain && children.length === 0) continue;
     const recency = children.reduce((m, c) => Math.max(m, c.recency), s.recency);
     groups.push({ parent: s, children, recency });
   }
