@@ -64,6 +64,8 @@
   async function adoptPath(oldPath: string, newPath: string) {
     const res = await fetch(`/api/resolve?q=${encodeURIComponent(newPath)}`);
     const group: DisplayGroup | null = res.ok ? await res.json() : null;
+    // On a transient resolve failure the tab keeps its old path; it self-heals
+    // on the next click (selectSpec re-runs adoptPath) and writes are 403'd anyway.
     if (!group) return;
     openedGroups = openedGroups.map((g) => (g.parent.path === oldPath ? group : g));
     if (lastSelectedGroup?.parent.path === oldPath) lastSelectedGroup = group;
