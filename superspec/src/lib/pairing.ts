@@ -39,13 +39,13 @@ export function pairAndGroup(specs: SpecEntry[]): DisplayGroup[] {
   };
   for (const s of parents) {
     indexNewest(keyToSpec, pairKey(s), s);
-    indexNewest(titleToSpec, s.title, s);
+    indexNewest(titleToSpec, `${s.project}::${s.title}`, s);
   }
 
   const childrenBySpec = new Map<SpecEntry, SpecEntry[]>();
   const standalonePlans: SpecEntry[] = [];
   for (const p of plans) {
-    const match = keyToSpec.get(pairKey(p)) ?? titleToSpec.get(p.title);
+    const match = keyToSpec.get(pairKey(p)) ?? titleToSpec.get(`${p.project}::${p.title}`);
     if (match) {
       const arr = childrenBySpec.get(match) ?? [];
       arr.push(p);

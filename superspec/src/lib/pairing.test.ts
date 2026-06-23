@@ -81,6 +81,14 @@ describe('pairAndGroup', () => {
     expect(groups.every((g) => g.children.length === 0)).toBe(true);
   });
 
+  it('does not pair via title fallback across different projects', () => {
+    const spec = entry({ filename: '2026-06-20-alpha-design.md', type: 'spec', project: 'A', title: 'Shared' });
+    const plan = entry({ filename: '2026-06-20-beta.md', type: 'plan', project: 'B', title: 'Shared' });
+    const groups = pairAndGroup([spec, plan]);
+    expect(groups).toHaveLength(2);
+    expect(groups.every((g) => g.children.length === 0)).toBe(true);
+  });
+
   it('sorts groups by group recency desc and children by recency desc', () => {
     const specA = entry({ filename: '2026-06-20-a-design.md', type: 'spec', project: 'A', recency: 10 });
     const planA1 = entry({ filename: '2026-06-20-a.md', type: 'plan', project: 'A', recency: 50 });
