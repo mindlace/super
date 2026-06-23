@@ -5,7 +5,7 @@
   import Toast from '$lib/components/Toast.svelte';
   import type { SpecEntry } from '$lib/types';
   import { DAY_MS } from '$lib/recency';
-  import { pairAndGroup } from '$lib/pairing';
+  import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
@@ -20,6 +20,18 @@
   const visibleGroups = $derived(
     pairAndGroup(specs).filter((g) => g.recency >= Date.now() - DAY_MS)
   );
+
+  let openedGroups = $state<DisplayGroup[]>([]);
+
+  const OPENED_KEY = 'sr:openedPaths';
+
+  const visiblePaths = $derived(new Set(visibleGroups.map((g) => g.parent.path)));
+  // Drop opened groups already shown by discovery (dedupe); keep the rest.
+  const openedRendered = $derived(
+    openedGroups.filter((g) => !visiblePaths.has(g.parent.path))
+  );
+  const tabGroups = $derived([...visibleGroups, ...openedRendered]);
+  const openedPaths = $derived(new Set(openedRendered.map((g) => g.parent.path)));
 
   const SELECTED_KEY = 'sr:selectedPath';
 
@@ -43,6 +55,36 @@
     saveStatus = 'idle';
     localStorage.setItem(SELECTED_KEY, path);
     return true;
+  }
+
+  function persistOpened() {
+    localStorage.setItem(OPENED_KEY, JSON.stringify(openedGroups.map((g) => g.parent.path)));
+  }
+
+  async function pickDoc(query: string): Promise<boolean> {
+    const res = await fetch(`/api/resolve?q=${encodeURIComponent(query)}`);
+    if (!res.ok) return false;
+    const group: DisplayGroup = await res.json();
+    const path = group.parent.path;
+    const known = tabGroups.some((g) => g.parent.path === path);
+    if (!known) {
+      openedGroups = [...openedGroups, group];
+      persistOpened();
+    }
+    return selectSpec(path);
+  }
+
+  function closeOpened(path: string) {
+    const removed = openedGroups.find((g) => g.parent.path === path);
+    openedGroups = openedGroups.filter((g) => g.parent.path !== path);
+    persistOpened();
+    const hitChild = removed?.children.some((c) => c.path === selectedPath);
+    if (selectedPath === path || hitChild) {
+      selectedPath = null;
+      content = '';
+      saveStatus = 'idle';
+      localStorage.removeItem(SELECTED_KEY);
+    }
   }
 
   async function save() {
@@ -99,6 +141,18 @@
   onMount(() => {
     loadSpecs();
 
+    const savedOpened: string[] = JSON.parse(localStorage.getItem(OPENED_KEY) ?? '[]');
+    Promise.all(
+      savedOpened.map((p) =>
+        fetch(`/api/resolve?q=${encodeURIComponent(p)}`)
+          .then((r) => (r.ok ? (r.json() as Promise<DisplayGroup>) : null))
+          .catch(() => null)
+      )
+    ).then((groups) => {
+      openedGroups = groups.filter((g): g is DisplayGroup => g !== null);
+      persistOpened();
+    });
+
     const fromQuery = new URLSearchParams(window.location.search).get('path');
     const toOpen = fromQuery ?? localStorage.getItem(SELECTED_KEY);
     if (toOpen) {
@@ -120,7 +174,14 @@
 </script>
 
 <div class="flex h-screen flex-col bg-neutral-900 text-neutral-200">
-  <TabStrip groups={visibleGroups} {selectedPath} onSelect={selectSpec} />
+  <TabStrip
+    groups={tabGroups}
+    {selectedPath}
+    onSelect={selectSpec}
+    onPick={pickDoc}
+    onClose={closeOpened}
+    {openedPaths}
+  />
   <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
     {#if selectedPath}
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
