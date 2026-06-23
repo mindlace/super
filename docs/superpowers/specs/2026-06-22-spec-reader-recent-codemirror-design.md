@@ -60,12 +60,21 @@ descending. `recency` is used for ordering and the 24h window only — **dates a
 
 Each list item renders:
 
-- the **title** (prominent), and
+- the **title** (prominent), shown **in full** — it wraps onto multiple lines as needed and is
+  never truncated or ellipsized, and
 - a small muted caption beneath it (furigana-style): `project · worktree · type`
   (e.g. *planafoot · recurrence-ai · spec*). Main-branch items omit the worktree segment
   (*planafoot · spec*).
 
 Selection is still by `path`. No dates appear anywhere in the UI.
+
+### Resizable width
+
+The sidebar (title list) is **resizable**: a draggable vertical divider between the sidebar and
+the main split-pane lets the user widen or narrow the list. The chosen width is **persisted to
+`localStorage`** so it survives reloads, with a sensible default (~20rem) and clamped to a
+reasonable min/max so the sidebar can't be dragged to zero or swallow the editor. This replaces
+the current fixed `grid-cols-[20rem_1fr]` layout.
 
 ## 3. Editor: preview left, CodeMirror right
 
@@ -102,10 +111,11 @@ the `/open` deep-link are all unchanged.
   - `withinWindow`: keeps entries at/after the boundary, drops older ones, exact-24h boundary,
     empty input.
 - **Manual end-to-end (real browser):** the list shows titles with captions, only last-24h
-  entries, newest first; selecting opens preview-left / CodeMirror-right; CodeMirror highlights
-  markdown in the dark theme; scroll-sync still tracks both ways; editing autosaves
-  (`saving…`→`saved`); an external change still reloads with a toast; an `/open?path=` deep-link
-  opens the right doc.
+  entries, newest first; long titles wrap to multiple lines (no truncation); the sidebar divider
+  drags to resize and the width persists across reload; selecting opens preview-left /
+  CodeMirror-right; CodeMirror highlights markdown in the dark theme; scroll-sync still tracks
+  both ways; editing autosaves (`saving…`→`saved`); an external change still reloads with a toast;
+  an `/open?path=` deep-link opens the right doc.
 
 ## Out of Scope (future)
 
