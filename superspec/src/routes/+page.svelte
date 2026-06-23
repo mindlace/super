@@ -23,6 +23,7 @@
   const MAX_W = 600;
   const DEFAULT_W = 320;
   const STORAGE_KEY = 'sr:sidebarWidth';
+  const SELECTED_KEY = 'sr:selectedPath';
   let sidebarWidth = $state(DEFAULT_W);
   let resizing = false;
 
@@ -46,17 +47,20 @@
     specs = await res.json();
   }
 
-  async function selectSpec(path: string) {
+  async function selectSpec(path: string): Promise<boolean> {
     if (saveTimer) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
     const res = await fetch(`/api/spec?path=${encodeURIComponent(path)}`);
+    if (!res.ok) return false;
     const data = await res.json();
     content = data.content;
     knownMtime = data.mtime;
     selectedPath = path;
     saveStatus = 'idle';
+    localStorage.setItem(SELECTED_KEY, path);
+    return true;
   }
 
   async function save() {
@@ -111,14 +115,28 @@
   }
 
   onMount(() => {
-    const saved = Number(localStorage.getItem(STORAGE_KEY));
-    if (saved >= MIN_W && saved <= MAX_W) sidebarWidth = saved;
+    const savedWidth = Number(localStorage.getItem(STORAGE_KEY));
+    if (savedWidth >= MIN_W && savedWidth <= MAX_W) sidebarWidth = savedWidth;
+
     loadSpecs();
-    const params = new URLSearchParams(window.location.search);
-    const path = params.get('path');
-    if (path) selectSpec(path);
-    const id = setInterval(pollExternalChange, 3000);
-    return () => clearInterval(id);
+
+    const fromQuery = new URLSearchParams(window.location.search).get('path');
+    const toOpen = fromQuery ?? localStorage.getItem(SELECTED_KEY);
+    if (toOpen) {
+      selectSpec(toOpen).then((ok) => {
+        if (!ok && !fromQuery) localStorage.removeItem(SELECTED_KEY);
+      });
+    }
+
+    const events = new EventSource('/api/events');
+    events.onmessage = () => loadSpecs();
+
+    const pollId = setInterval(pollExternalChange, 3000);
+
+    return () => {
+      clearInterval(pollId);
+      events.close();
+    };
   });
 </script>
 
