@@ -17,7 +17,3 @@ export interface SpecEntry {
   recency: number;
 }
 
-export interface ProjectGroup {
-  project: string;
-  specs: SpecEntry[];
-}

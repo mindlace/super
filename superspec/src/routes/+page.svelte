@@ -3,9 +3,10 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import Editor from '$lib/components/Editor.svelte';
   import Toast from '$lib/components/Toast.svelte';
-  import type { ProjectGroup } from '$lib/types';
+  import type { SpecEntry } from '$lib/types';
+  import { withinWindow } from '$lib/recency';
 
-  let groups = $state<ProjectGroup[]>([]);
+  let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
   let content = $state('');
   let knownMtime = $state(0);
@@ -15,9 +16,34 @@
   let toast = $state<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  async function loadGroups() {
+  const visible = $derived(withinWindow(specs, Date.now()));
+
+  // Resizable sidebar
+  const MIN_W = 220;
+  const MAX_W = 600;
+  const DEFAULT_W = 320;
+  const STORAGE_KEY = 'sr:sidebarWidth';
+  let sidebarWidth = $state(DEFAULT_W);
+  let resizing = false;
+
+  function startResize(e: PointerEvent) {
+    resizing = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onResizeMove(e: PointerEvent) {
+    if (!resizing) return;
+    sidebarWidth = Math.min(MAX_W, Math.max(MIN_W, e.clientX));
+  }
+  function endResize(e: PointerEvent) {
+    if (!resizing) return;
+    resizing = false;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    localStorage.setItem(STORAGE_KEY, String(sidebarWidth));
+  }
+
+  async function loadSpecs() {
     const res = await fetch('/api/specs');
-    groups = await res.json();
+    specs = await res.json();
   }
 
   async function selectSpec(path: string) {
@@ -85,7 +111,9 @@
   }
 
   onMount(() => {
-    loadGroups();
+    const saved = Number(localStorage.getItem(STORAGE_KEY));
+    if (saved >= MIN_W && saved <= MAX_W) sidebarWidth = saved;
+    loadSpecs();
     const params = new URLSearchParams(window.location.search);
     const path = params.get('path');
     if (path) selectSpec(path);
@@ -94,14 +122,26 @@
   });
 </script>
 
-<div class="grid h-screen grid-cols-[20rem_1fr] bg-neutral-900 text-neutral-200">
-  <Sidebar {groups} {selectedPath} onSelect={selectSpec} />
-  <main class="flex flex-col overflow-hidden">
+<div class="flex h-screen bg-neutral-900 text-neutral-200">
+  <div class="shrink-0 overflow-hidden" style="width: {sidebarWidth}px">
+    <Sidebar specs={visible} {selectedPath} onSelect={selectSpec} />
+  </div>
+  <div
+    class="w-1 shrink-0 cursor-col-resize bg-neutral-800 hover:bg-neutral-600"
+    role="separator"
+    aria-orientation="vertical"
+    onpointerdown={startResize}
+    onpointermove={onResizeMove}
+    onpointerup={endResize}
+  ></div>
+  <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
     {#if selectedPath}
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
         <span class="truncate text-neutral-500" title={selectedPath}>{selectedPath}</span>
         <span class="ml-2 shrink-0 text-neutral-500">
-          {#if saveStatus === 'saving'}saving…{:else if saveStatus === 'saved'}saved{:else if saveStatus === 'error'}<span class="text-red-400">save failed</span>{/if}
+          {#if saveStatus === 'saving'}saving…{:else if saveStatus === 'saved'}saved{:else if saveStatus === 'error'}<span
+              class="text-red-400">save failed</span
+            >{/if}
         </span>
       </header>
       <div class="min-h-0 flex-1">

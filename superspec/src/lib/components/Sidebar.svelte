@@ -1,44 +1,42 @@
 <script lang="ts">
-  import type { ProjectGroup } from '$lib/types';
+  import type { SpecEntry } from '$lib/types';
 
   let {
-    groups,
+    specs,
     selectedPath,
     onSelect
   }: {
-    groups: ProjectGroup[];
+    specs: SpecEntry[];
     selectedPath: string | null;
     onSelect: (path: string) => void;
   } = $props();
+
+  function caption(s: SpecEntry): string {
+    return [s.project, s.worktree, s.type].filter(Boolean).join(' · ');
+  }
 </script>
 
-<nav class="h-full overflow-y-auto border-r border-neutral-800 bg-neutral-950 p-3 text-sm">
-  {#if groups.length === 0}
-    <p class="text-neutral-500">No specs found under ~/Projects.</p>
+<nav class="h-full overflow-y-auto bg-neutral-950 p-2 text-sm">
+  {#if specs.length === 0}
+    <p class="p-2 text-neutral-500">No specs in the last 24 hours.</p>
   {/if}
-  {#each groups as group (group.project)}
-    <section class="mb-4">
-      <h2 class="mb-1 font-semibold text-neutral-300">{group.project}</h2>
-      <ul>
-        {#each group.specs as spec (spec.path)}
-          <li>
-            <button
-              type="button"
-              class="block w-full truncate rounded px-2 py-1 text-left hover:bg-neutral-800
-                {selectedPath === spec.path ? 'bg-blue-950 text-blue-200' : 'text-neutral-400'}"
-              title={spec.filename}
-              onclick={() => onSelect(spec.path)}
-            >
-              {spec.filename}
-              {#if spec.worktree}
-                <span class="ml-1 rounded bg-amber-900 px-1 text-xs text-amber-100"
-                  >{spec.worktree}</span
-                >
-              {/if}
-            </button>
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/each}
+  <ul>
+    {#each specs as spec (spec.path)}
+      <li>
+        <button
+          type="button"
+          class="mb-1 block w-full rounded px-2 py-2 text-left hover:bg-neutral-800
+            {selectedPath === spec.path ? 'bg-blue-950' : ''}"
+          onclick={() => onSelect(spec.path)}
+        >
+          <span
+            class="block break-words leading-snug
+              {selectedPath === spec.path ? 'text-blue-200' : 'text-neutral-200'}"
+            >{spec.title}</span
+          >
+          <span class="mt-0.5 block break-words text-xs text-neutral-500">{caption(spec)}</span>
+        </button>
+      </li>
+    {/each}
+  </ul>
 </nav>
