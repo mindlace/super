@@ -73,6 +73,9 @@
 
   onMount(() => {
     loadGroups();
+    const params = new URLSearchParams(window.location.search);
+    const path = params.get('path');
+    if (path) selectSpec(path);
     const id = setInterval(pollExternalChange, 3000);
     return () => clearInterval(id);
   });
