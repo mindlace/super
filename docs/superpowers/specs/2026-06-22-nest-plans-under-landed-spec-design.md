@@ -26,9 +26,10 @@ captions, since the nesting structure already conveys it.
    "this is the branch this spec is being worked on." For an ordinary
    worktree spec, the caption keeps showing its own branch, exactly as today.
 
-3. **Drop the type from plan/spec captions.** The caption no longer includes
-   `plan` or `spec` for those types. Captions for any other subdir type are
-   unchanged (the raw type still shows).
+3. **Lead with the branch, drop the plan/spec type.** The caption is ordered
+   `branch · project · type` — the worktree is the salient field, the project is
+   already known. The type is included only when it is *not* `plan`/`spec`
+   (those are implied by the nesting structure); other subdir types still show.
 
 ### Worked example
 
@@ -38,7 +39,7 @@ captions, since the nesting structure already conveys it.
 
 - **Today:** one top-level item — `foo` plan, caption `spec_reader · fix-foo · plan`.
 - **After:** nested —
-  - parent `foo` spec, caption `spec_reader · fix-foo`
+  - parent `foo` spec, caption `fix-foo · spec_reader`
   - child `foo` plan, title only (as all children render today)
 
 ## Design
@@ -91,14 +92,16 @@ project, by slug with a title fallback. The re-surfaced `main` spec enters the
 
 ### Caption — `src/lib/components/Sidebar.svelte`
 
-The parent caption becomes group-aware so it can hoist the child branch:
+The parent caption becomes group-aware so it can hoist the child branch. It is
+ordered `branch · project · type`:
 
-- **project** — unchanged.
 - **branch** — `parent.worktree` if set; otherwise the distinct `worktree`
   names of the group's children, joined by ` · `. (For a re-surfaced `main`
   spec, `parent.worktree` is `null`, so this yields the plan's branch.)
+- **project** — unchanged.
 - **type** — included only when it is *not* `plan` or `spec`.
 
+Empty segments are dropped before joining (e.g. a parent with no branch at all).
 Children continue to render title only — no caption — so the branch appears
 solely on the parent, as specified.
 
@@ -119,9 +122,9 @@ Colocated unit tests, consistent with the existing pure-unit style (pass a
   and the `main` spec is dropped.
 - **caption**: a small pure helper (extracted from `Sidebar.svelte`, e.g.
   `captionFor(group)` in a testable module) covering: worktree spec →
-  `project · branch`; re-surfaced `main` spec → `project · child-branch`;
-  standalone plan → `project · branch` (no `plan`); an "other" type → still
-  includes the type.
+  `branch · project`; re-surfaced `main` spec → `child-branch · project`;
+  standalone plan → `branch · project` (no `plan`); an "other" type → still
+  includes the type, ordered `branch · project · type`.
 
 ## Out of scope
 
