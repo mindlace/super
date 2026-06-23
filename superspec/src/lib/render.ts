@@ -2,6 +2,15 @@ import { Marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { highlightToHtml } from './highlight';
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Stash highlighted HTML on the code token during the async walk, then emit it
 // verbatim from a sync renderer. marked renderer fns cannot be async, so the
 // async highlight work happens in walkTokens.
@@ -18,7 +27,7 @@ marked.use({
   renderer: {
     code(token: Tokens.Code): string {
       const html = (token as HighlightedCode).highlighted;
-      return html ?? `<pre><code>${token.text}</code></pre>`;
+      return html ?? `<pre><code>${escapeHtml(token.text)}</code></pre>`;
     }
   }
 });
