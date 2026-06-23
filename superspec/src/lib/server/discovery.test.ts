@@ -15,20 +15,26 @@ beforeAll(async () => {
   root = await mkdtemp(join(tmpdir(), 'specreader-'));
   const aSpecs = join(root, 'projA/docs/superpowers/specs');
   const aPlans = join(root, 'projA/docs/superpowers/plans');
-  const aWt = join(root, 'projA/.claude/worktrees/wt1/docs/superpowers/specs');
-  const bSpecs = join(root, 'projB/docs/superpowers/specs');
+  const aWtSpecs = join(root, 'projA/.claude/worktrees/wt1/docs/superpowers/specs');
+  const aWtPlans = join(root, 'projA/.claude/worktrees/wt1/docs/superpowers/plans');
+  const bWtSpecs = join(root, 'projB/.claude/worktrees/wt2/docs/superpowers/specs');
 
-  await write(aSpecs, '2026-06-20-foo-design.md', '# Foo Spec\n\nbody');
-  await write(aPlans, '2026-06-20-foo-design.md', '# Foo Plan\n'); // same basename, other subdir -> kept
-  await write(aWt, '2026-06-20-foo-design.md', '# Foo (wt copy)\n'); // dup of main specs -> excluded
-  await write(aWt, '2026-06-21-bar-design.md', '## Bar Heading\n'); // unique -> kept, worktree wt1
-  await write(bSpecs, '2026-06-22-baz-design.md', 'no heading here\nsecond line'); // first-line title
-  await write(aSpecs, 'zzz-untitled.md', ''); // empty -> title falls back to filename
+  // Main-checkout specs are never listed; they only serve to suppress merged
+  // worktree copies of the same file.
+  await write(aSpecs, '2026-06-20-foo-design.md', '# Foo Spec\n\nbody'); // main -> excluded
+  await write(aPlans, '2026-06-20-foo-design.md', '# Foo Plan\n'); // main -> excluded
+  await write(aWtSpecs, '2026-06-20-foo-design.md', '# Foo (wt copy)\n'); // dup of main -> excluded
+
+  // Worktree-unique files are the ones that show up.
+  await write(aWtSpecs, '2026-06-21-bar-design.md', '## Bar Heading\n'); // kept, wt1, type spec
+  await write(aWtPlans, '2026-06-21-bar-design.md', '# Bar Plan\n'); // kept, wt1, type plan
+  await write(bWtSpecs, '2026-06-22-baz-design.md', 'no heading here\nsecond line'); // first-line title
+  await write(bWtSpecs, 'zzz-untitled.md', ''); // empty -> title falls back to filename
 
   // recency = max(mtime, filenameDate): old mtime + future-ish filename date -> filename wins
-  await write(bSpecs, '2026-06-22-recency-design.md', '# Recency\n');
+  await write(bWtSpecs, '2026-06-22-recency-design.md', '# Recency\n');
   const old = new Date(2020, 0, 1).getTime() / 1000;
-  await utimes(join(bSpecs, '2026-06-22-recency-design.md'), old, old);
+  await utimes(join(bWtSpecs, '2026-06-22-recency-design.md'), old, old);
 });
 
 afterAll(async () => {
@@ -75,30 +81,34 @@ describe('scanSpecs', () => {
 
   it('includes plans alongside specs with distinct type labels', async () => {
     const list = await scanSpecs(root);
-    const specFoo = list.find((e) => e.filename === '2026-06-20-foo-design.md' && e.type === 'spec');
-    const planFoo = list.find((e) => e.filename === '2026-06-20-foo-design.md' && e.type === 'plan');
-    expect(specFoo).toBeTruthy();
-    expect(planFoo).toBeTruthy();
+    const specBar = list.find((e) => e.filename === '2026-06-21-bar-design.md' && e.type === 'spec');
+    const planBar = list.find((e) => e.filename === '2026-06-21-bar-design.md' && e.type === 'plan');
+    expect(specBar).toBeTruthy();
+    expect(planBar).toBeTruthy();
   });
 
-  it('excludes worktree files that duplicate a main file (same subdir+name)', async () => {
+  it('excludes main-checkout specs and never tags an entry as main', async () => {
     const list = await scanSpecs(root);
-    const foos = list.filter((e) => e.filename === '2026-06-20-foo-design.md' && e.type === 'spec');
-    expect(foos).toHaveLength(1);
-    expect(foos[0].worktree).toBeNull();
+    expect(list.every((e) => e.worktree !== null)).toBe(true);
+  });
+
+  it('excludes a worktree file once it also exists in the main checkout', async () => {
+    const list = await scanSpecs(root);
+    const foos = list.filter((e) => e.filename === '2026-06-20-foo-design.md');
+    expect(foos).toHaveLength(0);
   });
 
   it('includes worktree-unique files tagged with the worktree name', async () => {
-    const bar = byName(await scanSpecs(root), '2026-06-21-bar-design.md');
+    const list = await scanSpecs(root);
+    const bar = list.find((e) => e.filename === '2026-06-21-bar-design.md' && e.type === 'spec');
     expect(bar?.worktree).toBe('wt1');
-    expect(bar?.type).toBe('spec');
     expect(bar?.project).toBe('projA');
   });
 
   it('extracts titles with heading, first-line, and filename fallbacks', async () => {
     const list = await scanSpecs(root);
-    const specFoo = list.find((e) => e.filename === '2026-06-20-foo-design.md' && e.type === 'spec');
-    expect(specFoo?.title).toBe('Foo Spec');
+    const barSpec = list.find((e) => e.filename === '2026-06-21-bar-design.md' && e.type === 'spec');
+    expect(barSpec?.title).toBe('Bar Heading');
     expect(byName(list, '2026-06-22-baz-design.md')?.title).toBe('no heading here');
     expect(byName(list, 'zzz-untitled.md')?.title).toBe('zzz-untitled.md');
   });

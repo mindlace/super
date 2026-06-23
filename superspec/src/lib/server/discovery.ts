@@ -73,13 +73,15 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
   const out: SpecEntry[] = [];
 
   for (const project of await listDirs(root)) {
+    // Specs in the main checkout are intentionally not listed; we only surface
+    // active worktree work. We still record them so a worktree copy that has
+    // already landed on main drops off the list too.
     const mainSuper = join(root, project, SUPERPOWERS_SEGMENT);
     const mainSet = new Set<string>();
     for (const sub of await listDirs(mainSuper)) {
       const dir = join(mainSuper, sub);
       for (const name of await listMarkdown(dir)) {
         mainSet.add(`${sub}/${name}`);
-        out.push(await makeEntry(dir, name, project, null, sub));
       }
     }
 
