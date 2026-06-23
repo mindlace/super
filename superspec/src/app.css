@@ -3,3 +3,14 @@
 
 :root { color-scheme: dark; }
 html, body { background-color: #171717; }
+
+/* Shiki emits an inline background on its <pre>; override it so highlighted
+   code blocks match the prose code background instead of github-dark's. */
+.prose :where(pre.shiki) {
+  background-color: #1c1c1c !important;
+}
+
+/* Soften near-white prose body text for comfortable contrast on #171717. */
+.prose-invert {
+  --tw-prose-invert-body: #d4d4d4;
+}

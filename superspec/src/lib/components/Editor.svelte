@@ -5,6 +5,7 @@
   import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
   import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
   import { markdown } from '@codemirror/lang-markdown';
+  import { languages } from '@codemirror/language-data';
   import { tags } from '@lezer/highlight';
   import { renderMarkdown } from '$lib/render';
 
@@ -16,7 +17,22 @@
     onInput: (value: string) => void;
   } = $props();
 
-  let html = $derived(renderMarkdown(content));
+  let html = $state('');
+  let renderVersion = 0;
+
+  // Re-render the preview whenever content changes. renderMarkdown is async
+  // (Shiki); a version guard drops stale results so fast typing can't let an
+  // older render overwrite a newer one. We keep the previous html until the new
+  // one resolves, so the pane never flashes blank between updates.
+  $effect(() => {
+    const src = content;
+    const version = ++renderVersion;
+    renderMarkdown(src)
+      .then((out) => {
+        if (version === renderVersion) html = out;
+      })
+      .catch((err) => console.error('preview render failed', err));
+  });
 
   let editorEl: HTMLDivElement;
   let preview: HTMLDivElement;
@@ -41,7 +57,7 @@
 
   const darkTheme = EditorView.theme(
     {
-      '&': { height: '100%', backgroundColor: '#171717', color: '#f5f5f5' },
+      '&': { height: '100%', backgroundColor: '#171717', color: '#d4d4d4' },
       '.cm-scroller': {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '13px',
@@ -59,14 +75,32 @@
   );
 
   const mdHighlight = HighlightStyle.define([
+    // Markdown structure
     { tag: tags.heading, color: '#93c5fd', fontWeight: 'bold' },
     { tag: tags.strong, color: '#fde68a', fontWeight: 'bold' },
     { tag: tags.emphasis, color: '#fcd34d', fontStyle: 'italic' },
     { tag: tags.link, color: '#7dd3fc', textDecoration: 'underline' },
     { tag: tags.url, color: '#7dd3fc' },
     { tag: tags.monospace, color: '#fca5a5' },
-    { tag: tags.list, color: '#a3a3a3' },
-    { tag: tags.quote, color: '#a3a3a3', fontStyle: 'italic' }
+    // Code tokens inside fenced blocks
+    { tag: tags.keyword, color: '#c792ea' },
+    { tag: tags.controlKeyword, color: '#c792ea' },
+    { tag: tags.moduleKeyword, color: '#c792ea' },
+    { tag: tags.string, color: '#c3e88d' },
+    { tag: tags.special(tags.string), color: '#c3e88d' },
+    { tag: tags.regexp, color: '#c3e88d' },
+    { tag: tags.comment, color: '#7d8590', fontStyle: 'italic' },
+    { tag: tags.number, color: '#f78c6c' },
+    { tag: [tags.bool, tags.null, tags.atom], color: '#ff9cac' },
+    { tag: [tags.typeName, tags.className], color: '#ffcb6b' },
+    { tag: tags.propertyName, color: '#82aaff' },
+    { tag: tags.function(tags.variableName), color: '#82aaff' },
+    { tag: tags.variableName, color: '#eeffff' },
+    { tag: [tags.operator, tags.punctuation], color: '#89ddff' },
+    // List markers track body text (de-emphasized, not comment-gray);
+    // quotes get a distinct non-gray accent so neither reads as a comment.
+    { tag: tags.list, color: '#d4d4d4' },
+    { tag: tags.quote, color: '#80cbc4', fontStyle: 'italic' }
   ]);
 
   onMount(() => {
@@ -77,7 +111,7 @@
         extensions: [
           history(),
           keymap.of([...defaultKeymap, ...historyKeymap]),
-          markdown(),
+          markdown({ codeLanguages: languages }),
           EditorView.lineWrapping,
           syntaxHighlighting(mdHighlight),
           highlightActiveLine(),
