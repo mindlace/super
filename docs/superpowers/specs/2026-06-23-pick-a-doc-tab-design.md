@@ -39,8 +39,9 @@ rules. When nothing recent exists, this picker is the only tab visible.
 - **Ambiguity:** when the input matches more than one file, **open the newest**
   by `recency = max(mtime, filename-date)` — the same ordering the app already
   uses everywhere.
-- Everything still funnels through `assertSpecPath`, so resolution can never
-  reach outside `~/Projects/**/docs/superpowers/**.md`.
+- Resolution can only ever return a path it discovered by walking the real
+  `~/Projects/**/docs/superpowers/**.md` tree (safe by construction), and every
+  read still funnels through `assertSpecPath` at the `/api/spec` layer.
 
 ### Opened-tab management (decided)
 
@@ -67,16 +68,20 @@ a picker/close UI on the client.
 
 `resolveDoc(query: string, root = PROJECTS_ROOT): Promise<DisplayGroup | null>`
 
-1. **Absolute-path branch.** If `query` is absolute, run it through
-   `assertSpecPath` and `stat` it. If it exists, that is the match. (Rejected
-   paths fall through to `null`.)
-2. **Search branch.** Otherwise walk every superpowers dir under `root` — main
-   checkout *and* `.claude/worktrees/*` — collecting `specs/` and `plans/` `.md`
-   files. (Reuses the same `listDirs` / `listMarkdown` walking style as
-   `discovery.ts`; the shared helpers are factored out so both modules use
-   them.) A candidate matches when, with `q = query` normalized to end in `.md`:
-   - its path `=== resolve(q)`, **or**
-   - its path ends with `sep + q` (suffix match; covers bare name and fragment).
+1. **Walk.** Walk every superpowers dir under `root` — main checkout *and*
+   `.claude/worktrees/*` — collecting `specs/` and `plans/` `.md` files as
+   candidates. (Reuses the same `listDirs` / `listMarkdown` walking style as
+   `discovery.ts`; the shared helpers are factored out so both modules use them.)
+2. **Match.** With `q = query` normalized to end in `.md`, a candidate matches
+   when:
+   - its path `=== resolve(q)` (handles a fully-qualified absolute path), **or**
+   - its path ends with `sep + q` (suffix match; covers bare name and fragment,
+     and naturally handles a dropped date prefix since the date is a prefix).
+
+   There is no separate absolute-path branch and no `assertSpecPath` call: the
+   resolver only ever returns paths it found by walking the real glob tree, so
+   it is safe by construction. An absolute path outside the glob simply matches
+   nothing → `null`.
 3. **Pick winner** = highest `recency` among matches; `null` if none.
 4. **Build the group.** From the winner's superpowers root, build `SpecEntry`s
    for the matched file and (if it is a spec) the sibling `plans/` files, then
@@ -86,8 +91,8 @@ a picker/close UI on the client.
    exactly the doc requested.
 
 `GET /api/resolve?q=<input>` → `200` with the `DisplayGroup` on success;
-`404` when `resolveDoc` returns `null`; `400` when `assertSpecPath` rejects an
-absolute input. The client treats any non-`200` identically (shake).
+`404` when `resolveDoc` returns `null`; `400` when `q` is missing. The client
+treats any non-`200` identically (shake).
 
 Reads still go through the existing guarded `GET /api/spec`; `/api/resolve` only
 locates the file and assembles its group.
