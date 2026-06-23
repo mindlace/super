@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanSpecs } from './discovery';
+import { scanSpecs, specSortKey } from './discovery';
 
 let root: string;
 
@@ -26,6 +26,16 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await rm(root, { recursive: true, force: true });
+});
+
+describe('specSortKey', () => {
+  it('YYYY-MM-DD-HHMM sorts after same-day YYYY-MM-DD (time defaults to 0000)', () => {
+    expect(specSortKey('2026-03-03-1200-x.md') > specSortKey('2026-03-03-x.md')).toBe(true);
+  });
+
+  it('filename with no date prefix sorts before any dated key', () => {
+    expect(specSortKey('no-date-file.md') < specSortKey('2026-01-01-x.md')).toBe(true);
+  });
 });
 
 describe('scanSpecs', () => {

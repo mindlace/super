@@ -9,7 +9,7 @@
   let selectedPath = $state<string | null>(null);
   let content = $state('');
   let knownMtime = $state(0);
-  let saveStatus = $state<'idle' | 'saving' | 'saved'>('idle');
+  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let toast = $state<string | null>(null);
@@ -35,14 +35,25 @@
 
   async function save() {
     if (!selectedPath) return;
+    const savedPath = selectedPath;
     saveStatus = 'saving';
-    const res = await fetch(`/api/spec?path=${encodeURIComponent(selectedPath)}`, {
-      method: 'PUT',
-      body: content
-    });
-    const data = await res.json();
-    knownMtime = data.mtime;
-    saveStatus = 'saved';
+    try {
+      const res = await fetch(`/api/spec?path=${encodeURIComponent(savedPath)}`, {
+        method: 'PUT',
+        body: content
+      });
+      if (selectedPath !== savedPath) return;
+      if (!res.ok) {
+        saveStatus = 'error';
+        return;
+      }
+      const data = await res.json();
+      knownMtime = data.mtime;
+      saveStatus = 'saved';
+    } catch {
+      if (selectedPath !== savedPath) return;
+      saveStatus = 'error';
+    }
   }
 
   function handleInput(value: string) {
@@ -60,8 +71,10 @@
 
   async function pollExternalChange() {
     if (!selectedPath || saveStatus === 'saving') return;
-    const res = await fetch(`/api/spec?path=${encodeURIComponent(selectedPath)}`);
+    const polledPath = selectedPath;
+    const res = await fetch(`/api/spec?path=${encodeURIComponent(polledPath)}`);
     if (!res.ok) return;
+    if (selectedPath !== polledPath) return;
     const data = await res.json();
     if (data.mtime > knownMtime) {
       content = data.content;
@@ -88,7 +101,7 @@
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
         <span class="truncate text-neutral-500" title={selectedPath}>{selectedPath}</span>
         <span class="ml-2 shrink-0 text-neutral-500">
-          {#if saveStatus === 'saving'}saving…{:else if saveStatus === 'saved'}saved{/if}
+          {#if saveStatus === 'saving'}saving…{:else if saveStatus === 'saved'}saved{:else if saveStatus === 'error'}<span class="text-red-400">save failed</span>{/if}
         </span>
       </header>
       <div class="min-h-0 flex-1">
