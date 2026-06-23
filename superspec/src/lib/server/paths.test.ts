@@ -36,4 +36,9 @@ describe('assertSpecPath', () => {
     const elsewhere = join(ROOT, 'p/README.md');
     expect(() => assertSpecPath(elsewhere, ROOT)).toThrow();
   });
+
+  it('accepts a plans path (any superpowers subdir)', () => {
+    const plan = join(ROOT, 'planafoot/docs/superpowers/plans/2026-06-22-x.md');
+    expect(assertSpecPath(plan, ROOT)).toBe(plan);
+  });
 });

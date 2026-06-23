@@ -1,16 +1,31 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PROJECTS_ROOT, SPECS_SEGMENT } from './config';
-import type { SpecEntry, ProjectGroup } from '$lib/types';
+import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
+import type { SpecEntry } from '$lib/types';
 
-const DATE_RE = /^(\d{4}-\d{2}-\d{2})(?:-(\d{4}))?/;
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?:-(\d{2})(\d{2}))?/;
 
-export function specSortKey(filename: string): string {
+export function parseFilenameDateMs(filename: string): number {
   const m = DATE_RE.exec(filename);
-  if (!m) return '0000000000000000' + filename;
-  const date = m[1].replace(/-/g, '');
-  const time = m[2] ?? '0000';
-  return date + time;
+  if (!m) return 0;
+  const [, y, mo, d, hh, mm] = m;
+  return new Date(Number(y), Number(mo) - 1, Number(d), hh ? Number(hh) : 0, mm ? Number(mm) : 0).getTime();
+}
+
+export function extractTitle(content: string): string | null {
+  for (const line of content.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const h = /^#{1,6}\s+(.+)$/.exec(t);
+    return h ? h[1].trim() : t;
+  }
+  return null;
+}
+
+function typeLabel(subdir: string): string {
+  if (subdir === 'specs') return 'spec';
+  if (subdir === 'plans') return 'plan';
+  return subdir;
 }
 
 async function listDirs(path: string): Promise<string[]> {
@@ -25,51 +40,64 @@ async function listDirs(path: string): Promise<string[]> {
 async function listMarkdown(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    return entries
-      .filter((e) => e.isFile() && e.name.endsWith('.md'))
-      .map((e) => e.name);
+    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
   } catch {
     return [];
   }
 }
 
-function makeEntry(dir: string, filename: string, worktree: string | null): SpecEntry {
-  const m = DATE_RE.exec(filename);
+async function makeEntry(
+  dir: string,
+  filename: string,
+  project: string,
+  worktree: string | null,
+  subdir: string
+): Promise<SpecEntry> {
+  const path = join(dir, filename);
+  const raw = await readFile(path, 'utf8').catch(() => '');
+  const st = await stat(path);
+  const mtime = st.mtimeMs;
+  const fileDate = parseFilenameDateMs(filename);
+  const mtimeSec = Math.floor(mtime / 1000) * 1000;
   return {
-    path: join(dir, filename),
+    path,
     filename,
-    date: m ? m[1] : '',
-    worktree
+    title: extractTitle(raw) ?? filename,
+    project,
+    worktree,
+    type: typeLabel(subdir),
+    mtime,
+    recency: Math.max(mtimeSec, fileDate)
   };
 }
 
-export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<ProjectGroup[]> {
-  const projects = await listDirs(root);
-  const groups: ProjectGroup[] = [];
+export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry[]> {
+  const out: SpecEntry[] = [];
 
-  for (const project of projects) {
-    const mainDir = join(root, project, SPECS_SEGMENT);
-    const mainNames = await listMarkdown(mainDir);
-    const mainSet = new Set(mainNames);
-
-    const specs: SpecEntry[] = mainNames.map((n) => makeEntry(mainDir, n, null));
-
-    const worktreesRoot = join(root, project, '.claude', 'worktrees');
-    for (const wt of await listDirs(worktreesRoot)) {
-      const wtDir = join(worktreesRoot, wt, SPECS_SEGMENT);
-      for (const n of await listMarkdown(wtDir)) {
-        if (!mainSet.has(n)) specs.push(makeEntry(wtDir, n, wt));
+  for (const project of await listDirs(root)) {
+    const mainSuper = join(root, project, SUPERPOWERS_SEGMENT);
+    const mainSet = new Set<string>();
+    for (const sub of await listDirs(mainSuper)) {
+      const dir = join(mainSuper, sub);
+      for (const name of await listMarkdown(dir)) {
+        mainSet.add(`${sub}/${name}`);
+        out.push(await makeEntry(dir, name, project, null, sub));
       }
     }
 
-    if (specs.length === 0) continue;
-
-    specs.sort((a, b) => specSortKey(b.filename).localeCompare(specSortKey(a.filename)));
-    groups.push({ project, specs });
+    const wtRoot = join(root, project, '.claude', 'worktrees');
+    for (const wt of await listDirs(wtRoot)) {
+      const wtSuper = join(wtRoot, wt, SUPERPOWERS_SEGMENT);
+      for (const sub of await listDirs(wtSuper)) {
+        const dir = join(wtSuper, sub);
+        for (const name of await listMarkdown(dir)) {
+          if (mainSet.has(`${sub}/${name}`)) continue;
+          out.push(await makeEntry(dir, name, project, wt, sub));
+        }
+      }
+    }
   }
 
-  groups.sort((a, b) =>
-    specSortKey(b.specs[0].filename).localeCompare(specSortKey(a.specs[0].filename))
-  );
-  return groups;
+  out.sort((a, b) => b.recency - a.recency || b.type.localeCompare(a.type));
+  return out;
 }
