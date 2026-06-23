@@ -112,7 +112,7 @@
 <div class="flex h-full overflow-hidden">
   <div
     bind:this={preview}
-    class="prose prose-invert prose-sm min-w-0 max-w-none flex-1 overflow-y-auto bg-neutral-900 p-4"
+    class="prose prose-invert prose-base min-w-0 max-w-none flex-1 overflow-y-auto bg-neutral-900 p-4"
     onscroll={() => {
       if (view) sync(preview, view.scrollDOM);
     }}
