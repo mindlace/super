@@ -81,11 +81,11 @@
     content = data.content;
     knownMtime = data.mtime;
     const effective: string = data.path ?? path;
+    selectedPath = effective;
+    readOnly = isMainPath(effective);
     // Worktree gone → server served the main copy; rewrite the opened tab so the
     // selection, caption, autosave, and persistence all target the real file.
     if (effective !== path) await adoptPath(path, effective);
-    selectedPath = effective;
-    readOnly = isMainPath(effective);
     saveStatus = 'idle';
     localStorage.setItem(SELECTED_KEY, effective);
     return true;
@@ -117,6 +117,7 @@
       selectedPath = null;
       content = '';
       saveStatus = 'idle';
+      readOnly = false;
       lastSelectedGroup = null;
       localStorage.removeItem(SELECTED_KEY);
     }
