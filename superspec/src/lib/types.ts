@@ -9,6 +9,8 @@ export interface SpecEntry {
   project: string;
   /** worktree name if this file exists ONLY in a worktree, else null */
   worktree: string | null;
+  /** true if re-surfaced from the project's main checkout (otherwise main files are hidden) */
+  onMain?: boolean;
   /** display label for the superpowers subdir: 'spec' | 'plan' | raw subdir name */
   type: string;
   /** file mtime in ms */

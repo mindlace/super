@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
+import { normalizedSlug } from '../pairing';
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?:-(\d{2})(\d{2}))?/;
 
@@ -86,15 +87,28 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
     }
 
     const wtRoot = join(root, project, '.claude', 'worktrees');
+    const planSlugs = new Set<string>();
     for (const wt of await listDirs(wtRoot)) {
       const wtSuper = join(wtRoot, wt, SUPERPOWERS_SEGMENT);
       for (const sub of await listDirs(wtSuper)) {
         const dir = join(wtSuper, sub);
         for (const name of await listMarkdown(dir)) {
           if (mainSet.has(`${sub}/${name}`)) continue;
-          out.push(await makeEntry(dir, name, project, wt, sub));
+          const entry = await makeEntry(dir, name, project, wt, sub);
+          out.push(entry);
+          if (entry.type === 'plan') planSlugs.add(normalizedSlug(name));
         }
       }
+    }
+
+    // Re-surface a landed main spec when a live worktree plan still references
+    // it (same project, same slug), so the plan keeps its nested parent.
+    const mainSpecsDir = join(mainSuper, 'specs');
+    for (const name of await listMarkdown(mainSpecsDir)) {
+      if (!planSlugs.has(normalizedSlug(name))) continue;
+      const entry = await makeEntry(mainSpecsDir, name, project, null, 'specs');
+      entry.onMain = true;
+      out.push(entry);
     }
   }
 
