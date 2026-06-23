@@ -4,6 +4,7 @@ import { listDirs, listMarkdown } from './fswalk';
 import { makeEntry } from './discovery';
 import { pairAndGroup, type DisplayGroup } from '../pairing';
 import type { SpecEntry } from '../types';
+import { isWorktreePath, mainEquivalent } from '../mainpath';
 
 interface Candidate {
   dir: string;
@@ -48,7 +49,11 @@ export async function resolveDoc(
   const abs = resolvePath(qMd);
 
   const candidates = await collectCandidates(root);
-  const matches = candidates.filter((c) => c.path === abs || c.path.endsWith(sep + qMd));
+  let matches = candidates.filter((c) => c.path === abs || c.path.endsWith(sep + qMd));
+  if (matches.length === 0 && isWorktreePath(abs)) {
+    const mainEq = mainEquivalent(abs);
+    if (mainEq) matches = candidates.filter((c) => c.path === mainEq);
+  }
   if (matches.length === 0) return null;
 
   // Newest match wins; build entries only for matches (limits stat/read IO).

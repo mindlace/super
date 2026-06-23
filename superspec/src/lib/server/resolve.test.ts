@@ -31,6 +31,10 @@ beforeAll(async () => {
   await write(dWtSpecs, 'dupe.md', '# Newer Dupe\n');
   const older = new Date(2020, 0, 1).getTime() / 1000;
   await utimes(join(cWtSpecs, 'dupe.md'), older, older);
+
+  // projE: a spec that landed on main; its worktree is gone.
+  const eMainSpecs = join(root, 'projE/docs/superpowers/specs');
+  await write(eMainSpecs, '2026-06-22-landed-design.md', '# Landed\n');
 });
 
 afterAll(async () => {
@@ -81,5 +85,24 @@ describe('resolveDoc', () => {
 
   it('returns null for an absolute path outside the glob', async () => {
     expect(await resolveDoc('/etc/passwd', root)).toBeNull();
+  });
+
+  it('falls back to the main copy when the worktree path is gone', async () => {
+    const gone = join(
+      root,
+      'projE/.claude/worktrees/wtgone/docs/superpowers/specs/2026-06-22-landed-design.md'
+    );
+    const g = await resolveDoc(gone, root);
+    expect(g?.parent.project).toBe('projE');
+    expect(g?.parent.worktree).toBeNull();
+    expect(g?.parent.filename).toBe('2026-06-22-landed-design.md');
+  });
+
+  it('returns null when neither the worktree path nor its main equivalent exists', async () => {
+    const gone = join(
+      root,
+      'projE/.claude/worktrees/wtgone/docs/superpowers/specs/nope-design.md'
+    );
+    expect(await resolveDoc(gone, root)).toBeNull();
   });
 });
