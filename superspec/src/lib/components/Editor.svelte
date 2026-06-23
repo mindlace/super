@@ -37,22 +37,31 @@
   let editorEl: HTMLDivElement;
   let preview: HTMLDivElement;
   let view: EditorView | undefined;
-  let syncing = false;
   let applyingExternal = false;
+
+  // The pane we just scrolled programmatically. Its resulting scroll event must
+  // be swallowed (and the flag cleared) so the sync doesn't bounce back. A flag
+  // rather than a timer/rAF guard: setting scrollTop fires exactly one scroll
+  // event synchronously-queued, so matching it by identity is race-free where a
+  // time-based guard would let a late programmatic event read as user input.
+  let suppress: HTMLElement | null = null;
 
   function pct(el: HTMLElement): number {
     const max = el.scrollHeight - el.clientHeight;
     return max <= 0 ? 0 : el.scrollTop / max;
   }
-  function applyPct(el: HTMLElement, p: number) {
-    const max = el.scrollHeight - el.clientHeight;
-    el.scrollTop = p * max;
-  }
   function sync(from: HTMLElement, to: HTMLElement) {
-    if (syncing) return;
-    syncing = true;
-    applyPct(to, pct(from));
-    requestAnimationFrame(() => (syncing = false));
+    if (suppress === from) {
+      suppress = null;
+      return;
+    }
+    const max = to.scrollHeight - to.clientHeight;
+    const target = pct(from) * max;
+    // No-op moves fire no scroll event; don't arm suppress or it'd swallow the
+    // next genuine scroll on `to`.
+    if (Math.abs(to.scrollTop - target) < 1) return;
+    suppress = to;
+    to.scrollTop = target;
   }
 
   const darkTheme = EditorView.theme(

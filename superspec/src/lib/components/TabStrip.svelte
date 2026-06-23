@@ -65,21 +65,19 @@
           >×</button>
         {/if}
       </div>
-      <span class="mt-1 block truncate text-xs text-neutral-500" title={tab.caption}>{tab.caption}</span>
-      {#if tab.plans.length > 0}
-        <div class="mt-1.5 flex flex-wrap gap-1.5">
-          {#each tab.plans as plan (plan.path)}
-            <button
-              type="button"
-              class="text-xs text-blue-400 hover:text-blue-300
-                {plan.boxed
-                  ? 'rounded border border-blue-500 px-1.5 text-blue-300'
-                  : 'underline'}"
-              onclick={() => onSelect(plan.path)}
-            >{plan.label}</button>
-          {/each}
-        </div>
-      {/if}
+      <div class="mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+        <span class="text-xs text-neutral-500" title={tab.caption}>{tab.caption}</span>
+        {#each tab.plans as plan (plan.path)}
+          <button
+            type="button"
+            class="text-xs text-blue-400 hover:text-blue-300
+              {plan.boxed
+                ? 'rounded border border-blue-500 px-1.5 text-blue-300'
+                : 'underline'}"
+            onclick={() => onSelect(plan.path)}
+          >{plan.label}</button>
+        {/each}
+      </div>
     </div>
   {/each}
 
