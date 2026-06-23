@@ -4,7 +4,8 @@
   import Editor from '$lib/components/Editor.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import type { SpecEntry } from '$lib/types';
-  import { withinWindow } from '$lib/recency';
+  import { DAY_MS } from '$lib/recency';
+  import { pairAndGroup } from '$lib/pairing';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
@@ -16,7 +17,9 @@
   let toast = $state<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const visible = $derived(withinWindow(specs, Date.now()));
+  const visibleGroups = $derived(
+    pairAndGroup(specs).filter((g) => g.recency >= Date.now() - DAY_MS)
+  );
 
   // Resizable sidebar
   const MIN_W = 220;
@@ -143,7 +146,7 @@
 
 <div class="flex h-screen bg-neutral-900 text-neutral-200">
   <div class="shrink-0 overflow-hidden" style="width: {sidebarWidth}px">
-    <Sidebar specs={visible} {selectedPath} onSelect={selectSpec} />
+    <Sidebar groups={visibleGroups} {selectedPath} onSelect={selectSpec} />
   </div>
   <div
     class="w-1 shrink-0 cursor-col-resize bg-neutral-800 hover:bg-neutral-600"
