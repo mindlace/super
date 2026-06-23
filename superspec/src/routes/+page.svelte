@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import Sidebar from '$lib/components/Sidebar.svelte';
+  import TabStrip from '$lib/components/TabStrip.svelte';
   import Editor from '$lib/components/Editor.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import type { SpecEntry } from '$lib/types';
@@ -21,29 +21,7 @@
     pairAndGroup(specs).filter((g) => g.recency >= Date.now() - DAY_MS)
   );
 
-  // Resizable sidebar
-  const MIN_W = 220;
-  const MAX_W = 600;
-  const DEFAULT_W = 320;
-  const STORAGE_KEY = 'sr:sidebarWidth';
   const SELECTED_KEY = 'sr:selectedPath';
-  let sidebarWidth = $state(DEFAULT_W);
-  let resizing = false;
-
-  function startResize(e: PointerEvent) {
-    resizing = true;
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  }
-  function onResizeMove(e: PointerEvent) {
-    if (!resizing) return;
-    sidebarWidth = Math.min(MAX_W, Math.max(MIN_W, e.clientX));
-  }
-  function endResize(e: PointerEvent) {
-    if (!resizing) return;
-    resizing = false;
-    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
-    localStorage.setItem(STORAGE_KEY, String(sidebarWidth));
-  }
 
   async function loadSpecs() {
     const res = await fetch('/api/specs');
@@ -119,9 +97,6 @@
   }
 
   onMount(() => {
-    const savedWidth = Number(localStorage.getItem(STORAGE_KEY));
-    if (savedWidth >= MIN_W && savedWidth <= MAX_W) sidebarWidth = savedWidth;
-
     loadSpecs();
 
     const fromQuery = new URLSearchParams(window.location.search).get('path');
@@ -144,19 +119,9 @@
   });
 </script>
 
-<div class="flex h-screen bg-neutral-900 text-neutral-200">
-  <div class="shrink-0 overflow-hidden" style="width: {sidebarWidth}px">
-    <Sidebar groups={visibleGroups} {selectedPath} onSelect={selectSpec} />
-  </div>
-  <div
-    class="w-1 shrink-0 cursor-col-resize bg-neutral-800 hover:bg-neutral-600"
-    role="separator"
-    aria-orientation="vertical"
-    onpointerdown={startResize}
-    onpointermove={onResizeMove}
-    onpointerup={endResize}
-  ></div>
-  <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
+<div class="flex h-screen flex-col bg-neutral-900 text-neutral-200">
+  <TabStrip groups={visibleGroups} {selectedPath} onSelect={selectSpec} />
+  <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
     {#if selectedPath}
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
         <span class="truncate text-neutral-500" title={selectedPath}>{selectedPath}</span>
@@ -170,7 +135,9 @@
         <Editor {content} onInput={handleInput} />
       </div>
     {:else}
-      <p class="p-6 text-neutral-500">Select a spec.</p>
+      <p class="p-6 text-neutral-500">
+        {visibleGroups.length === 0 ? 'No specs in the last 24 hours.' : 'Select a spec.'}
+      </p>
     {/if}
   </main>
 </div>
