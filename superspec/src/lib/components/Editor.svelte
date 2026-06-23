@@ -27,9 +27,11 @@
   $effect(() => {
     const src = content;
     const version = ++renderVersion;
-    renderMarkdown(src).then((out) => {
-      if (version === renderVersion) html = out;
-    });
+    renderMarkdown(src)
+      .then((out) => {
+        if (version === renderVersion) html = out;
+      })
+      .catch((err) => console.error('preview render failed', err));
   });
 
   let editorEl: HTMLDivElement;

@@ -19,4 +19,9 @@ describe('renderMarkdown', () => {
     const out = await renderMarkdown('```no-such-lang\nabc\n```');
     expect(out).toContain('abc');
   });
+
+  it('preserves inline style attributes (token colors) through sanitization', async () => {
+    const out = await renderMarkdown('```ts\nconst x = 1;\n```');
+    expect(out).toContain('style="color:');
+  });
 });
