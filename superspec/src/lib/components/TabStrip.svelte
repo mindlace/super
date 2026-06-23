@@ -23,6 +23,7 @@
     >
       <button
         type="button"
+        aria-current={tab.active ? 'page' : undefined}
         class="block w-full break-words text-left leading-snug
           {tab.active ? 'text-blue-200' : 'text-neutral-300'}"
         onclick={() => onSelect(tab.path)}
