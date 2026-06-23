@@ -6,9 +6,12 @@
   import type { SpecEntry } from '$lib/types';
   import { DAY_MS } from '$lib/recency';
   import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
+  import { findSelectedGroup, groupToPromote } from '$lib/openTabs';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
+  let lastSelectedGroup = $state<DisplayGroup | null>(null);
+  let specsLoaded = $state(false);
   let content = $state('');
   let knownMtime = $state(0);
   let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -33,12 +36,27 @@
   const tabGroups = $derived([...visibleGroups, ...openedRendered]);
   const openedPaths = $derived(new Set(openedRendered.map((g) => g.parent.path)));
 
+  $effect(() => {
+    if (!specsLoaded || !selectedPath) return;
+    const live = findSelectedGroup(tabGroups, selectedPath);
+    if (live) {
+      lastSelectedGroup = live; // capture while visible (idempotent: same ref)
+      return;
+    }
+    const promote = groupToPromote(selectedPath, tabGroups, lastSelectedGroup, openedGroups);
+    if (promote) {
+      openedGroups = [...openedGroups, promote];
+      persistOpened();
+    }
+  });
+
   const SELECTED_KEY = 'sr:selectedPath';
 
   async function loadSpecs() {
     const res = await fetch('/api/specs');
     if (!res.ok) return;
     specs = await res.json();
+    specsLoaded = true;
   }
 
   async function selectSpec(path: string): Promise<boolean> {
@@ -83,6 +101,7 @@
       selectedPath = null;
       content = '';
       saveStatus = 'idle';
+      lastSelectedGroup = null;
       localStorage.removeItem(SELECTED_KEY);
     }
   }
@@ -159,6 +178,13 @@
       selectSpec(toOpen).then((ok) => {
         if (!ok && !fromQuery) localStorage.removeItem(SELECTED_KEY);
       });
+      // Seed the retention cache so an out-of-window deep-link still gets a tab.
+      fetch(`/api/resolve?q=${encodeURIComponent(toOpen)}`)
+        .then((r) => (r.ok ? (r.json() as Promise<DisplayGroup>) : null))
+        .then((g) => {
+          if (g) lastSelectedGroup = g;
+        })
+        .catch(() => {});
     }
 
     const events = new EventSource('/api/events');
