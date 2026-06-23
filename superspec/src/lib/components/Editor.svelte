@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { EditorState } from '@codemirror/state';
+  import { EditorState, Compartment } from '@codemirror/state';
   import { EditorView, keymap, highlightActiveLine } from '@codemirror/view';
   import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
   import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -11,11 +11,15 @@
 
   let {
     content,
-    onInput
+    onInput,
+    readOnly = false
   }: {
     content: string;
     onInput: (value: string) => void;
+    readOnly?: boolean;
   } = $props();
+
+  const editable = new Compartment();
 
   let html = $state('');
   let renderVersion = 0;
@@ -132,7 +136,8 @@
             scroll: () => {
               if (view) sync(view.scrollDOM, preview);
             }
-          })
+          }),
+          editable.of([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)])
         ]
       })
     });
@@ -149,6 +154,16 @@
     applyingExternal = true;
     view.dispatch({ changes: { from: 0, to: current.length, insert: incoming } });
     applyingExternal = false;
+  });
+
+  // Switch between an editable worktree file and a read-only main file without
+  // remounting the editor.
+  $effect(() => {
+    const ro = readOnly;
+    if (!view) return;
+    view.dispatch({
+      effects: editable.reconfigure([EditorState.readOnly.of(ro), EditorView.editable.of(!ro)])
+    });
   });
 </script>
 

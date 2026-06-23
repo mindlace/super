@@ -7,6 +7,7 @@
   import { DAY_MS } from '$lib/recency';
   import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
   import { findSelectedGroup, groupToPromote } from '$lib/openTabs';
+  import { isMainPath } from '$lib/mainpath';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
@@ -15,6 +16,7 @@
   let content = $state('');
   let knownMtime = $state(0);
   let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  let readOnly = $state(false);
 
   let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let toast = $state<string | null>(null);
@@ -59,6 +61,17 @@
     specsLoaded = true;
   }
 
+  async function adoptPath(oldPath: string, newPath: string) {
+    const res = await fetch(`/api/resolve?q=${encodeURIComponent(newPath)}`);
+    const group: DisplayGroup | null = res.ok ? await res.json() : null;
+    // On a transient resolve failure the tab keeps its old path; it self-heals
+    // on the next click (selectSpec re-runs adoptPath) and writes are 403'd anyway.
+    if (!group) return;
+    openedGroups = openedGroups.map((g) => (g.parent.path === oldPath ? group : g));
+    if (lastSelectedGroup?.parent.path === oldPath) lastSelectedGroup = group;
+    persistOpened();
+  }
+
   async function selectSpec(path: string): Promise<boolean> {
     if (saveTimer) {
       clearTimeout(saveTimer);
@@ -69,9 +82,14 @@
     const data = await res.json();
     content = data.content;
     knownMtime = data.mtime;
-    selectedPath = path;
+    const effective: string = data.path ?? path;
+    selectedPath = effective;
+    readOnly = isMainPath(effective);
+    // Worktree gone → server served the main copy; rewrite the opened tab so the
+    // selection, caption, autosave, and persistence all target the real file.
+    if (effective !== path) await adoptPath(path, effective);
     saveStatus = 'idle';
-    localStorage.setItem(SELECTED_KEY, path);
+    localStorage.setItem(SELECTED_KEY, effective);
     return true;
   }
 
@@ -101,13 +119,14 @@
       selectedPath = null;
       content = '';
       saveStatus = 'idle';
+      readOnly = false;
       lastSelectedGroup = null;
       localStorage.removeItem(SELECTED_KEY);
     }
   }
 
   async function save() {
-    if (!selectedPath) return;
+    if (!selectedPath || readOnly) return;
     const savedPath = selectedPath;
     saveStatus = 'saving';
     try {
@@ -130,6 +149,7 @@
   }
 
   function handleInput(value: string) {
+    if (readOnly) return;
     content = value;
     saveStatus = 'saving';
     if (saveTimer) clearTimeout(saveTimer);
@@ -219,7 +239,7 @@
         </span>
       </header>
       <div class="min-h-0 flex-1">
-        <Editor {content} onInput={handleInput} />
+        <Editor {content} {readOnly} onInput={handleInput} />
       </div>
     {:else}
       <p class="p-6 text-neutral-500">
