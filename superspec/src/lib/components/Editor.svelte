@@ -55,7 +55,7 @@
 
   const darkTheme = EditorView.theme(
     {
-      '&': { height: '100%', backgroundColor: '#171717', color: '#f5f5f5' },
+      '&': { height: '100%', backgroundColor: '#171717', color: '#d4d4d4' },
       '.cm-scroller': {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
         fontSize: '13px',
@@ -95,9 +95,10 @@
     { tag: tags.function(tags.variableName), color: '#82aaff' },
     { tag: tags.variableName, color: '#eeffff' },
     { tag: [tags.operator, tags.punctuation], color: '#89ddff' },
-    // List / quote markup — recolored in Task 5
-    { tag: tags.list, color: '#a3a3a3' },
-    { tag: tags.quote, color: '#a3a3a3', fontStyle: 'italic' }
+    // List markers track body text (de-emphasized, not comment-gray);
+    // quotes get a distinct non-gray accent so neither reads as a comment.
+    { tag: tags.list, color: '#d4d4d4' },
+    { tag: tags.quote, color: '#80cbc4', fontStyle: 'italic' }
   ]);
 
   onMount(() => {
