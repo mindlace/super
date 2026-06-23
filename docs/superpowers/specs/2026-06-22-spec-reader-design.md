@@ -59,13 +59,13 @@ Pure filesystem + filename comparison — no git required.
 
 - Roughly 1 second after the user stops typing, `PUT` the textarea content to disk. A small
   status indicator shows `saving…` / `saved`.
-- **External-change safety** (important for the brainstorm → read → iterate loop, where an
+- **External-change handling** (important for the brainstorm → read → iterate loop, where an
   agent may rewrite the file while it is open):
   - The server returns the file `mtime`; the client polls it periodically.
-  - If the on-disk file changed and the editor has **no unsaved local edits** → auto-reload
-    the content.
-  - If the file changed and there **are** unsaved edits → show a banner:
-    *"File changed on disk — Reload / Keep mine."*
+  - If the on-disk file changed, **always reload** the content from disk and show a toast
+    (e.g. *"Reloaded — file changed on disk"*). No conflict prompt and no "keep mine" path:
+    a second's worth of in-flight edits isn't worth preserving, and the user does not edit
+    docs that aren't quiescent.
 
 ## Server Endpoints
 
