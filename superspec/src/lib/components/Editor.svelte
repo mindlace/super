@@ -16,7 +16,20 @@
     onInput: (value: string) => void;
   } = $props();
 
-  let html = $derived(renderMarkdown(content));
+  let html = $state('');
+  let renderVersion = 0;
+
+  // Re-render the preview whenever content changes. renderMarkdown is async
+  // (Shiki); a version guard drops stale results so fast typing can't let an
+  // older render overwrite a newer one. We keep the previous html until the new
+  // one resolves, so the pane never flashes blank between updates.
+  $effect(() => {
+    const src = content;
+    const version = ++renderVersion;
+    renderMarkdown(src).then((out) => {
+      if (version === renderVersion) html = out;
+    });
+  });
 
   let editorEl: HTMLDivElement;
   let preview: HTMLDivElement;
