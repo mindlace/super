@@ -40,6 +40,9 @@
         // re-rendered with new content/height. rAF waits for Svelte to flush the
         // {@html} and the browser to lay it out, then aligns the preview to the
         // editor's preserved position (sync() arms `suppress` so it won't bounce).
+        // Keep the rAF: the diff dispatch can fire a CodeMirror scroll event that
+        // runs an early sync() against the *old* preview height; deferring past
+        // that settles re-aligns to the final height. Don't "simplify" it away.
         if (pendingPreviewSync) {
           pendingPreviewSync = false;
           requestAnimationFrame(() => {
