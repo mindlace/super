@@ -8,6 +8,7 @@
   import { languages } from '@codemirror/language-data';
   import { tags } from '@lezer/highlight';
   import { renderMarkdown } from '$lib/render';
+  import { diffRange } from '$lib/diffRange';
 
   let {
     content,
@@ -33,7 +34,18 @@
     const version = ++renderVersion;
     renderMarkdown(src)
       .then((out) => {
-        if (version === renderVersion) html = out;
+        if (version !== renderVersion) return;
+        html = out;
+        // After an external reload the editor kept its scroll; the preview just
+        // re-rendered with new content/height. rAF waits for Svelte to flush the
+        // {@html} and the browser to lay it out, then aligns the preview to the
+        // editor's preserved position (sync() arms `suppress` so it won't bounce).
+        if (pendingPreviewSync) {
+          pendingPreviewSync = false;
+          requestAnimationFrame(() => {
+            if (view) sync(view.scrollDOM, preview);
+          });
+        }
       })
       .catch((err) => console.error('preview render failed', err));
   });
@@ -42,6 +54,11 @@
   let preview: HTMLDivElement;
   let view: EditorView | undefined;
   let applyingExternal = false;
+  // Set when an *external* content change has just been applied to the doc, so
+  // the next completed preview render re-aligns the preview to the editor's
+  // (preserved) scroll position. Stays false for user typing — there the doc
+  // already matches `content`, so the external-sync effect early-returns.
+  let pendingPreviewSync = false;
 
   // The pane we just scrolled programmatically. Its resulting scroll event must
   // be swallowed (and the flag cleared) so the sync doesn't bounce back. A flag
@@ -144,16 +161,19 @@
     return () => view?.destroy();
   });
 
-  // External content changes (spec selection, external-change reload): replace the doc
-  // without re-triggering onInput (guarded by applyingExternal).
+  // External content changes (spec selection, external-change reload): apply the
+  // smallest diff rather than replacing the whole doc, so CodeMirror maps scroll
+  // and selection through the change instead of resetting to the top. Guarded by
+  // applyingExternal so it doesn't re-trigger onInput.
   $effect(() => {
     const incoming = content;
     if (!view) return;
     const current = view.state.doc.toString();
     if (incoming === current) return;
     applyingExternal = true;
-    view.dispatch({ changes: { from: 0, to: current.length, insert: incoming } });
+    view.dispatch({ changes: diffRange(current, incoming) });
     applyingExternal = false;
+    pendingPreviewSync = true;
   });
 
   // Switch between an editable worktree file and a read-only main file without
