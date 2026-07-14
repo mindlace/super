@@ -1,7 +1,7 @@
 import { resolve as resolvePath, join, sep } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import { listDirs, listMarkdown } from './fswalk';
-import { makeEntry } from './discovery';
+import { listWorktrees, makeEntry } from './discovery';
 import { pairAndGroup, type DisplayGroup } from '../pairing';
 import type { SpecEntry } from '../types';
 import { isWorktreePath, mainEquivalent } from '../mainpath';
@@ -30,7 +30,7 @@ async function collectCandidates(root: string): Promise<Candidate[]> {
   for (const project of await listDirs(root)) {
     await addSuperdir(join(root, project, SUPERPOWERS_SEGMENT), project, null);
     const wtRoot = join(root, project, '.claude', 'worktrees');
-    for (const wt of await listDirs(wtRoot)) {
+    for (const wt of await listWorktrees(wtRoot)) {
       await addSuperdir(join(wtRoot, wt, SUPERPOWERS_SEGMENT), project, wt);
     }
   }

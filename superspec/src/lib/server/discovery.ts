@@ -3,7 +3,31 @@ import { join } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
-import { listDirs, listMarkdown } from './fswalk';
+import { exists, listDirs, listMarkdown } from './fswalk';
+
+// A branch name with slashes ("support/foo") nests its worktree that many levels
+// below .claude/worktrees, so we can't assume worktrees are direct children.
+const MAX_WORKTREE_DEPTH = 3;
+
+/**
+ * Worktree directories under `wtRoot`, as paths relative to it ("foo",
+ * "support/foo"). A directory is a worktree if it holds a `.git` link or a
+ * superpowers dir; anything else is treated as a container of worktrees and
+ * descended into. Stopping at worktree roots keeps us out of their source trees.
+ */
+export async function listWorktrees(wtRoot: string, prefix = '', depth = 1): Promise<string[]> {
+  const out: string[] = [];
+  for (const name of await listDirs(wtRoot)) {
+    const dir = join(wtRoot, name);
+    const rel = prefix ? `${prefix}/${name}` : name;
+    if ((await exists(join(dir, '.git'))) || (await exists(join(dir, SUPERPOWERS_SEGMENT)))) {
+      out.push(rel);
+    } else if (depth < MAX_WORKTREE_DEPTH) {
+      out.push(...(await listWorktrees(dir, rel, depth + 1)));
+    }
+  }
+  return out;
+}
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})(?:-(\d{2})(\d{2}))?/;
 
@@ -71,7 +95,7 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
 
     const wtRoot = join(root, project, '.claude', 'worktrees');
     const planSlugs = new Set<string>();
-    for (const wt of await listDirs(wtRoot)) {
+    for (const wt of await listWorktrees(wtRoot)) {
       const wtSuper = join(wtRoot, wt, SUPERPOWERS_SEGMENT);
       for (const sub of await listDirs(wtSuper)) {
         const dir = join(wtSuper, sub);

@@ -36,6 +36,12 @@ beforeAll(async () => {
   const old = new Date(2020, 0, 1).getTime() / 1000;
   await utimes(join(bWtSpecs, '2026-06-22-recency-design.md'), old, old);
 
+  // A branch with a slash ("support/thing") nests the worktree one level deeper.
+  const dNested = join(root, 'projD/.claude/worktrees/support/thing/docs/superpowers/specs');
+  await write(dNested, '2026-06-24-nested-design.md', '# Nested\n');
+  // A container dir holding no worktree at all must not break the walk.
+  await mkdir(join(root, 'projD/.claude/worktrees/feature'), { recursive: true });
+
   // projC: spec landed on main, plan still in a worktree -> spec is re-surfaced.
   const cSpecs = join(root, 'projC/docs/superpowers/specs');
   const cWtPlans = join(root, 'projC/.claude/worktrees/wt3/docs/superpowers/plans');
@@ -130,6 +136,13 @@ describe('scanSpecs', () => {
     const bar = list.find((e) => e.filename === '2026-06-21-bar-design.md' && e.type === 'spec');
     expect(bar?.worktree).toBe('wt1');
     expect(bar?.project).toBe('projA');
+  });
+
+  it('finds specs in a worktree nested under a slashed branch name', async () => {
+    const nested = byName(await scanSpecs(root), '2026-06-24-nested-design.md');
+    expect(nested?.project).toBe('projD');
+    expect(nested?.worktree).toBe('support/thing');
+    expect(nested?.type).toBe('spec');
   });
 
   it('extracts titles with heading, first-line, and filename fallbacks', async () => {

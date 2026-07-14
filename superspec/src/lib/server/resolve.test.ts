@@ -32,6 +32,11 @@ beforeAll(async () => {
   const older = new Date(2020, 0, 1).getTime() / 1000;
   await utimes(join(cWtSpecs, 'dupe.md'), older, older);
 
+  // projF: worktree nested under a slashed branch name, spec + sibling plan.
+  const fWt = join(root, 'projF/.claude/worktrees/support/thing/docs/superpowers');
+  await write(join(fWt, 'specs'), '2026-06-24-nested-design.md', '# Nested\n');
+  await write(join(fWt, 'plans'), '2026-06-24-nested.md', '# Nested Plan\n');
+
   // projE: a spec that landed on main; its worktree is gone.
   const eMainSpecs = join(root, 'projE/docs/superpowers/specs');
   await write(eMainSpecs, '2026-06-22-landed-design.md', '# Landed\n');
@@ -48,6 +53,13 @@ describe('resolveDoc', () => {
     expect(g?.parent.type).toBe('spec');
     expect(g?.children.map((c) => c.filename)).toEqual(['2026-06-21-bar.md']);
     expect(g?.children[0].type).toBe('plan');
+  });
+
+  it('resolves a spec in a worktree nested under a slashed branch name', async () => {
+    const g = await resolveDoc('2026-06-24-nested-design.md', root);
+    expect(g?.parent.project).toBe('projF');
+    expect(g?.parent.worktree).toBe('support/thing');
+    expect(g?.children.map((c) => c.filename)).toEqual(['2026-06-24-nested.md']);
   });
 
   it('matches a bare name with .md', async () => {
