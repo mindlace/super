@@ -13,7 +13,12 @@ export function isMainPath(p: string): boolean {
   return !isWorktreePath(p);
 }
 
+// A slashed branch name ("support/foo") nests the worktree that many levels deep,
+// so the name is matched lazily up to the superpowers segment rather than as one
+// path segment.
+const WORKTREE_TO_SUPER_RE = /\/\.claude\/worktrees\/.+?(\/docs\/superpowers\/)/;
+
 export function mainEquivalent(p: string): string | null {
-  const stripped = p.replace(/\/\.claude\/worktrees\/[^/]+\//, '/');
+  const stripped = p.replace(WORKTREE_TO_SUPER_RE, '$1');
   return stripped === p ? null : stripped;
 }

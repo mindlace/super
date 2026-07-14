@@ -23,4 +23,11 @@ describe('mainpath', () => {
   it('returns null for a non-worktree path', () => {
     expect(mainEquivalent(main)).toBeNull();
   });
+
+  it('strips a multi-segment worktree name (slashed branch)', () => {
+    const nested =
+      '/Users/x/Projects/p/.claude/worktrees/support/wt1/docs/superpowers/specs/2026-06-22-y-design.md';
+    expect(isWorktreePath(nested)).toBe(true);
+    expect(mainEquivalent(nested)).toBe(main);
+  });
 });
