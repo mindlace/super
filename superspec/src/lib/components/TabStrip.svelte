@@ -95,17 +95,3 @@
     />
   </div>
 </nav>
-
-<style>
-  @keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-5px); }
-    40% { transform: translateX(5px); }
-    60% { transform: translateX(-4px); }
-    80% { transform: translateX(3px); }
-  }
-  .shake {
-    animation: shake 0.4s ease-in-out;
-    border-color: rgb(248 113 113);
-  }
-</style>
