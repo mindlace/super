@@ -209,6 +209,13 @@
 
     const events = new EventSource('/api/events');
     events.onmessage = () => loadSpecs();
+    // Re-sync on every (re)connect, not just on a change event. EventSource
+    // reconnects itself after a dropped stream (dev server restart, sleep), but
+    // onmessage won't fire until the *next* file change — so without this the
+    // list stays frozen at whatever it was when the stream died, indefinitely.
+    // The open doc keeps healing via pollExternalChange, which is what makes the
+    // stale state look like "a doc is open but has no tab".
+    events.onopen = () => loadSpecs();
 
     const pollId = setInterval(pollExternalChange, 3000);
 
