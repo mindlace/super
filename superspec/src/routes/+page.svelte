@@ -8,6 +8,7 @@
   import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
   import { findSelectedGroup, groupToPromote } from '$lib/openTabs';
   import { isMainPath } from '$lib/mainpath';
+  import { retryDelay } from '$lib/backoff';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
@@ -54,11 +55,35 @@
 
   const SELECTED_KEY = 'sr:selectedPath';
 
+  let specsAttempt = 0;
+  let specsRetryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function fetchSpecs(): Promise<boolean> {
+    try {
+      const res = await fetch('/api/specs');
+      if (!res.ok) return false;
+      specs = await res.json();
+      specsLoaded = true;
+      return true;
+    } catch {
+      return false; // dev server down / restarting
+    }
+  }
+
+  // Never give up: until this succeeds once, specsLoaded stays false, which
+  // disables the tab-retention effect below — so a single transient failure
+  // (dev server restarting at mount) would otherwise leave the strip empty
+  // for the life of the page while the open doc keeps rendering.
   async function loadSpecs() {
-    const res = await fetch('/api/specs');
-    if (!res.ok) return;
-    specs = await res.json();
-    specsLoaded = true;
+    if (specsRetryTimer) {
+      clearTimeout(specsRetryTimer);
+      specsRetryTimer = null;
+    }
+    if (await fetchSpecs()) {
+      specsAttempt = 0;
+      return;
+    }
+    specsRetryTimer = setTimeout(loadSpecs, retryDelay(++specsAttempt));
   }
 
   async function adoptPath(oldPath: string, newPath: string) {
@@ -221,6 +246,7 @@
 
     return () => {
       clearInterval(pollId);
+      if (specsRetryTimer) clearTimeout(specsRetryTimer);
       events.close();
     };
   });
