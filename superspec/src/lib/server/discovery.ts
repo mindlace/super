@@ -3,11 +3,7 @@ import { join } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
-import { exists, listDirs, listMarkdown } from './fswalk';
-
-// A branch name with slashes ("support/foo") nests its worktree that many levels
-// below .claude/worktrees, so we can't assume worktrees are direct children.
-const MAX_WORKTREE_DEPTH = 3;
+import { exists, isWorktreeRoot, listDirs, listMarkdown, MAX_WORKTREE_DEPTH } from './fswalk';
 
 /**
  * Worktree directories under `wtRoot`, as paths relative to it ("foo",
@@ -20,7 +16,7 @@ export async function listWorktrees(wtRoot: string, prefix = '', depth = 1): Pro
   for (const name of await listDirs(wtRoot)) {
     const dir = join(wtRoot, name);
     const rel = prefix ? `${prefix}/${name}` : name;
-    if ((await exists(join(dir, '.git'))) || (await exists(join(dir, SUPERPOWERS_SEGMENT)))) {
+    if (await isWorktreeRoot(dir)) {
       out.push(rel);
     } else if (depth < MAX_WORKTREE_DEPTH) {
       out.push(...(await listWorktrees(dir, rel, depth + 1)));
