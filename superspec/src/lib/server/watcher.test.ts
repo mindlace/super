@@ -59,12 +59,26 @@ describe('createWatcherHub', () => {
 
 function fakeWatch() {
   const open = new Map<string, { closed: boolean }>();
-  const fn = (dir: string) => {
+  const callbacks = new Map<string, (event: string, filename: string | null) => void>();
+  const errorCallbacks = new Map<string, (err: unknown) => void>();
+  const fn = (
+    dir: string,
+    cb: (event: string, filename: string | null) => void,
+    onError: (err: unknown) => void
+  ) => {
     const h = { closed: false };
     open.set(dir, h);
+    callbacks.set(dir, cb);
+    errorCallbacks.set(dir, onError);
     return { close: () => { h.closed = true; open.delete(dir); } };
   };
-  return { fn, open };
+  return {
+    fn,
+    open,
+    fireEvent: (dir: string, event: string, filename: string | null) =>
+      callbacks.get(dir)?.(event, filename),
+    fireError: (dir: string, err: unknown) => errorCallbacks.get(dir)?.(err)
+  };
 }
 
 describe('createWatchRegistry', () => {
@@ -88,7 +102,10 @@ describe('createWatchRegistry', () => {
   it('does not reopen a watch that is already open', () => {
     const calls: string[] = [];
     const { fn } = fakeWatch();
-    const counting = (dir: string) => { calls.push(dir); return fn(dir); };
+    const counting: typeof fn = (dir, cb, onError) => {
+      calls.push(dir);
+      return fn(dir, cb, onError);
+    };
     const reg = createWatchRegistry(counting, () => {});
     reg.reconcile(['/a']);
     reg.reconcile(['/a']);
@@ -102,5 +119,42 @@ describe('createWatchRegistry', () => {
     reg.closeAll();
     expect(reg.watchedDirs()).toEqual([]);
     expect(open.size).toBe(0);
+  });
+
+  it('delivers a filesystem event on a watched dir to onEvent with that dir', () => {
+    const { fn, fireEvent } = fakeWatch();
+    const onEvent = vi.fn();
+    const reg = createWatchRegistry(fn, onEvent);
+    reg.reconcile(['/a', '/b']);
+    fireEvent('/a', 'change', 'x.md');
+    expect(onEvent).toHaveBeenCalledTimes(1);
+    expect(onEvent).toHaveBeenCalledWith('/a', 'x.md');
+  });
+
+  it('leaves watchedDirs clean when watchFn throws on open, and retries on the next reconcile', () => {
+    const { fn, open } = fakeWatch();
+    let shouldThrow = true;
+    const flaky: typeof fn = (dir, cb, onError) => {
+      if (shouldThrow) throw new Error('ENOENT: dir does not exist yet');
+      return fn(dir, cb, onError);
+    };
+    const reg = createWatchRegistry(flaky, () => {});
+    reg.reconcile(['/a']);
+    expect(reg.watchedDirs()).toEqual([]);
+    expect(open.size).toBe(0);
+
+    shouldThrow = false;
+    reg.reconcile(['/a']);
+    expect(reg.watchedDirs()).toEqual(['/a']);
+    expect(open.size).toBe(1);
+  });
+
+  it('removes a dir from the registry on an error from an opened watcher, without throwing', () => {
+    const { fn, open, fireError } = fakeWatch();
+    const reg = createWatchRegistry(fn, () => {});
+    reg.reconcile(['/a', '/b']);
+    expect(() => fireError('/a', new Error('EPERM'))).not.toThrow();
+    expect(reg.watchedDirs()).toEqual(['/b']);
+    expect(open.size).toBe(1);
   });
 });

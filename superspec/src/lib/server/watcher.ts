@@ -45,7 +45,8 @@ export interface WatchHandle {
 
 export type WatchFn = (
   dir: string,
-  cb: (event: string, filename: string | null) => void
+  cb: (event: string, filename: string | null) => void,
+  onError: (err: unknown) => void
 ) => WatchHandle;
 
 export interface WatchRegistry {
@@ -80,7 +81,23 @@ export function createWatchRegistry(
       for (const dir of want) {
         if (open.has(dir)) continue;
         try {
-          open.set(dir, watchFn(dir, (_e, filename) => onEvent(dir, filename)));
+          let handle: WatchHandle;
+          handle = watchFn(
+            dir,
+            (_e, filename) => onEvent(dir, filename),
+            () => {
+              // Watched dir vanished or errored after a successful open (e.g. a
+              // worktree got deleted). Drop it here so the next reconcile retries
+              // it as a fresh directory instead of leaving a dead entry behind.
+              try {
+                handle.close();
+              } catch {
+                // already gone; ignore
+              }
+              open.delete(dir);
+            }
+          );
+          open.set(dir, handle);
         } catch {
           // dir vanished between enumeration and watch; the next reconcile retries
         }
@@ -109,10 +126,15 @@ const g = globalThis as unknown as {
   __srWatcher?: { hub: WatcherHub; registry: WatchRegistry; started: boolean };
 };
 
-const nodeWatch: WatchFn = (dir, cb) =>
-  watch(dir, { recursive: false }, (event, filename) =>
+const nodeWatch: WatchFn = (dir, cb, onError) => {
+  const handle = watch(dir, { recursive: false }, (event, filename) =>
     cb(event, filename == null ? null : filename.toString())
   );
+  // FSWatcher is an EventEmitter; an unhandled 'error' (dir deleted, EPERM,
+  // descriptor exhaustion) would otherwise throw and crash the process.
+  handle.on('error', (err) => onError(err));
+  return handle;
+};
 
 function getState() {
   if (!g.__srWatcher) {
