@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { isRelevantChange, createWatcherHub } from './watcher';
+import { isRelevantChange, createWatcherHub, createWatchRegistry } from './watcher';
 
 describe('isRelevantChange', () => {
   it('matches specs and plans markdown under docs/superpowers', () => {
@@ -54,5 +54,53 @@ describe('createWatcherHub', () => {
     vi.advanceTimersByTime(500);
     expect(cb).not.toHaveBeenCalled();
     expect(hub.subscriberCount()).toBe(0);
+  });
+});
+
+function fakeWatch() {
+  const open = new Map<string, { closed: boolean }>();
+  const fn = (dir: string) => {
+    const h = { closed: false };
+    open.set(dir, h);
+    return { close: () => { h.closed = true; open.delete(dir); } };
+  };
+  return { fn, open };
+}
+
+describe('createWatchRegistry', () => {
+  it('opens a watch per desired directory', () => {
+    const { fn, open } = fakeWatch();
+    const reg = createWatchRegistry(fn, () => {});
+    reg.reconcile(['/a', '/b']);
+    expect(reg.watchedDirs().sort()).toEqual(['/a', '/b']);
+    expect(open.size).toBe(2);
+  });
+
+  it('closes watches for directories that disappear and opens newly added ones', () => {
+    const { fn, open } = fakeWatch();
+    const reg = createWatchRegistry(fn, () => {});
+    reg.reconcile(['/a', '/b']);
+    reg.reconcile(['/b', '/c']);
+    expect(reg.watchedDirs().sort()).toEqual(['/b', '/c']);
+    expect([...open.keys()].sort()).toEqual(['/b', '/c']);
+  });
+
+  it('does not reopen a watch that is already open', () => {
+    const calls: string[] = [];
+    const { fn } = fakeWatch();
+    const counting = (dir: string) => { calls.push(dir); return fn(dir); };
+    const reg = createWatchRegistry(counting, () => {});
+    reg.reconcile(['/a']);
+    reg.reconcile(['/a']);
+    expect(calls).toEqual(['/a']);
+  });
+
+  it('closeAll releases every watch', () => {
+    const { fn, open } = fakeWatch();
+    const reg = createWatchRegistry(fn, () => {});
+    reg.reconcile(['/a', '/b']);
+    reg.closeAll();
+    expect(reg.watchedDirs()).toEqual([]);
+    expect(open.size).toBe(0);
   });
 });
