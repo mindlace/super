@@ -3,11 +3,7 @@ import { join } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
-import { exists, listDirs, listMarkdown } from './fswalk';
-
-// A branch name with slashes ("support/foo") nests its worktree that many levels
-// below .claude/worktrees, so we can't assume worktrees are direct children.
-const MAX_WORKTREE_DEPTH = 3;
+import { exists, isWorktreeRoot, listDirs, listMarkdown, MAX_WORKTREE_DEPTH } from './fswalk';
 
 /**
  * Worktree directories under `wtRoot`, as paths relative to it ("foo",
@@ -20,7 +16,7 @@ export async function listWorktrees(wtRoot: string, prefix = '', depth = 1): Pro
   for (const name of await listDirs(wtRoot)) {
     const dir = join(wtRoot, name);
     const rel = prefix ? `${prefix}/${name}` : name;
-    if ((await exists(join(dir, '.git'))) || (await exists(join(dir, SUPERPOWERS_SEGMENT)))) {
+    if (await isWorktreeRoot(dir)) {
       out.push(rel);
     } else if (depth < MAX_WORKTREE_DEPTH) {
       out.push(...(await listWorktrees(dir, rel, depth + 1)));
@@ -77,31 +73,70 @@ export async function makeEntry(
   };
 }
 
+export interface SuperpowersLocation {
+  project: string;
+  worktree: string | null;
+  dir: string;
+}
+
+/**
+ * Every docs/superpowers directory that exists under `root` — main checkouts and
+ * worktrees alike. Single source of truth for both scanSpecs (what to read) and
+ * the watcher (what to watch), so the two can never drift apart.
+ */
+export async function listSuperpowersLocations(
+  root: string = PROJECTS_ROOT
+): Promise<SuperpowersLocation[]> {
+  const out: SuperpowersLocation[] = [];
+  for (const project of await listDirs(root)) {
+    const mainSuper = join(root, project, SUPERPOWERS_SEGMENT);
+    if (await exists(mainSuper)) {
+      out.push({ project, worktree: null, dir: mainSuper });
+    }
+    const wtRoot = join(root, project, '.claude', 'worktrees');
+    for (const wt of await listWorktrees(wtRoot)) {
+      const wtSuper = join(wtRoot, wt, SUPERPOWERS_SEGMENT);
+      if (await exists(wtSuper)) {
+        out.push({ project, worktree: wt, dir: wtSuper });
+      }
+    }
+  }
+  return out;
+}
+
 export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry[]> {
   const out: SpecEntry[] = [];
 
-  for (const project of await listDirs(root)) {
+  const byProject = new Map<string, SuperpowersLocation[]>();
+  for (const loc of await listSuperpowersLocations(root)) {
+    const arr = byProject.get(loc.project) ?? [];
+    arr.push(loc);
+    byProject.set(loc.project, arr);
+  }
+
+  for (const [project, locs] of byProject) {
+    const mainLoc = locs.find((l) => l.worktree === null);
+
     // Specs in the main checkout are intentionally not listed; we only surface
     // active worktree work. We still record them so a worktree copy that has
     // already landed on main drops off the list too.
-    const mainSuper = join(root, project, SUPERPOWERS_SEGMENT);
     const mainSet = new Set<string>();
-    for (const sub of await listDirs(mainSuper)) {
-      const dir = join(mainSuper, sub);
-      for (const name of await listMarkdown(dir)) {
-        mainSet.add(`${sub}/${name}`);
+    if (mainLoc) {
+      for (const sub of await listDirs(mainLoc.dir)) {
+        for (const name of await listMarkdown(join(mainLoc.dir, sub))) {
+          mainSet.add(`${sub}/${name}`);
+        }
       }
     }
 
-    const wtRoot = join(root, project, '.claude', 'worktrees');
     const planSlugs = new Set<string>();
-    for (const wt of await listWorktrees(wtRoot)) {
-      const wtSuper = join(wtRoot, wt, SUPERPOWERS_SEGMENT);
-      for (const sub of await listDirs(wtSuper)) {
-        const dir = join(wtSuper, sub);
+    for (const loc of locs) {
+      if (loc.worktree === null) continue;
+      for (const sub of await listDirs(loc.dir)) {
+        const dir = join(loc.dir, sub);
         for (const name of await listMarkdown(dir)) {
           if (mainSet.has(`${sub}/${name}`)) continue;
-          const entry = await makeEntry(dir, name, project, wt, sub);
+          const entry = await makeEntry(dir, name, project, loc.worktree, sub);
           out.push(entry);
           if (entry.type === 'plan') planSlugs.add(normalizedSlug(name));
         }
@@ -110,12 +145,14 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
 
     // Re-surface a landed main spec when a live worktree plan still references
     // it (same project, same slug), so the plan keeps its nested parent.
-    const mainSpecsDir = join(mainSuper, 'specs');
-    for (const name of await listMarkdown(mainSpecsDir)) {
-      if (!planSlugs.has(normalizedSlug(name))) continue;
-      const entry = await makeEntry(mainSpecsDir, name, project, null, 'specs');
-      entry.onMain = true;
-      out.push(entry);
+    if (mainLoc) {
+      const mainSpecsDir = join(mainLoc.dir, 'specs');
+      for (const name of await listMarkdown(mainSpecsDir)) {
+        if (!planSlugs.has(normalizedSlug(name))) continue;
+        const entry = await makeEntry(mainSpecsDir, name, project, null, 'specs');
+        entry.onMain = true;
+        out.push(entry);
+      }
     }
   }
 

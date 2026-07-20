@@ -2,7 +2,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanSpecs, parseFilenameDateMs, extractTitle } from './discovery';
+import { scanSpecs, parseFilenameDateMs, extractTitle, listSuperpowersLocations } from './discovery';
+import { makeTree } from './testtree';
 
 let root: string;
 
@@ -79,6 +80,30 @@ describe('extractTitle', () => {
   });
   it('returns null for empty/whitespace content', () => {
     expect(extractTitle('   \n\n')).toBeNull();
+  });
+});
+
+describe('listSuperpowersLocations', () => {
+  it('returns main-checkout and worktree superpowers dirs, including nested worktrees', async () => {
+    const root = await makeTree({
+      'proj/docs/superpowers/specs/a.md': '# A',
+      'proj/.claude/worktrees/feat/.git': 'gitdir: whatever',
+      'proj/.claude/worktrees/feat/docs/superpowers/plans/b.md': '# B',
+      'proj/.claude/worktrees/support/nested/.git': 'gitdir: whatever',
+      'proj/.claude/worktrees/support/nested/docs/superpowers/specs/c.md': '# C'
+    });
+
+    const locs = await listSuperpowersLocations(root);
+    const got = locs.map((l) => `${l.project}:${l.worktree ?? '(main)'}`).sort();
+
+    expect(got).toEqual(['proj:(main)', 'proj:feat', 'proj:support/nested']);
+    expect(locs.every((l) => l.dir.startsWith(root))).toBe(true);
+    expect(locs.every((l) => l.dir.endsWith(join('docs', 'superpowers')))).toBe(true);
+  });
+
+  it('omits projects that have no superpowers dir at all', async () => {
+    const root = await makeTree({ 'plain/README.md': 'hi' });
+    expect(await listSuperpowersLocations(root)).toEqual([]);
   });
 });
 
