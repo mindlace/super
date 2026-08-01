@@ -41,10 +41,15 @@
   }
 </script>
 
-<nav class="flex shrink-0 gap-1.5 bg-neutral-950 px-2 pt-2 text-sm">
+<!--
+  min-w-36 is a floor, not a size: without it flex shrinks every tab toward zero
+  once there are enough of them, and a bad scan turns the strip into a row of
+  unreadable, unclickable slivers. Past that floor the strip scrolls instead.
+-->
+<nav class="flex shrink-0 gap-1.5 overflow-x-auto bg-neutral-950 px-2 pt-2 text-sm">
   {#each tabs as tab (tab.path)}
     <div
-      class="flex min-w-0 flex-col rounded-t-lg border border-b-0 px-3 py-2
+      class="flex min-w-36 max-w-64 flex-col rounded-t-lg border border-b-0 px-3 py-2
         {tab.active ? 'border-neutral-700 bg-neutral-900' : 'border-neutral-800 bg-neutral-950'}"
     >
       <div class="flex min-w-0 items-start gap-1.5">

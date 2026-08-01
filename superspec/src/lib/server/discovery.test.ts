@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { scanSpecs, parseFilenameDateMs, extractTitle, listSuperpowersLocations } from './discovery';
 import { makeTree } from './testtree';
+import type { GitRunner } from './gitdirty';
 
 let root: string;
 
@@ -182,5 +183,54 @@ describe('scanSpecs', () => {
     const e = byName(await scanSpecs(root), '2026-06-22-recency-design.md')!;
     expect(e.recency).toBe(parseFilenameDateMs('2026-06-22-recency-design.md'));
     expect(e.recency).toBeGreaterThan(e.mtime);
+  });
+});
+
+describe('scanSpecs recency vs. checkout mtime', () => {
+  // A fresh `git worktree add` stamps every file with the checkout time, which
+  // would otherwise report a whole backlog of old specs as edited today.
+  const DATED = '2026-01-05-backlog-design.md';
+  const UNDATED = 'undated-design.md';
+
+  async function treeWithWorktreeSpecs() {
+    return makeTree({
+      [`proj/.claude/worktrees/wt/.git`]: 'gitdir: whatever',
+      [`proj/.claude/worktrees/wt/docs/superpowers/specs/${DATED}`]: '# Backlog\n',
+      [`proj/.claude/worktrees/wt/docs/superpowers/specs/${UNDATED}`]: '# Undated\n'
+    });
+  }
+
+  it('ignores the checkout mtime of a clean file and uses its filename date', async () => {
+    const treeRoot = await treeWithWorktreeSpecs();
+    const clean: GitRunner = async () => '';
+
+    const e = byName(await scanSpecs(treeRoot, clean), DATED)!;
+    expect(e.recency).toBe(parseFilenameDateMs(DATED));
+    expect(e.recency).toBeLessThan(e.mtime);
+  });
+
+  it('keeps the mtime of a file git reports as modified', async () => {
+    const treeRoot = await treeWithWorktreeSpecs();
+    const dirty: GitRunner = async () => ` M docs/superpowers/specs/${DATED}\0`;
+
+    const e = byName(await scanSpecs(treeRoot, dirty), DATED)!;
+    expect(e.recency).toBe(e.mtime);
+    expect(e.recency).toBeGreaterThan(parseFilenameDateMs(DATED));
+  });
+
+  it('falls back to mtime for a clean file with no date in its name', async () => {
+    const treeRoot = await treeWithWorktreeSpecs();
+    const clean: GitRunner = async () => '';
+
+    const e = byName(await scanSpecs(treeRoot, clean), UNDATED)!;
+    expect(e.recency).toBe(e.mtime);
+  });
+
+  it('treats every file as recent when git cannot answer', async () => {
+    const treeRoot = await treeWithWorktreeSpecs();
+    const noGit: GitRunner = async () => null;
+
+    const e = byName(await scanSpecs(treeRoot, noGit), DATED)!;
+    expect(e.recency).toBe(e.mtime);
   });
 });

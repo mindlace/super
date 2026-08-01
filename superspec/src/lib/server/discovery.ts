@@ -4,6 +4,7 @@ import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
 import { exists, isWorktreeRoot, listDirs, listMarkdown, MAX_WORKTREE_DEPTH } from './fswalk';
+import { listDirtyDocs, type GitRunner } from './gitdirty';
 
 /**
  * Worktree directories under `wtRoot`, as paths relative to it ("foo",
@@ -50,12 +51,26 @@ function typeLabel(subdir: string): string {
   return subdir;
 }
 
+/**
+ * How recent a file looks. mtime is only trustworthy for a file git reports as
+ * edited: a checkout stamps every file it writes with the checkout time, so an
+ * untouched file's mtime says when its worktree was created, not when anyone
+ * last worked on it. For those we use the date in the filename, falling back to
+ * mtime only when the name carries no date to read.
+ */
+export function entryRecency(filename: string, mtime: number, dirty: boolean): number {
+  const named = parseFilenameDateMs(filename);
+  if (dirty || !named) return Math.max(mtime, named);
+  return named;
+}
+
 export async function makeEntry(
   dir: string,
   filename: string,
   project: string,
   worktree: string | null,
-  subdir: string
+  subdir: string,
+  dirty = true
 ): Promise<SpecEntry> {
   const path = join(dir, filename);
   const raw = await readFile(path, 'utf8').catch(() => '');
@@ -69,14 +84,17 @@ export async function makeEntry(
     worktree,
     type: typeLabel(subdir),
     mtime,
-    recency: Math.max(mtime, parseFilenameDateMs(filename))
+    recency: entryRecency(filename, mtime, dirty)
   };
 }
 
 export interface SuperpowersLocation {
   project: string;
   worktree: string | null;
+  /** The docs/superpowers dir itself. */
   dir: string;
+  /** The checkout holding `dir` — a git repo root, which `dir` sits two levels below. */
+  checkout: string;
 }
 
 /**
@@ -89,22 +107,27 @@ export async function listSuperpowersLocations(
 ): Promise<SuperpowersLocation[]> {
   const out: SuperpowersLocation[] = [];
   for (const project of await listDirs(root)) {
-    const mainSuper = join(root, project, SUPERPOWERS_SEGMENT);
+    const mainCheckout = join(root, project);
+    const mainSuper = join(mainCheckout, SUPERPOWERS_SEGMENT);
     if (await exists(mainSuper)) {
-      out.push({ project, worktree: null, dir: mainSuper });
+      out.push({ project, worktree: null, dir: mainSuper, checkout: mainCheckout });
     }
     const wtRoot = join(root, project, '.claude', 'worktrees');
     for (const wt of await listWorktrees(wtRoot)) {
-      const wtSuper = join(wtRoot, wt, SUPERPOWERS_SEGMENT);
+      const wtCheckout = join(wtRoot, wt);
+      const wtSuper = join(wtCheckout, SUPERPOWERS_SEGMENT);
       if (await exists(wtSuper)) {
-        out.push({ project, worktree: wt, dir: wtSuper });
+        out.push({ project, worktree: wt, dir: wtSuper, checkout: wtCheckout });
       }
     }
   }
   return out;
 }
 
-export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry[]> {
+export async function scanSpecs(
+  root: string = PROJECTS_ROOT,
+  run?: GitRunner
+): Promise<SpecEntry[]> {
   const out: SpecEntry[] = [];
 
   const byProject = new Map<string, SuperpowersLocation[]>();
@@ -113,6 +136,20 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
     arr.push(loc);
     byProject.set(loc.project, arr);
   }
+
+  // One `git status` per checkout, up front, so each file's recency can tell a
+  // real edit from a checkout timestamp. A null set means git had no answer, in
+  // which case every file in that checkout is treated as edited.
+  const dirtyByDir = new Map<string, Set<string> | null>();
+  await Promise.all(
+    [...byProject.values()].flat().map(async (loc) => {
+      dirtyByDir.set(loc.dir, await listDirtyDocs(loc.checkout, run));
+    })
+  );
+  const isDirty = (loc: SuperpowersLocation, path: string) => {
+    const set = dirtyByDir.get(loc.dir);
+    return set ? set.has(path) : true;
+  };
 
   for (const [project, locs] of byProject) {
     const mainLoc = locs.find((l) => l.worktree === null);
@@ -136,7 +173,14 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
         const dir = join(loc.dir, sub);
         for (const name of await listMarkdown(dir)) {
           if (mainSet.has(`${sub}/${name}`)) continue;
-          const entry = await makeEntry(dir, name, project, loc.worktree, sub);
+          const entry = await makeEntry(
+            dir,
+            name,
+            project,
+            loc.worktree,
+            sub,
+            isDirty(loc, join(dir, name))
+          );
           out.push(entry);
           if (entry.type === 'plan') planSlugs.add(normalizedSlug(name));
         }
@@ -149,7 +193,14 @@ export async function scanSpecs(root: string = PROJECTS_ROOT): Promise<SpecEntry
       const mainSpecsDir = join(mainLoc.dir, 'specs');
       for (const name of await listMarkdown(mainSpecsDir)) {
         if (!planSlugs.has(normalizedSlug(name))) continue;
-        const entry = await makeEntry(mainSpecsDir, name, project, null, 'specs');
+        const entry = await makeEntry(
+          mainSpecsDir,
+          name,
+          project,
+          null,
+          'specs',
+          isDirty(mainLoc, join(mainSpecsDir, name))
+        );
         entry.onMain = true;
         out.push(entry);
       }
