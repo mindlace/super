@@ -1,0 +1,5 @@
+Nested-dispatch probe — 2026-08-04
+Chain: SDD implementer -> probe-operator (sonnet) -> leaf (haiku)
+Result: PASS (probe returned "LEAF-SAID: NESTED-OK")
+Implication: operators (main -> operator -> leaf) are one level shallower
+than this chain; nested dispatch is available.
