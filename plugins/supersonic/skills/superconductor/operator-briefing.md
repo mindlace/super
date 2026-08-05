@@ -26,7 +26,8 @@ assignment` block below sets your slug, spec, and project.
 
 1. Invoke `superpowers:using-git-worktrees` to get an isolated worktree for
    the project, honoring the project's own worktree conventions (see its
-   CLAUDE.md). All your work happens there.
+   CLAUDE.md). All your work happens there. Base the worktree on the
+   `Worktree base` given in your assignment.
 2. Invoke `superpowers:writing-plans` against your spec file. Your spec
    embeds the interface slice and global constraints — the plan's Global
    Constraints section copies them verbatim.

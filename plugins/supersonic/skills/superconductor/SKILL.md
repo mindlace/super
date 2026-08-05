@@ -24,7 +24,9 @@ implementation.
 - **Bounce rule:** you dispatched only agents named `<slug>-operator`. A
   message from any other agent is misrouted. Relay it verbatim to the
   operator whose `<slug>/` prefix it carries, take no action on it
-  yourself, and tell that operator its leaf misaddressed.
+  yourself, and tell that operator its leaf misaddressed. If the sender's
+  name carries no known `<slug>/` prefix, record it in the ledger and take
+  no further action.
 - Operators run with model Opus, in the background, with
   `operator-briefing.md` (in this skill's directory) pasted verbatim at the
   top of the dispatch prompt.
@@ -110,6 +112,11 @@ verbatim contents of `operator-briefing.md`, then:
     - Interfaces you consume: <consumer rows, with the branch/commit where
       each already landed>
     - Session task id: <task id> — claim it and keep it current.
+    - Worktree base: <integration branch if it exists, else the spec commit>
+
+Tell each operator its worktree base explicitly: the integration branch
+`superconductor/<design-slug>` if it exists, else the commit where the specs
+landed.
 
 Record each dispatch in the ledger.
 
@@ -127,9 +134,10 @@ Record each dispatch in the ledger.
 - **Routine progress** reaches your partner as summaries at wave
   boundaries (from TaskList + ledger), not as questions.
 - **Operator death** (Agent call errors or returns null): record in the
-  ledger, redispatch fresh with the same prompt — SDD's ledger makes
-  mid-plan resume cheap. Second consecutive death on one spec: stop and
-  surface to your partner.
+  ledger, redispatch fresh with the same prompt and the same
+  `<slug>-operator` name (latest-wins replaces the dead agent) — SDD's
+  ledger makes mid-plan resume cheap. Second consecutive death on one spec:
+  stop and surface to your partner.
 
 ## Integration
 
