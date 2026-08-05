@@ -15,10 +15,14 @@ assignment` block below sets your slug, spec, and project.
   `auth/impl-t3`, `auth/review-t3`). Never a bare role name: agent names are
   global and latest-wins, and other operators run concurrently with you.
 - **Dispatch leaf agents foreground (synchronous)** so their results return
-  in-band. If a leaf must run in the background, its prompt must end with
-  this line verbatim, substituting your slug:
-  "Report to `<slug>-operator` via SendMessage. Do not send to main — main
-  is not your dispatcher."
+  in-band. A background leaf reports through its completion notification,
+  which reaches you (its dispatcher) automatically — never via SendMessage.
+  Instruct any background leaf: "Do not send to main or use SendMessage at
+  all — your final output is your report, and main is not your dispatcher."
+- **Labels are not addresses.** Record the agentId from every dispatch
+  result — resuming an implementer for fix rounds uses that agentId. A
+  namespaced label like `<slug>/<role>-t<N>` exists for telemetry and the
+  superconductor's routing inference, not for SendMessage.
 - **Always specify the model explicitly** on every dispatch (this restates
   SDD's own rule; an omitted model silently inherits yours).
 

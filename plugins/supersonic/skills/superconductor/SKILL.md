@@ -21,12 +21,13 @@ implementation.
 - **Append to the ledger after every state change.** A usage limit can end
   this session at any moment; the ledger plus git is the only memory that
   survives. On resume, trust the ledger and git over recollection.
-- **Bounce rule:** you dispatched only agents named `<slug>-operator`. A
-  message from any other agent is misrouted. Relay it verbatim to the
-  operator whose `<slug>/` prefix it carries, take no action on it
-  yourself, and tell that operator its leaf misaddressed. If the sender's
-  name carries no known `<slug>/` prefix, record it in the ledger and take
-  no further action.
+- **Bounce rule:** the only agents that should message you are your
+  operators. Message envelopes name only the sender's agent type, so
+  attribute a misrouted message by its content: if it clearly belongs to
+  one plan, relay it verbatim to that operator's agentId (recorded in the
+  ledger at dispatch), take no action on it yourself, and tell that
+  operator its leaf misaddressed. If you cannot attribute it to a plan,
+  record it in the ledger and take no further action.
 - Operators run with model Opus, in the background, with
   `operator-briefing.md` (in this skill's directory) pasted verbatim at the
   top of the dispatch prompt.
@@ -118,7 +119,9 @@ Tell each operator its worktree base explicitly: the integration branch
 `superconductor/<design-slug>` if it exists, else the commit where the specs
 landed.
 
-Record each dispatch in the ledger.
+Record each dispatch in the ledger, including the operator's agentId from
+the spawn result — labels are not addresses, and every message you send an
+operator uses its agentId.
 
 ## Supervision
 
@@ -135,7 +138,7 @@ Record each dispatch in the ledger.
   boundaries (from TaskList + ledger), not as questions.
 - **Operator death** (Agent call errors or returns null): record in the
   ledger, redispatch fresh with the same prompt and the same
-  `<slug>-operator` name (latest-wins replaces the dead agent) — SDD's
+  `<slug>-operator` label, recording the new agentId in the ledger — SDD's
   ledger makes mid-plan resume cheap. Second consecutive death on one spec:
   stop and surface to your partner.
 
@@ -144,8 +147,8 @@ Record each dispatch in the ledger.
 After each wave completes: merge operator branches in dependency order into
 the integration branch `superconductor/<design-slug>` (create it from the
 dispatch base if absent), running the project's full test suite after each
-merge. On breakage, dispatch a fix round to the owning operator — by name
-if still live, else a fresh operator given the briefing, its original
+merge. On breakage, dispatch a fix round to the owning operator — via its
+recorded agentId if still live, else a fresh operator given the briefing, its original
 assignment, the integration failure output, and its SDD ledger path. Never
 fix it yourself. When every spec has landed, present the integration branch
 to your partner and follow superpowers:finishing-a-development-branch.
@@ -158,7 +161,7 @@ to your partner and follow superpowers:finishing-a-development-branch.
 
     ## Specs
     - <slug>: <spec path> — status: pending | dispatched | complete |
-      blocked | deferred (+ task id, branch, wave)
+      blocked | deferred (+ task id, agentId, branch, wave)
 
     ## Adjudications
     - <date> <slug>: <question> → <ruling> (<design section cited>)
