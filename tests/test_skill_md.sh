@@ -13,9 +13,11 @@ desc=$(printf '%s\n' "$fm" | sed -n 's/^description: //p')
 case "$desc" in "Use when"*) ;; *) echo "FAIL: description must start with 'Use when'"; exit 1;; esac
 [ "${#desc}" -le 500 ] || { echo "FAIL: description over 500 chars (${#desc})"; exit 1; }
 
-for s in 'Phase 0' 'Phase 1' 'Phase 2' 'Phase 3' 'Supervision' 'Integration' 'Ledger format' 'Hard rules'; do
+for s in 'Phase 0' 'Phase 1' 'Phase 2' 'Supervision' 'Context economics' 'Integration' 'Ledger format' 'Hard rules'; do
   grep -q "## .*$s" "$skill" || { echo "FAIL: SKILL.md missing section: $s"; exit 1; }
 done
 grep -qF 'operator-briefing.md' "$skill" || { echo "FAIL: SKILL.md never references the briefing"; exit 1; }
 grep -qF 'rate-limits.json' "$skill" || { echo "FAIL: SKILL.md never references the bridge file"; exit 1; }
+grep -qF 'supercomposer' "$skill" || { echo "FAIL: SKILL.md never references supercomposer (package intake)"; exit 1; }
+grep -q 'frame-defect\|Frame-defect' "$skill" || { echo "FAIL: SKILL.md missing the frame-defect tally"; exit 1; }
 echo "PASS: SKILL.md structure"
