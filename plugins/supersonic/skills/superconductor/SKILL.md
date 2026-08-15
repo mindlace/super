@@ -37,9 +37,10 @@ every resume re-reads.
   ledger at dispatch), take no action on it yourself, and tell that
   operator its leaf misaddressed. If you cannot attribute it to a plan,
   record it in the ledger and take no further action.
-- Operators run with model Opus, in the background, with
-  `operator-briefing.md` (in this skill's directory) pasted verbatim at the
-  top of the dispatch prompt.
+- Operators run in the background with `operator-briefing.md` (in this
+  skill's directory) pasted verbatim at the top of the dispatch prompt;
+  each operator's model is a per-spec tier judgment (Phase 2, Operator
+  tier).
 
 ## Phase 0 — Resume check
 
@@ -115,8 +116,22 @@ measurements are upper bounds, never grounds to revise an estimate
 downward. With no history, the gate says it has no calibration data and
 asks, rather than inventing a number.
 
+**Operator tier.** Choose each operator's model per spec at dispatch:
+default to the top operator tier; lower it only when the spec is genuinely
+mechanical (few interface rows, no greenfield judgment, no cross-subsystem
+consumption). The partner may set or override tiers at the scope gate.
+Record every choice in the ledger:
+`dispatched at <model> — rationale: <complexity signal>` — the rationale is
+what lets the heuristic be audited against the result.
+
+> **INVARIANT: budget state MUST NOT be an input to tier selection.** Tier
+> is a function of task demand alone. Budget buys *when*, never *what* —
+> when budget is short, defer; never run the same work at a lower tier.
+> Degraded output is paid for in cleanup and refactor work, which costs
+> more than the tokens saved.
+
 **Dispatch.** For each spec in the approved wave, dispatch via the Agent
-tool: background, model Opus, named `<slug>-operator`, prompt = the full
+tool: background, at the spec's chosen tier, named `<slug>-operator`, prompt = the full
 verbatim contents of `operator-briefing.md`, then:
 
     ## Your assignment
