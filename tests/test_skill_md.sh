@@ -26,8 +26,8 @@ grep -qF 'defer-only' "$skill" || { echo "FAIL: gate is not declared defer-only"
 grep -qF 'specs completed' "$skill" || { echo "FAIL: calibration must divide by specs completed"; exit 1; }
 grep -qF 'budget state MUST NOT be an input to tier selection' "$skill" \
   || { echo "FAIL: budget-independence invariant missing"; exit 1; }
-grep -qF 'model Opus' "$skill" \
-  && { echo "FAIL: operator tier is still hardcoded to Opus"; exit 1; }
+grep -qi 'opus' "$skill" \
+  && { echo "FAIL: operator tier must not be hardcoded to a specific model (Opus found)"; exit 1; }
 grep -qF 'rationale' "$skill" \
   || { echo "FAIL: tier decisions must be recorded with a rationale"; exit 1; }
 echo "PASS: SKILL.md structure"

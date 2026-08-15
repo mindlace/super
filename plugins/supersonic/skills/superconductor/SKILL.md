@@ -131,8 +131,8 @@ what lets the heuristic be audited against the result.
 > more than the tokens saved.
 
 **Dispatch.** For each spec in the approved wave, dispatch via the Agent
-tool: background, at the spec's chosen tier, named `<slug>-operator`, prompt = the full
-verbatim contents of `operator-briefing.md`, then:
+tool: background, at the spec's chosen tier, named `<slug>-operator`,
+prompt = the full verbatim contents of `operator-briefing.md`, then:
 
     ## Your assignment
     - Project: <absolute path to the target project repo>
@@ -232,7 +232,8 @@ superpowers:finishing-a-development-branch.
 
     ## Specs
     - <slug>: <spec path> — status: pending | dispatched | complete |
-      blocked | deferred (+ task id, agentId, branch, wave)
+      blocked | deferred (+ task id, agentId, branch, wave, tier: dispatched
+      at <model> — rationale: <complexity signal>)
 
     ## Adjudications
     - <date> <slug> [defect-class: <slug>]: <question> → <ruling>

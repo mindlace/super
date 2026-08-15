@@ -24,11 +24,18 @@ s_used="$(val "$seven" used_percentage)"; s_reset="$(val "$seven" resets_at)"
   || { echo "BUDGET: malformed $limits"; exit 2; }
 
 # Reserve ceilings: partner-declared, defaults 60/85 (placeholders — see spec Q1).
+# Tolerates optional whitespace after the colon so a hand-written, pretty-printed
+# reserves file (the natural form for a partner-owned file) still parses.
 f_res=60; s_res=85
 if [ -f "$reserves" ]; then
   r="$(cat "$reserves")"
-  f_res="$(printf '%s' "$r" | sed -n 's/.*"five_hour":\([0-9][0-9]*\).*/\1/p')"; f_res="${f_res:-60}"
-  s_res="$(printf '%s' "$r" | sed -n 's/.*"seven_day":\([0-9][0-9]*\).*/\1/p')"; s_res="${s_res:-85}"
+  f_parsed="$(printf '%s' "$r" | sed -n 's/.*"five_hour":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+  s_parsed="$(printf '%s' "$r" | sed -n 's/.*"seven_day":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+  if [ -z "$f_parsed" ] && [ -z "$s_parsed" ]; then
+    echo "BUDGET: warning — $reserves unreadable, using default reserves (60/85)" >&2
+  fi
+  f_res="${f_parsed:-60}"
+  s_res="${s_parsed:-85}"
 fi
 
 local_time() { date -r "$1" '+%a %H:%M' 2>/dev/null || date -d "@$1" '+%a %H:%M'; }
@@ -36,14 +43,16 @@ until_h() { d=$(( $1 - now )); [ "$d" -lt 0 ] && d=0; printf '%dh%02dm' $((d/360
 
 note() { [ "$1" -lt "$now" ] && printf ' (reset elapsed — data predates reset; refresh via any statusline render)'; }
 stale=''; [ "$age_min" -gt 30 ] && stale=" — STALE"
+stale_verdict=''
+[ "$age_min" -gt 30 ] && stale_verdict=' — STALE (>30m): confirm with your partner before acting'
 echo "DATA: ${age_min}m old${stale}"
 echo "FIVE_HOUR: used ${f_used}% of ${f_res}% reserve — headroom $((f_res - f_used)) — resets $(local_time "$f_reset") (in $(until_h "$f_reset"))$(note "$f_reset")"
 echo "SEVEN_DAY: used ${s_used}% of ${s_res}% reserve — headroom $((s_res - s_used)) — resets $(local_time "$s_reset") (in $(until_h "$s_reset"))$(note "$s_reset")"
 
 if [ "$s_used" -ge "$s_res" ] && [ "$s_reset" -ge "$now" ]; then
-  echo "VERDICT: STOP (seven_day at/over reserve) — admit nothing; resume after $(local_time "$s_reset")"
+  echo "VERDICT: STOP (seven_day at/over reserve) — admit nothing; resume after $(local_time "$s_reset")${stale_verdict}"
 elif [ "$f_used" -ge "$f_res" ] && [ "$f_reset" -ge "$now" ]; then
-  echo "VERDICT: HOLD (five_hour at/over reserve) — pause the wave until $(local_time "$f_reset")"
+  echo "VERDICT: HOLD (five_hour at/over reserve) — pause the wave until $(local_time "$f_reset")${stale_verdict}"
 else
-  echo "VERDICT: OK — admit within headroom"
+  echo "VERDICT: OK — admit within headroom${stale_verdict}"
 fi
