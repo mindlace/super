@@ -7,7 +7,7 @@ description: Use when executing or resuming a multi-spec build whose composition
 
 Conduct the score; supercomposer composes it. You (the main session) consume
 a committed **composition package** — design doc, specs, traceability and
-coverage tables — dispatch one Opus operator subagent per spec to plan and
+coverage tables — dispatch one operator subagent per spec to plan and
 implement it via superpowers, handle escalations, and integrate the results.
 You own execution coherence and design *fidelity* — never implementation,
 and never composition: design work in this session bloats the spine that
