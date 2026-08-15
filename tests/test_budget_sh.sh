@@ -31,8 +31,8 @@ mk stop.json 90 $((now+1800)) 92 $((now+86400)); res 60 85
 sh "$b" "$tmp/stop.json" "$tmp/reserves.json" | grep -q 'VERDICT: STOP (seven_day' || fail "expected STOP at seven_day ceiling"
 
 # 4. defaults apply when the reserves file is absent
-mk def.json 59 $((now+3600)) 84 $((now+86400))
-sh "$b" "$tmp/def.json" "$tmp/nonexistent.json" | grep -q 'VERDICT: OK' || fail "defaults (60/85) should admit 59/84"
+mk def.json 79 $((now+3600)) 59 $((now+86400))
+sh "$b" "$tmp/def.json" "$tmp/nonexistent.json" | grep -q 'VERDICT: OK' || fail "defaults (80/60) should admit 79/59"
 
 # 5. stale data (>30m) is reported, including on the VERDICT line itself
 mk stale.json 10 $((now+3600)) 10 $((now+86400)); res 60 85
@@ -71,16 +71,16 @@ out=$(sh "$b" "$tmp/pretty.json" "$tmp/pretty_reserves.json")
 echo "$out" | grep -q 'FIVE_HOUR: used 35% of 30% reserve' || fail "pretty-printed reserves not honored: $out"
 echo "$out" | grep -q 'VERDICT: HOLD (five_hour' || fail "expected HOLD under pretty-printed declared reserves: $out"
 
-# 6e. reserves file present but unparseable -> warns on stderr, falls back to 60/85
+# 6e. reserves file present but unparseable -> warns on stderr, falls back to 80/60
 printf 'not json at all\n' > "$tmp/garbage_reserves.json"
-mk garbage.json 59 $((now+3600)) 84 $((now+86400))
+mk garbage.json 79 $((now+3600)) 59 $((now+86400))
 err=$(sh "$b" "$tmp/garbage.json" "$tmp/garbage_reserves.json" 2>&1 >/dev/null)
 echo "$err" | grep -qi 'unreadable' || fail "expected a stderr warning for an unparseable reserves file: $err"
 out=$(sh "$b" "$tmp/garbage.json" "$tmp/garbage_reserves.json" 2>/dev/null)
-echo "$out" | grep -q 'FIVE_HOUR: used 59% of 60% reserve' || fail "garbage reserves file should fall back to default 60: $out"
+echo "$out" | grep -q 'FIVE_HOUR: used 79% of 80% reserve' || fail "garbage reserves file should fall back to default 80: $out"
 
 # 6f. reserves file absent -> defaults apply with no warning
-mk noreserves.json 59 $((now+3600)) 84 $((now+86400))
+mk noreserves.json 79 $((now+3600)) 59 $((now+86400))
 err=$(sh "$b" "$tmp/noreserves.json" "$tmp/nonexistent.json" 2>&1 >/dev/null)
 [ -z "$err" ] || fail "absent reserves file must not warn: $err"
 

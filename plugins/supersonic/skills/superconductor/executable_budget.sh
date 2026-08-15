@@ -23,19 +23,19 @@ s_used="$(val "$seven" used_percentage)"; s_reset="$(val "$seven" resets_at)"
 [ -n "$f_used" ] && [ -n "$f_reset" ] && [ -n "$s_used" ] && [ -n "$s_reset" ] \
   || { echo "BUDGET: malformed $limits"; exit 2; }
 
-# Reserve ceilings: partner-declared, defaults 60/85 (placeholders — see spec Q1).
+# Reserve ceilings: partner-declared, defaults 80/60.
 # Tolerates optional whitespace after the colon so a hand-written, pretty-printed
 # reserves file (the natural form for a partner-owned file) still parses.
-f_res=60; s_res=85
+f_res=80; s_res=60
 if [ -f "$reserves" ]; then
   r="$(cat "$reserves")"
   f_parsed="$(printf '%s' "$r" | sed -n 's/.*"five_hour":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
   s_parsed="$(printf '%s' "$r" | sed -n 's/.*"seven_day":[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
   if [ -z "$f_parsed" ] && [ -z "$s_parsed" ]; then
-    echo "BUDGET: warning — $reserves unreadable, using default reserves (60/85)" >&2
+    echo "BUDGET: warning — $reserves unreadable, using default reserves (80/60)" >&2
   fi
-  f_res="${f_parsed:-60}"
-  s_res="${s_parsed:-85}"
+  f_res="${f_parsed:-80}"
+  s_res="${s_parsed:-60}"
 fi
 
 local_time() { date -r "$1" '+%a %H:%M' 2>/dev/null || date -d "@$1" '+%a %H:%M'; }
