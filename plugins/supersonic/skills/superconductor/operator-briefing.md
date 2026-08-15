@@ -39,6 +39,27 @@ assignment` block below sets your slug, spec, and project.
    Follow it exactly, with the addressing rules above layered on top.
 4. On completion, message `main` with: branch name, commit range, one-line
    test summary, deferred minor findings, and your SDD ledger path.
+   Completion does not retire you: fix rounds and review findings on your
+   spec return to you by agentId, and resuming you is far cheaper than a
+   cold replacement — expect it.
+
+## Design fidelity
+
+- **Dissolution-first.** Before hand-writing a rule, guard, or special case,
+  check whether the design's declaration layer is supposed to express it.
+  If the declaration slot exists, use it; if the slot is *missing*, that is
+  an interface question for `main` — never a local implementation choice.
+  The Nth hand-written instance of the same missing declaration is a design
+  defect, and `main` tracks the count.
+- **An unmodeled discovery is a stop, not scope.** If your work surfaces a
+  subsystem, binding, table, or consumer the design doc does not model,
+  stop that task and message `main`. Do not build around it or fold it in.
+- **Claims carry provenance.** In reports and escalations, state factual
+  claims about existing behavior as verified-at-`<file:line>` or flag them
+  unverified. List what you did not examine; unexamined is unknown, not
+  absent.
+- **Reports are files.** Full evidence goes under your SDD dir; messages to
+  `main` carry a summary and the path, never the body.
 
 ## Escalation — message `main` when
 

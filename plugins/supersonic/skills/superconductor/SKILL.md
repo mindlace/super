@@ -1,26 +1,35 @@
 ---
 name: superconductor
-description: Use when the user wants to build something large enough to decompose into multiple specs and co-design at the level above individual specs, or when resuming an earlier superconductor run after a session ended or a usage limit hit. Not for single-spec features — use superpowers:brainstorming for those.
+description: Use when executing or resuming a multi-spec build whose composition package (design doc + specs) already exists — dispatching operators, supervising waves, integrating results — or when reconciling an earlier superconductor run after a session ended or a usage limit hit. For designing or reappraising the package itself, use supercomposer; for single-spec features, use superpowers:brainstorming.
 ---
 
 # Superconductor
 
-Orchestrate design-level development. You (the main session) co-design with
-your human partner, derive one spec per subsystem, dispatch one Opus
-operator subagent per spec to plan and implement it via superpowers, handle
-escalations, and integrate the results. You own design coherence — never
-implementation.
+Conduct the score; supercomposer composes it. You (the main session) consume
+a committed **composition package** — design doc, specs, traceability and
+coverage tables — dispatch one Opus operator subagent per spec to plan and
+implement it via superpowers, handle escalations, and integrate the results.
+You own execution coherence and design *fidelity* — never implementation,
+and never composition: design work in this session bloats the spine that
+every resume re-reads.
 
-**Announce at start:** "Using superconductor to orchestrate <topic>."
+**Announce at start:** "Using superconductor to conduct <topic>."
 
 ## Hard rules
 
 - **You never write or fix implementation code.** Not in fix rounds, not on
   integration breakage. Dispatch instead — controller fixes skip review and
   burn coordination context.
+- **You never design in this session.** A missing, incomplete, or defective
+  package goes back to supercomposer (a separate session); you may relay the
+  defect record, never author the amendment.
 - **Append to the ledger after every state change.** A usage limit can end
   this session at any moment; the ledger plus git is the only memory that
   survives. On resume, trust the ledger and git over recollection.
+- **Keep the spine lean — cold resume is the normal path.** Full reports,
+  survey output, and review evidence live in files; the ledger carries a
+  ≤1-paragraph summary plus the path. Never paste a report body into this
+  conversation. Checkpoint the ledger before any predictable long silence.
 - **Bounce rule:** the only agents that should message you are your
   operators. Message envelopes name only the sender's agent type, so
   attribute a misrouted message by its content: if it clearly belongs to
@@ -42,40 +51,24 @@ partner and offer to redispatch fresh operators for incomplete plans.
 Operators from prior sessions are dead; on-disk state is the only truth.
 Continue from whichever phase the ledger shows incomplete.
 
-## Phase 1 — Design
+## Phase 1 — Package intake
 
-Work with your partner at design altitude: subsystem decomposition, the
-interfaces between subsystems, and sequencing. Follow
-superpowers:brainstorming's dialogue discipline and your partner's
-brainstorming preferences (write the doc early; the doc is the discussion
-surface).
+The package comes from a supercomposer session, committed. Before any
+dispatch, verify it is complete:
 
-- Path: `docs/superpowers/design/YYYY-MM-DD-<topic>.md` in the target
-  project.
-- Required sections: **Goal**; **Subsystems** (one-paragraph scope each,
-  with a `<slug>` per subsystem); **Interface table** (producer subsystem,
-  consumer subsystem, exact signature — every cross-subsystem interface);
-  **Dependency order**; **Global constraints**; **Out of scope**.
-- **Partner approval of this document is the only human gate before
-  dispatch.** Do not add per-spec review rounds.
+- Design doc with every required section, including the **traceability
+  table** (every model-doc claim → interface row / spec, or a
+  dropped/narrowed/deferred entry bearing partner sign-off) and the
+  **coverage table** (every system-inventory item surveyed or excluded).
+- Specs committed, one per subsystem, interface rows and global constraints
+  embedded verbatim; the fresh-eyes fidelity + delegation checks recorded
+  as run.
+- Interface-table rows marked *model commitment* vs *decomposition choice*.
 
-On approval, create the ledger (format below) and commit the design doc.
+Anything missing → back to supercomposer; do not patch it here. Operators
+branch worktrees from the package's committed state.
 
-## Phase 2 — Spec derivation
-
-- Derive one spec per subsystem into
-  `docs/superpowers/specs/YYYY-MM-DD-<slug>-design.md`. Each spec embeds,
-  verbatim: its rows of the interface table (both produced and consumed)
-  and the design's global constraints.
-- Dispatch one fresh-eyes subagent (foreground, general-purpose) with the
-  design doc path and all spec paths. It checks: every design requirement
-  covered by exactly one spec; no contradictions between specs; interface
-  signatures identical everywhere they appear; no placeholders. Fix its
-  findings inline — no user gate.
-- Commit the specs before any dispatch; operators branch worktrees from
-  this committed state.
-
-## Phase 3 — Dispatch
+## Phase 2 — Dispatch
 
 **Waves.** From the interface table, group specs into waves: a spec with no
 unmet interface dependency joins the current wave; a spec consuming another
@@ -127,13 +120,38 @@ operator uses its agentId.
 
 - **Adjudicate yourself** anything answerable from the design doc and
   specs: reply to the operator by SendMessage, record the ruling in the
-  ledger.
+  ledger. When a ruling touches an interface row, honor its marking: a
+  *decomposition choice* is yours; a *model commitment* changes only with
+  the partner.
 - **Interface change requests:** update the design doc and every affected
   spec, commit, message each affected operator with the exact delta, record
   in the ledger.
+- **Frame-defect tally.** Tag every escalation, workaround, and adjudication
+  with a short defect-class slug in the ledger. **The third same-class
+  instance is a tripwire**: stop issuing in-frame rulings for that class,
+  record the aggregate, and surface it to the partner as a candidate
+  supercomposer bounce. Seven independent rediscoveries of one missing
+  declaration is a design defect wearing an implementation costume.
+- **A discovered unmodeled subsystem is a frame event, never extra scope.**
+  If any agent surfaces a binding, store, table family, or consumer the
+  design doc does not model: pause the affected specs, record it, surface
+  to the partner, and route to supercomposer for an amended package. Do not
+  absorb it as additional tasks on a running wave.
+- **Operators stay warm through review.** A completed operator is not dead:
+  fix rounds, review findings, and integration breakage on its spec go to
+  its recorded agentId first (resume is cheap; a cold fix round costs ~3.7×
+  per line). Dispatch a fresh operator only when the agentId no longer
+  resolves (prior session) or after an operator death.
+- **Comprehension gate.** After the first wave that makes the model
+  load-bearing (and again before any cutover-class step), dispatch a fresh
+  agent to write or refresh an "explain the system as built" doc and diff
+  it against the source model documents. Findings enter the frame-defect
+  tally. Per-task review compares work against briefs; only a whole-system
+  reading catches the drift briefs inherit.
 - **Surface to your partner only:** requirement contradictions, scope
-  changes (cut/add), a BLOCKED task whose resolution implies a design
-  change, or two consecutive operator deaths on the same spec.
+  changes (cut/add), frame events and tripped tallies, a BLOCKED task whose
+  resolution implies a design change, or two consecutive operator deaths on
+  the same spec.
 - **Routine progress** reaches your partner as summaries at wave
   boundaries (from TaskList + ledger), not as questions.
 - **Operator death** (Agent call errors or returns null): record in the
@@ -142,16 +160,33 @@ operator uses its agentId.
   ledger makes mid-plan resume cheap. Second consecutive death on one spec:
   stop and surface to your partner.
 
+## Context economics
+
+The spine and its operators outlive any cache window; engineer for cheap
+cold resume rather than warm waiting.
+
+- Fill waits with real work at a cadence under the cache TTL — review the
+  previous wave's artifacts, prep the next wave's assignments, tend the
+  ledger. Never send a message or schedule a wakeup solely to keep a cache
+  warm.
+- Size operator work so leaf round-trips tend to come back inside the TTL;
+  a task that will run silent for hours belongs split, or checkpointed.
+- For mechanical phases (rename sweeps, ordinal conversions, vocabulary
+  swaps) where an operator would add no judgment between leaves, flatten to
+  two tiers: dispatch the leaves yourself against the spec, with the SDD
+  ledger as the spine.
+
 ## Integration
 
 After each wave completes: merge operator branches in dependency order into
 the integration branch `superconductor/<design-slug>` (create it from the
 dispatch base if absent), running the project's full test suite after each
 merge. On breakage, dispatch a fix round to the owning operator — via its
-recorded agentId if still live, else a fresh operator given the briefing, its original
-assignment, the integration failure output, and its SDD ledger path. Never
-fix it yourself. When every spec has landed, present the integration branch
-to your partner and follow superpowers:finishing-a-development-branch.
+recorded agentId if still live, else a fresh operator given the briefing,
+its original assignment, the integration failure output, and its SDD ledger
+path. Never fix it yourself. When every spec has landed, present the
+integration branch to your partner and follow
+superpowers:finishing-a-development-branch.
 
 ## Ledger format
 
@@ -164,11 +199,15 @@ to your partner and follow superpowers:finishing-a-development-branch.
       blocked | deferred (+ task id, agentId, branch, wave)
 
     ## Adjudications
-    - <date> <slug>: <question> → <ruling> (<design section cited>)
+    - <date> <slug> [defect-class: <slug>]: <question> → <ruling>
+      (<design section cited>)
+
+    ## Frame-defect tally
+    - <class-slug>: <count> — instances: <one line each, dated>
 
     ## Integration
     - merged <slug> into superconductor/<design-slug> @ <sha>, tests <result>
 
-Append a line after every state change: spec derived, wave gated, operator
-dispatched / completed / died, ruling issued, interface changed, merge done,
-deferral recorded.
+Append a line after every state change: package accepted, wave gated,
+operator dispatched / completed / died, ruling issued, interface changed,
+frame event recorded, merge done, deferral recorded.
