@@ -20,4 +20,8 @@ grep -qF 'operator-briefing.md' "$skill" || { echo "FAIL: SKILL.md never referen
 grep -qF 'rate-limits.json' "$skill" || { echo "FAIL: SKILL.md never references the bridge file"; exit 1; }
 grep -qF 'supercomposer' "$skill" || { echo "FAIL: SKILL.md never references supercomposer (package intake)"; exit 1; }
 grep -q 'frame-defect\|Frame-defect' "$skill" || { echo "FAIL: SKILL.md missing the frame-defect tally"; exit 1; }
+grep -qF 'budget.sh' "$skill" || { echo "FAIL: gate never runs budget.sh"; exit 1; }
+grep -qF 'seven_day' "$skill" || { echo "FAIL: gate never references seven_day"; exit 1; }
+grep -qF 'defer-only' "$skill" || { echo "FAIL: gate is not declared defer-only"; exit 1; }
+grep -qF 'specs completed' "$skill" || { echo "FAIL: calibration must divide by specs completed"; exit 1; }
 echo "PASS: SKILL.md structure"

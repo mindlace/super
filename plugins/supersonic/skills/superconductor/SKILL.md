@@ -79,20 +79,41 @@ spec's new interface waits for its producer's wave to complete and merge.
 their own task — the task list, not message traffic, is the progress
 surface.
 
-**Scope gate — run before every wave.** Read `~/.claude/rate-limits.json`
-(written by the statusline on every render; mtime is its freshness). Then
-present to your partner: the wave structure, a rough cost signal (spec
-count, estimated tasks per spec, ~4-6 subagent dispatches per task under
-SDD), and the current five-hour / seven-day used percentages. Ask which
-specs run now. Defaults:
+**Scope gate — run before every wave.** Run this skill's `budget.sh` (reads
+`~/.claude/rate-limits.json`, written by the statusline on every render, and
+the partner's declared reserve ceilings from
+`~/.claude/superconductor-reserves.json` when present). The gate is
+**reserve-based and defer-only**: budget buys *when*, never *what* — when
+budget is short, defer; never produce a worse artifact on schedule.
 
-- If the file is missing or older than 30 minutes, say so and ask for a
-  scope decision without the numbers.
-- If `five_hour.used_percentage` > 80, recommend deferring the wave; the
-  partner may override the threshold.
-- Deferred specs stay `pending` in the task spine; record the deferral in
-  the ledger. Resumability is the backstop — a mispredicted cutoff must
-  never lose work.
+Present to your partner: the wave structure, the budget report (both
+windows: used %, reserve, headroom, local reset time, staleness), and the
+calibrated per-spec cost. Then:
+
+- `VERDICT: STOP` (seven_day at/over reserve) → **stop admitting** — a long
+  wait; may mean ending the session and resuming after the named reset.
+- `VERDICT: HOLD` (five_hour at/over reserve) → **hold the wave** — a short
+  pause until the named reset. The five-hour window is what protects the
+  partner's ability to do a quick fix right now; the seven-day window
+  protects the rest of the week.
+- Data older than 30 minutes → say so and ask for a scope decision without
+  the numbers.
+- `VERDICT: OK` → dispatch as many ready specs as fit under both ceilings
+  per the calibrated per-spec cost; defer the rest (`pending` in the task
+  spine, deferral line in the ledger).
+
+The gate recommends; the partner decides — ceilings are overridable per
+wave. Resumability is the backstop: a mispredicted cutoff must never lose
+work.
+
+**Cost calibration.** Record `seven_day.used_percentage` at wave start and
+wave end in the ledger's Waves section, plus whether the wave ran
+exclusively (no concurrent interactive work). The delta ÷ **specs
+completed** — not operators launched; redispatch ran 2.4× on the
+calibration run — is the per-spec estimate the next gate uses. Non-exclusive
+measurements are upper bounds, never grounds to revise an estimate
+downward. With no history, the gate says it has no calibration data and
+asks, rather than inventing a number.
 
 **Dispatch.** For each spec in the approved wave, dispatch via the Agent
 tool: background, model Opus, named `<slug>-operator`, prompt = the full
@@ -201,6 +222,10 @@ superpowers:finishing-a-development-branch.
     ## Adjudications
     - <date> <slug> [defect-class: <slug>]: <question> → <ruling>
       (<design section cited>)
+
+    ## Waves
+    - wave <n>: start seven_day <pct>% @ <date> | end <pct>% | exclusive:
+      yes|no | specs completed: <k> | per-spec: <pct-points>
 
     ## Frame-defect tally
     - <class-slug>: <count> — instances: <one line each, dated>
