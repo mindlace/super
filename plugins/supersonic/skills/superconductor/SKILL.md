@@ -99,6 +99,11 @@ calibrated per-spec cost. Then:
   protects the rest of the week.
 - Data older than 30 minutes → say so and ask for a scope decision without
   the numbers.
+- A window reported as `NO DATA` (the harness can omit or null a window
+  right at its reset) → `VERDICT: UNKNOWN` when seven_day is missing: do not
+  admit; re-run after the next statusline render. `VERDICT: OK*` when only
+  five_hour is missing: treat that window as freshly reset and proceed as OK,
+  re-checking before the next wave.
 - `VERDICT: OK` → dispatch as many ready specs as fit under both ceilings
   per the calibrated per-spec cost; defer the rest (`pending` in the task
   spine, deferral line in the ledger).
