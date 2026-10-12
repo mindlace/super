@@ -26,23 +26,36 @@ def summary_confidence(answers):
 
 
 def ask(point, state, env, call_id=None, cwd=None, post=None, write_log=True):
+    """Never raises: any exception becomes {"enabled": False, "reason": "internal error: ..."}."""
     post = post or client.post
-    mode = resolve_mode(env, point)
+    try:
+        mode = resolve_mode(env, point)
+    except Exception as exc:  # direct callers never see an exception
+        return disabled("internal error: %s" % type(exc).__name__)
     if mode == "off":
         return disabled("mode off")
     call_id = call_id or new_call_id()
-    try:
-        template = templates.load_template(point, env)
-    except templates.TemplateError as exc:
-        return disabled(str(exc), call_id=call_id, point=point)
-    entry = {"type": "call", "call_id": call_id, "ts": now(), "point": point,
-             "template_version": template.get("version"), "mode": mode,
-             "compare": template.get("compare"), "on_skips": template.get("on_skips")}
+    entry = {"type": "call", "call_id": call_id, "ts": now(), "point": point, "mode": mode}
 
     def fail(reason):
         if write_log:
             log.safe_append(dict(entry, verdict=None, confident=False, error=reason), env, cwd)
         return disabled(reason, call_id=call_id, point=point, mode=mode)
+
+    try:
+        return _run(point, state, env, cwd, post, write_log, entry, fail)
+    except Exception as exc:  # fail open on anything unexpected in the body
+        return fail("internal error: %s" % type(exc).__name__)
+
+
+def _run(point, state, env, cwd, post, write_log, entry, fail):
+    call_id, mode = entry["call_id"], entry["mode"]
+    try:
+        template = templates.load_template(point, env)
+    except templates.TemplateError as exc:
+        return disabled(str(exc), call_id=call_id, point=point)
+    entry.update(template_version=template.get("version"), compare=template.get("compare"),
+                 on_skips=template.get("on_skips"))
 
     errors = schema.validate(template["state_schema"], state)
     if errors:

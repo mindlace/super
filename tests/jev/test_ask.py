@@ -6,6 +6,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import support
 from jevlib import ask, client, log
@@ -188,6 +189,47 @@ class TransportFailureTest(unittest.TestCase):
             out = ask.ask("toy", STATE, env)
         self.assertFalse(out["enabled"])
         self.assertIn("jev unavailable", out["reason"])
+
+
+class MalformedEndpointTest(unittest.TestCase):
+    def test_malformed_endpoint_is_jev_unavailable(self):
+        with self.assertRaises(client.JevUnavailable):
+            client.post({"state": {}, "questions": {}}, "k", endpoint="not-a-url")
+
+    def test_malformed_endpoint_fails_open_and_logs(self):
+        env = toy_env(JEV_ENDPOINT="not-a-url")
+        out = ask.ask("toy", STATE, env)
+        self.assertFalse(out["enabled"])
+        self.assertIn("jev unavailable", out["reason"])
+        self.assertEqual(log.read_entries(env)[0]["error"], out["reason"])
+
+
+class NeverRaisesTest(unittest.TestCase):
+    def test_malformed_state_schema_fails_open(self):
+        # schema.validate raises KeyError on an unknown type name.
+        t = support.load_json(support.TOY_TEMPLATES / "toy.json")
+        t["state_schema"] = {"type": "bogus"}
+        env = support.make_env(None, JEV_QUESTIONS_DIR=templates_dir(t))
+        out = ask.ask("toy", STATE, env)
+        self.assertEqual(out["enabled"], False)
+        self.assertEqual(out["reason"], "internal error: KeyError")
+        self.assertEqual(log.read_entries(env)[0]["error"], out["reason"])
+
+    def test_non_dict_answer_fails_open(self):
+        with support.StubServer(lambda p: (200, {"answers": {"wrong": 5}}, 0)) as srv:
+            out = ask.ask("toy", STATE, toy_env(srv))
+        self.assertEqual(out["enabled"], False)
+        self.assertTrue(out["reason"].startswith("combine failed"), out["reason"])
+
+    def test_success_path_exception_fails_open(self):
+        env = None
+        with mock.patch.object(ask, "summary_confidence", side_effect=RuntimeError("boom")):
+            with support.StubServer(support.ok(noul=0.9)) as srv:
+                env = toy_env(srv)
+                out = ask.ask("toy", STATE, env)
+        self.assertEqual(out["enabled"], False)
+        self.assertEqual(out["reason"], "internal error: RuntimeError")
+        self.assertEqual(log.read_entries(env)[0]["error"], out["reason"])
 
 
 class LogDirTest(unittest.TestCase):

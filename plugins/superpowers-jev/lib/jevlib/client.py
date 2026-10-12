@@ -13,11 +13,11 @@ class JevUnavailable(Exception):
 
 
 def post(payload, key, endpoint=None, timeout=TIMEOUT_S):
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        endpoint or DEFAULT_ENDPOINT, data=body, method="POST",
-        headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
     try:
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            endpoint or DEFAULT_ENDPOINT, data=body, method="POST",
+            headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
