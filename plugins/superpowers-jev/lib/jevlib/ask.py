@@ -83,13 +83,17 @@ def _run(point, state, env, cwd, post, write_log, entry, fail):
         result = combine.apply(template, answers, index, state)
     except Exception as exc:  # fail open on any unexpected combination error
         return fail("combine failed: %r" % (exc,))
+    detail = result.get("detail", {})
+    labels = templates.item_labels(template, state)
+    if labels is not None:
+        detail = dict(detail, labels=labels)
     out = {"enabled": True, "call_id": call_id, "point": point, "mode": mode,
            "template_version": template.get("version"), "verdict": result["verdict"],
            "confident": result["confident"], "items": result.get("items"),
-           "detail": result.get("detail", {}), "raw": answers}
+           "detail": detail, "raw": answers}
     if write_log:
         log.safe_append(dict(entry, verdict=result["verdict"], confident=result["confident"],
-                             items=result.get("items"), detail=result.get("detail", {}),
+                             items=result.get("items"), detail=detail,
                              confidence=summary_confidence(answers), raw=answers,
                              model=response.get("model")), env, cwd)
     return out

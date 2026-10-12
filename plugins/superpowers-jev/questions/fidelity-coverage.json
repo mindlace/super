@@ -24,6 +24,7 @@
     }
   },
   "combine": {"rule": "items_true_over", "question": "carries", "threshold": 0.5, "min_confidence": 0.6},
+  "item_label": {"path": "requirements"},
   "compare": "coverage",
   "on_skips": null,
   "claude_verdict_example": {"uncovered": [2], "multiply_covered": []},

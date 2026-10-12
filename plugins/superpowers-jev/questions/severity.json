@@ -49,6 +49,7 @@
     "threshold": 0.8,
     "compare_to": {"state_path": "findings", "field": "reviewer_severity", "order": ["critical", "important", "minor"], "min_distance": 1}
   },
+  "item_label": {"path": "findings", "field": "text"},
   "compare": "items",
   "on_skips": null,
   "claude_verdict_example": {"items": ["important", "minor"]},

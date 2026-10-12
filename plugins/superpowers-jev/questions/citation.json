@@ -60,6 +60,7 @@
     "also_flag": "unreadable",
     "escalate_if": {"options": ["contradicts", "says_nothing"], "threshold": 0.8, "hit": "downgrade", "miss": "keep"}
   },
+  "item_label": {"path": "claims", "field": "claim"},
   "compare": "items",
   "on_skips": null,
   "claude_verdict_example": {"items": ["supports", "says_nothing"]},

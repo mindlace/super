@@ -63,6 +63,13 @@ class TemplatesTest(unittest.TestCase):
         self.assertEqual(payload["state"], {"text": "t", "items": []})
         self.assertEqual(list(payload["questions"]), ["wrong"])
 
+    def test_item_labels_follow_state_order_and_truncate(self):
+        t = dict(self.t, item_label={"path": "items"})
+        self.assertEqual(templates.item_labels(t, {"items": ["a", "b" * 200]}), ["a", "b" * 80])
+        t = dict(self.t, item_label={"path": "rows", "field": "name"})
+        self.assertEqual(templates.item_labels(t, {"rows": [{"name": "x\ny"}, {}]}), ["x y", ""])
+        self.assertIsNone(templates.item_labels({}, {"items": ["a"]}))
+
     def test_estimate_tokens_is_chars_over_four(self):
         self.assertEqual(templates.estimate_tokens("x" * 400), 100)
 

@@ -91,6 +91,13 @@ class AskTest(unittest.TestCase):
         self.assertFalse(out["enabled"])
         self.assertTrue(out["reason"].startswith("combine failed"))
 
+    def test_per_item_points_report_item_labels_in_detail(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            env = toy_env(srv)
+            out = ask.ask("toy", dict(STATE, items=["apple", "hammer"]), env)
+        self.assertEqual(out["detail"]["labels"], ["apple", "hammer"])
+        self.assertEqual(log.read_entries(env)[0]["detail"]["labels"], ["apple", "hammer"])
+
     def test_timeout_fails_open_within_budget(self):
         with support.StubServer(lambda p: (200, support.answer_all(p), 5)) as srv:
             t0 = time.monotonic()

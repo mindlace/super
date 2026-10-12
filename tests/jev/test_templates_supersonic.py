@@ -98,6 +98,18 @@ class SupersonicTemplatesTest(unittest.TestCase):
         pasted["questions"]["route"]["criteria"]["unclear"] = s["event"]
         self.assertTrue(any("interpolated" in v for v in agent_text_violations(pasted, s, ["event"])))
 
+    def test_per_item_points_declare_labels_aligned_with_state_items(self):
+        # severity/re-review/diag-confidence/citation record items in state order: ask output
+        # must carry a short label per item so agents can align verdicts with their own list.
+        for p in ("severity", "re-review", "diag-confidence", "citation", "fidelity-coverage"):
+            t, s = support.template(p), support.fixture_state(p)
+            self.assertIn("item_label", t, p)
+            labels = templates.item_labels(t, s)
+            self.assertEqual(len(labels), len(s[t["item_label"]["path"]]), p)
+            self.assertTrue(all(lbl and len(lbl) <= templates.LABEL_CHARS for lbl in labels), p)
+        cit = templates.item_labels(support.template("citation"), support.fixture_state("citation"))
+        self.assertTrue(cit[0].startswith("- parse_config returns {}"))
+
     def test_operator_tier_state_schema_has_no_budget_field(self):
         t = support.template("operator-tier")
         props = t["state_schema"]["properties"]

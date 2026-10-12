@@ -63,6 +63,19 @@ class LintTest(unittest.TestCase):
             t["cookbook"] = ""
         self.assertTrue(any("cookbook" in e for e in mutated(f)))
 
+    def test_item_label_must_name_an_array_of_state(self):
+        def good(t):
+            t["item_label"] = {"path": "items"}
+        self.assertEqual(mutated(good), [])
+
+        def bad_path(t):
+            t["item_label"] = {"path": "text"}
+        self.assertTrue(any("item_label" in e for e in mutated(bad_path)))
+
+        def bad_field(t):
+            t["item_label"] = {"path": "items", "field": "nope"}
+        self.assertTrue(any("item_label" in e for e in mutated(bad_field)))
+
     def test_unknown_rule(self):
         def f(t):
             t["combine"]["rule"] = "majority_vote"

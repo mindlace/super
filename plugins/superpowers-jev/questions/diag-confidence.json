@@ -48,6 +48,7 @@
     "score_levels": ["low", "medium", "high"],
     "compare_to": {"state_path": "findings", "field": "analyst_confidence", "order": ["low", "medium", "high"], "min_distance": 1}
   },
+  "item_label": {"path": "findings", "field": "finding"},
   "compare": "items",
   "on_skips": null,
   "claude_verdict_example": {"items": ["high", "medium"]},

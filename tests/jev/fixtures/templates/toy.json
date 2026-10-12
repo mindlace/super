@@ -39,6 +39,7 @@
     }
   },
   "combine": {"rule": "any_true_over", "threshold": 0.7, "hit": "flagged", "miss": "clean"},
+  "item_label": {"path": "items"},
   "compare": "verdict",
   "on_skips": null,
   "claude_verdict_example": {"verdict": "clean"},

@@ -7,6 +7,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 POINT_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 STATE_TOKEN_LIMIT = 28000      # spec: refuse state > 28k tokens (chars/4)
 REQUEST_TOKEN_LIMIT = 60000    # API: 64k per request; keep headroom
+LABEL_CHARS = 80               # item labels in `ask` output: enough to align, cheap to carry
 MAX_CHOICE_OPTIONS = 255       # API: at most 255 Choice options
 TEMPLATE_ONLY_KEYS = ("for_each", "only_if", "options_from_state", "conservative",
                       "no_match", "polarity")
@@ -109,3 +110,20 @@ def build_request(template, state):
     payload = {"state": state, "model": template.get("model", "jev-latest"),
                "questions": questions}
     return payload, index
+
+
+def item_labels(template, state):
+    """Short labels for a per-item point's state items, in state order (None if undeclared).
+
+    `item_label` = {"path": <array in state>, "field": <item property>}; `field` is omitted
+    when the items are strings. Callers that filter or reorder their own list before asking
+    use these to align each recorded verdict with the item it belongs to.
+    """
+    spec = template.get("item_label")
+    if not spec:
+        return None
+    labels = []
+    for item in state.get(spec["path"]) or []:
+        text = item.get(spec["field"]) if spec.get("field") and isinstance(item, dict) else item
+        labels.append(" ".join(str(text or "").split())[:LABEL_CHARS])
+    return labels

@@ -52,6 +52,7 @@
     "threshold": 0.8,
     "escalate_if": {"options": ["not_addressed"], "threshold": 0.8, "hit": "return_to_implementer", "miss": "dispatch_rereview"}
   },
+  "item_label": {"path": "findings", "field": "text"},
   "compare": "items",
   "on_skips": {"verdict": "return_to_implementer", "dispatch": "scoped re-reviewer"},
   "claude_verdict_example": {"items": ["addressed", "not_addressed"]},

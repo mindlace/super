@@ -7,6 +7,7 @@ from .schema import KEYWORDS
 
 TOP_KEYS = {"point", "version", "plugin", "anchor", "cookbook", "model", "state_schema",
             "questions", "combine", "compare", "on_skips", "claude_verdict_example", "notes"}
+OPTIONAL_KEYS = {"item_label"}
 COMPARE_KINDS = {"verdict", "picks", "items", "coverage"}
 PLUGINS = {"superpowers", "supersonic"}
 QID_RE = re.compile(r"^[a-z][a-z_]*$")
@@ -119,11 +120,29 @@ def _lint_combine(t):
     return errs
 
 
+def _lint_item_label(t):
+    spec = t.get("item_label")
+    if spec is None:
+        return []
+    props = (t.get("state_schema") or {}).get("properties", {})
+    arr = props.get(spec.get("path") if isinstance(spec, dict) else None, {})
+    if arr.get("type") != "array":
+        return ["item_label.path must name an array property of state_schema"]
+    item = arr.get("items") or {}
+    field = spec.get("field")
+    if field is None:
+        return [] if item.get("type") == "string" else ["item_label needs a field for non-string items"]
+    if item.get("properties", {}).get(field, {}).get("type") != "string":
+        return ["item_label.field %r must be a string property of the items" % field]
+    return []
+
+
 def lint_template(t, stem):
     missing = TOP_KEYS - set(t)
     if missing:
         return ["missing keys: %s" % sorted(missing)]
-    errs = ["unknown key %r" % k for k in sorted(set(t) - TOP_KEYS)]
+    errs = ["unknown key %r" % k for k in sorted(set(t) - TOP_KEYS - OPTIONAL_KEYS)]
+    errs += _lint_item_label(t)
     if t["point"] != stem:
         errs.append("point %r must equal file name %r" % (t["point"], stem))
     if not isinstance(t["version"], int) or isinstance(t["version"], bool) or t["version"] < 1:
