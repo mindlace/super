@@ -1,0 +1,10 @@
+{
+  "name": "supersonic",
+  "version": "0.1.0",
+  "description": "superconductor (execute a multi-spec composition package via operator subagents) and supercomposer (compose that package).",
+  "author": { "name": "mindlace", "url": "https://github.com/mindlace" },
+  "homepage": "https://github.com/mindlace/super",
+  "repository": "https://github.com/mindlace/super",
+  "license": "MIT",
+  "keywords": ["superpowers", "orchestration", "multi-spec", "subagents"]
+}

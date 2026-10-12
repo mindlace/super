@@ -1,0 +1,9 @@
+# Ensure shell scripts always have LF line endings
+*.sh text eol=lf
+*.cmd text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+plugins/superpowers-jev/bin/jev text eol=lf
+plugins/superpowers-jev/hooks/jev-hook text eol=lf

@@ -1,0 +1,21 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "super",
+  "description": "mindlace's Claude Code plugins: supersonic (superconductor + supercomposer) and superpowers-jev (optional TypeSafe Jev judgments for superpowers).",
+  "owner": {
+    "name": "mindlace",
+    "url": "https://github.com/mindlace"
+  },
+  "plugins": [
+    {
+      "name": "supersonic",
+      "source": "./plugins/supersonic",
+      "description": "superconductor conducts a multi-spec build through operator subagents; supercomposer composes the package it executes."
+    },
+    {
+      "name": "superpowers-jev",
+      "source": "./plugins/superpowers-jev",
+      "description": "Optional TypeSafe Jev typed judgments at superpowers and supersonic decision points. Shadow mode by default; fails open."
+    }
+  ]
+}
