@@ -6,11 +6,13 @@ No key always means off: there is nothing to call.
 """
 import sys
 
+from .key import resolve_key
+
 MODES = ("off", "shadow", "on")
 
 
 def base_mode(env):
-    key = (env.get("TYPESAFE_API_KEY") or "").strip()
+    key, _ = resolve_key(env)
     raw = (env.get("SUPERPOWERS_JEV") or "").strip().lower()
     if raw and raw not in MODES:
         sys.stderr.write("jev: ignoring invalid SUPERPOWERS_JEV=%r (want off|shadow|on)\n" % raw)

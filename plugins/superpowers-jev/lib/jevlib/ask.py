@@ -2,7 +2,7 @@
 import secrets
 import time
 
-from . import client, combine, log, schema, templates
+from . import client, combine, key, log, schema, templates
 from .mode import resolve_mode
 
 
@@ -75,7 +75,7 @@ def _run(point, state, env, cwd, post, write_log, entry, fail):
     if templates.estimate_tokens(payload) > templates.REQUEST_TOKEN_LIMIT:
         return fail("request over budget")
     try:
-        response = post(payload, env.get("TYPESAFE_API_KEY", ""), endpoint=env.get("JEV_ENDPOINT"))
+        response = post(payload, (key.resolve_key(env)[0] or ""), endpoint=env.get("JEV_ENDPOINT"))
     except client.JevUnavailable as exc:
         return fail("jev unavailable: %s" % exc)
     answers = response["answers"]

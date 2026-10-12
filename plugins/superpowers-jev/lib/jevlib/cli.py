@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from . import ask as ask_mod
+from .key import resolve_key
 from .mode import resolve_mode
 
 
@@ -47,6 +48,12 @@ def cmd_mode(args, env):
     return 0
 
 
+def cmd_key(args, env):
+    key, source = resolve_key(env)
+    emit({"source": source, "present": bool(key)})
+    return 0
+
+
 def build_parser(include_modules=True):
     parser = argparse.ArgumentParser(prog="jev", description="TypeSafe Jev judgments for superpowers.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -58,6 +65,8 @@ def build_parser(include_modules=True):
     p = sub.add_parser("mode", help="print off|shadow|on")
     p.add_argument("--point")
     p.set_defaults(func=cmd_mode)
+    p = sub.add_parser("key", help="print where the API key comes from (never the key)")
+    p.set_defaults(func=cmd_key)
     for mod in (command_modules() if include_modules else []):
         mod.add_parser(sub)
     return parser
