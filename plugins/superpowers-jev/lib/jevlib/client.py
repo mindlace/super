@@ -1,7 +1,6 @@
 """POST to TypeSafe System One. One attempt, 3 s timeout, no retries: a slow Jev
 must never stall a caller, and every failure becomes JevUnavailable."""
 import json
-import socket
 import urllib.error
 import urllib.request
 
@@ -24,7 +23,7 @@ def post(payload, key, endpoint=None, timeout=TIMEOUT_S):
     except urllib.error.HTTPError as exc:
         exc.close()
         raise JevUnavailable("http %d" % exc.code)
-    except (urllib.error.URLError, socket.timeout, TimeoutError, OSError, ValueError) as exc:
+    except Exception as exc:  # any transport failure, including http.client.HTTPException
         raise JevUnavailable("%s: %s" % (type(exc).__name__, exc))
     if not isinstance(data, dict) or not isinstance(data.get("answers"), dict):
         raise JevUnavailable("malformed response")

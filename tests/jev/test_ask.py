@@ -2,12 +2,13 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
 
 import support
-from jevlib import ask, log
+from jevlib import ask, client, log
 
 STATE = {"text": "The moon is made of cheese.", "items": ["apple"]}
 
@@ -146,6 +147,47 @@ class AskTest(unittest.TestCase):
             out = ask.ask("toy", STATE, env)
         self.assertFalse(out["enabled"])
         self.assertTrue(out["reason"].startswith("combine failed"), out["reason"])
+
+
+class TruncatedBodyServer:
+    """Raw socket server: claims a longer Content-Length than it sends, then closes,
+    so the client's read raises http.client.IncompleteRead (not an OSError)."""
+
+    def __enter__(self):
+        import socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.sock.bind(("127.0.0.1", 0))
+        self.sock.listen(1)
+        self.url = "http://127.0.0.1:%d/v1/systemone" % self.sock.getsockname()[1]
+        self.thread = threading.Thread(target=self._serve, daemon=True)
+        self.thread.start()
+        return self
+
+    def _serve(self):
+        conn, _ = self.sock.accept()
+        with conn:
+            conn.recv(65536)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                         b"Content-Length: 500\r\nConnection: close\r\n\r\n{\"answers\": {")
+
+    def __exit__(self, *exc):
+        self.sock.close()
+        self.thread.join(timeout=5)
+
+
+class TransportFailureTest(unittest.TestCase):
+    def test_truncated_body_is_jev_unavailable(self):
+        with TruncatedBodyServer() as srv:
+            with self.assertRaises(client.JevUnavailable):
+                client.post({"state": {}, "questions": {}}, "k", endpoint=srv.url, timeout=3.0)
+
+    def test_truncated_body_fails_open_through_ask(self):
+        with TruncatedBodyServer() as srv:
+            env = toy_env(JEV_ENDPOINT=srv.url)
+            out = ask.ask("toy", STATE, env)
+        self.assertFalse(out["enabled"])
+        self.assertIn("jev unavailable", out["reason"])
 
 
 class LogDirTest(unittest.TestCase):
