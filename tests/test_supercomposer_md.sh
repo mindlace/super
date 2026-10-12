@@ -1,7 +1,7 @@
 #!/bin/sh
 # Structural checks for the supercomposer SKILL.md
 set -e
-skill="$(cd "$(dirname "$0")/.." && pwd)/home/dot_claude/skills/supercomposer/SKILL.md"
+skill="$(cd "$(dirname "$0")/.." && pwd)/plugins/supersonic/skills/supercomposer/SKILL.md"
 
 test -f "$skill" || { echo "FAIL: supercomposer SKILL.md missing"; exit 1; }
 head -1 "$skill" | grep -qx -- '---' || { echo "FAIL: no opening frontmatter delimiter"; exit 1; }
@@ -21,4 +21,6 @@ for t in 'Traceability table' 'Coverage table' 'delegation check' 'ledger'; do
 done
 # Composition ends at handoff; conduction must not start here.
 grep -qF 'superconductor' "$skill" || { echo "FAIL: supercomposer SKILL.md never references superconductor"; exit 1; }
+grep -qF 'supersonic:superconductor' "$skill" \
+  || { echo "FAIL: supercomposer must hand off to supersonic:superconductor"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

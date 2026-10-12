@@ -1,7 +1,7 @@
 #!/bin/sh
 # Structural checks for operator-briefing.md
 set -e
-briefing="$(cd "$(dirname "$0")/.." && pwd)/home/dot_claude/skills/superconductor/operator-briefing.md"
+briefing="$(cd "$(dirname "$0")/.." && pwd)/plugins/supersonic/skills/superconductor/operator-briefing.md"
 
 test -f "$briefing" || { echo "FAIL: operator-briefing.md missing"; exit 1; }
 grep -qF 'Do not send to main' "$briefing" || { echo "FAIL: missing return-address line"; exit 1; }

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Structural checks for SKILL.md frontmatter and required sections
 set -e
-skill="$(cd "$(dirname "$0")/.." && pwd)/home/dot_claude/skills/superconductor/SKILL.md"
+skill="$(cd "$(dirname "$0")/.." && pwd)/plugins/supersonic/skills/superconductor/SKILL.md"
 
 test -f "$skill" || { echo "FAIL: SKILL.md missing"; exit 1; }
 head -1 "$skill" | grep -qx -- '---' || { echo "FAIL: no opening frontmatter delimiter"; exit 1; }
@@ -30,4 +30,10 @@ grep -qi 'opus' "$skill" \
   && { echo "FAIL: operator tier must not be hardcoded to a specific model (Opus found)"; exit 1; }
 grep -qF 'rationale' "$skill" \
   || { echo "FAIL: tier decisions must be recorded with a rationale"; exit 1; }
+grep -qF 'supersonic:supercomposer' "$skill" \
+  || { echo "FAIL: SKILL.md must route package work to supersonic:supercomposer"; exit 1; }
+grep -qF 'back to supercomposer' "$skill" \
+  && { echo "FAIL: un-namespaced route 'back to supercomposer'"; exit 1; }
+grep -qF "this skill's \`budget.sh\`" "$skill" \
+  || { echo "FAIL: gate must run this skill's budget.sh"; exit 1; }
 echo "PASS: SKILL.md structure"

@@ -1,6 +1,6 @@
 ---
 name: supercomposer
-description: Use when co-designing a build large enough to decompose into multiple specs, when a design requires systemic understanding of existing code before it can be written, or when a superconductor run has surfaced a frame defect, missing subsystem, or reappraisal need in its design. Produces the composition package a superconductor run executes. Not for single-spec features — use superpowers:brainstorming for those.
+description: Use when co-designing a build large enough to decompose into multiple specs, when a design requires systemic understanding of existing code before it can be written, or when a supersonic:superconductor run has surfaced a frame defect, missing subsystem, or reappraisal need in its design. Produces the composition package a superconductor run executes. Not for single-spec features — use superpowers:brainstorming for those.
 ---
 
 # Supercomposer
@@ -117,8 +117,9 @@ agent — do not attempt to score it lexically. Fix findings inline.
 Commit the package (design doc, specs, tables, survey reports worth keeping).
 Ledger records: package contents and commit, settled decisions, open
 decisions, coverage and traceability pointers. Then **end the session** —
-conduction starts fresh with superconductor, which consumes the package via
-its intake phase. Do not begin dispatching operators from this session.
+conduction starts fresh with supersonic:superconductor, which consumes the
+package via its intake phase. Do not begin dispatching operators from this
+session.
 
 ## Red flags — stop and re-ground
 

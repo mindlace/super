@@ -2,7 +2,7 @@
 # tests/test_budget_sh.sh — fixture tests for the budget reader.
 set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
-b="$root/home/dot_claude/skills/superconductor/executable_budget.sh"
+b="$root/plugins/supersonic/skills/superconductor/budget.sh"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 now=$(date +%s)
 

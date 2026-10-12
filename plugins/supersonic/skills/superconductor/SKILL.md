@@ -1,17 +1,17 @@
 ---
 name: superconductor
-description: Use when executing or resuming a multi-spec build whose composition package (design doc + specs) already exists — dispatching operators, supervising waves, integrating results — or when reconciling an earlier superconductor run after a session ended or a usage limit hit. For designing or reappraising the package itself, use supercomposer; for single-spec features, use superpowers:brainstorming.
+description: Use when executing or resuming a multi-spec build whose composition package (design doc + specs) already exists — dispatching operators, supervising waves, integrating results — or when reconciling an earlier superconductor run after a session ended or a usage limit hit. For designing or reappraising the package itself, use supersonic:supercomposer; for single-spec features, use superpowers:brainstorming.
 ---
 
 # Superconductor
 
-Conduct the score; supercomposer composes it. You (the main session) consume
-a committed **composition package** — design doc, specs, traceability and
-coverage tables — dispatch one operator subagent per spec to plan and
-implement it via superpowers, handle escalations, and integrate the results.
-You own execution coherence and design *fidelity* — never implementation,
-and never composition: design work in this session bloats the spine that
-every resume re-reads.
+Conduct the score; supersonic:supercomposer composes it. You (the main
+session) consume a committed **composition package** — design doc, specs,
+traceability and coverage tables — dispatch one operator subagent per spec
+to plan and implement it via superpowers, handle escalations, and integrate
+the results. You own execution coherence and design *fidelity* — never
+implementation, and never composition: design work in this session bloats
+the spine that every resume re-reads.
 
 **Announce at start:** "Using superconductor to conduct <topic>."
 
@@ -21,8 +21,8 @@ every resume re-reads.
   integration breakage. Dispatch instead — controller fixes skip review and
   burn coordination context.
 - **You never design in this session.** A missing, incomplete, or defective
-  package goes back to supercomposer (a separate session); you may relay the
-  defect record, never author the amendment.
+  package goes back to supersonic:supercomposer (a separate session); you
+  may relay the defect record, never author the amendment.
 - **Append to the ledger after every state change.** A usage limit can end
   this session at any moment; the ledger plus git is the only memory that
   survives. On resume, trust the ledger and git over recollection.
@@ -54,8 +54,8 @@ Continue from whichever phase the ledger shows incomplete.
 
 ## Phase 1 — Package intake
 
-The package comes from a supercomposer session, committed. Before any
-dispatch, verify it is complete:
+The package comes from a supersonic:supercomposer session, committed. Before
+any dispatch, verify it is complete:
 
 - Design doc with every required section, including the **traceability
   table** (every model-doc claim → interface row / spec, or a
@@ -66,8 +66,8 @@ dispatch, verify it is complete:
   as run.
 - Interface-table rows marked *model commitment* vs *decomposition choice*.
 
-Anything missing → back to supercomposer; do not patch it here. Operators
-branch worktrees from the package's committed state.
+Anything missing → back to supersonic:supercomposer; do not patch it here.
+Operators branch worktrees from the package's committed state.
 
 ## Phase 2 — Dispatch
 
@@ -171,13 +171,13 @@ operator uses its agentId.
   with a short defect-class slug in the ledger. **The third same-class
   instance is a tripwire**: stop issuing in-frame rulings for that class,
   record the aggregate, and surface it to the partner as a candidate
-  supercomposer bounce. Seven independent rediscoveries of one missing
-  declaration is a design defect wearing an implementation costume.
+  supersonic:supercomposer bounce. Seven independent rediscoveries of one
+  missing declaration is a design defect wearing an implementation costume.
 - **A discovered unmodeled subsystem is a frame event, never extra scope.**
   If any agent surfaces a binding, store, table family, or consumer the
   design doc does not model: pause the affected specs, record it, surface
-  to the partner, and route to supercomposer for an amended package. Do not
-  absorb it as additional tasks on a running wave.
+  to the partner, and route to supersonic:supercomposer for an amended
+  package. Do not absorb it as additional tasks on a running wave.
 - **Operators stay warm through review.** A completed operator is not dead:
   fix rounds, review findings, and integration breakage on its spec go to
   its recorded agentId first (resume is cheap; a cold fix round costs ~3.7×
