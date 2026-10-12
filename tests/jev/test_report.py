@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import unittest
 
@@ -55,6 +57,42 @@ class ReportMathTest(unittest.TestCase):
         ])["prompt-route"]
         self.assertEqual((rows["units"], rows["agree"]), (1, 1))
 
+    def test_picks_also_score_the_acted_on_verdict(self):
+        gated = {"choices": {"skill": "superpowers:systematic-debugging"}, "confident_keys": {"skill": True}}
+        floored = {"choices": {"implementer": "cheap"}, "confident_keys": {"implementer": True}}
+        entries = [
+            # prompt-route: the gate suppressed the pick (verdict None), Claude used no skill.
+            call("g1", "prompt-route", "picks", {"skill": None}, detail=gated),
+            rec("g1", {"picks": {"skill": "none"}}),
+            # gated and Claude did use the skill: Jev abstained, so nothing to score as acted.
+            call("g2", "prompt-route", "picks", {"skill": None}, detail=gated),
+            rec("g2", {"picks": {"skill": "superpowers:systematic-debugging"}}),
+            # tier: the floor raised the raw choice, and the acted-on verdict is the right one.
+            call("f1", "tier", "picks", {"implementer": "standard"},
+                 detail=dict(floored, floored={"implementer": ["cheap", "standard"]})),
+            rec("f1", {"picks": {"implementer": "standard"}}),
+        ]
+        rows = report.build_report(entries)
+        g, f = rows["prompt-route"], rows["tier"]
+        self.assertEqual((g["units"], g["agree"]), (2, 1))              # raw: g1 wrong, g2 right
+        self.assertEqual((g["acted_units"], g["acted_agree"], g["abstained"]), (1, 1, 1))
+        self.assertEqual((f["units"], f["agree"]), (1, 0))              # raw choice was below the floor
+        self.assertEqual((f["acted_units"], f["acted_agree"], f["abstained"]), (1, 1, 0))
+        self.assertAlmostEqual(f["acted_agreement"], 1.0)
+        self.assertIn("acted", report.format_report(rows).splitlines()[0])
+
+    def test_non_picks_kinds_act_on_their_raw_value(self):
+        rows = report.build_report([
+            call("a", "report-evidence", "verdict", "complete"), rec("a", {"verdict": "complete"}),
+        ])["report-evidence"]
+        self.assertEqual((rows["acted_units"], rows["acted_agree"]), (1, 1))
+
+    def test_units_tolerate_missing_detail_and_item_fields(self):
+        self.assertEqual(report.units(call("a", "tier", "picks", {}, detail=None), {"picks": {"x": "y"}}),
+                         [(None, None, "y", False)])
+        self.assertEqual(report.units(call("b", "re-review", "items", "x", items=[{"index": 0}]),
+                                      {"items": ["addressed"]}), [(None, None, "addressed", False)])
+
     def test_coverage_units(self):
         rows = report.build_report([
             call("a", "fidelity-coverage", "coverage", {"uncovered": [2], "multiply_covered": [0]},
@@ -97,8 +135,20 @@ class RecordCliTest(unittest.TestCase):
 
     def test_record_rejects_non_object(self):
         env = support.make_env()
-        self.assertEqual(cli.main(["record", "x1", '["addressed"]'], env), 2)
-        self.assertEqual(cli.main(["record", "x1", "not json"], env), 2)
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.main(["record", "x1", '["addressed"]'], env), 2)
+            self.assertEqual(cli.main(["record", "x1", "not json"], env), 2)
+        self.assertIn("jev record:", err.getvalue())
+
+    def test_record_for_unknown_call_id_warns_but_exits_zero(self):
+        env = support.make_env()
+        log.append(call("known", "tier", "picks", {}), env)
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.main(["record", "nope", '{"verdict": "x"}'], env), 0)
+            self.assertEqual(cli.main(["record", "known", '{"picks": {}}'], env), 0)
+        self.assertEqual(err.getvalue().count("unknown call_id"), 1)
+        self.assertIn("nope", err.getvalue())
+        self.assertEqual(len([e for e in log.read_entries(env) if e["type"] == "record"]), 2)
 
 
 if __name__ == "__main__":

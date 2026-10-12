@@ -9,6 +9,11 @@ Units of agreement by compare kind:
   picks    - one unit per key in Claude {"picks": {...}}: Jev's raw choice for that key
   items    - one unit per index in Claude {"items": [...]}: Jev's item pick
   coverage - one unit per requirement: ok | uncovered | multi, from {"uncovered", "multiply_covered"}
+
+Two agreement columns: `agreement` scores Jev's raw answer (for picks, detail.choices);
+`acted-agreement` scores the combined verdict an `on` run would act on (floors, gates, and
+overrides applied). A None acted verdict is Jev abstaining: it scores as agreement when
+Claude's value is "none", and otherwise counts under `abstain` and is not scored.
 """
 import json
 import sys
@@ -29,26 +34,34 @@ def _coverage_classes(v, n):
 
 
 def units(call, claude):
-    """[(jev_value, claude_value, jev_confident)] for one recorded call."""
+    """[(jev_raw, jev_acted, claude_value, jev_confident)] for one recorded call.
+
+    jev_raw is Jev's own answer; jev_acted is the combined verdict an `on` run would act
+    on (floors, gates, and overrides applied; None = Jev abstained). They differ only
+    for `picks`."""
     kind = call.get("compare")
     detail = call.get("detail") or {}
     if kind == "verdict":
-        return [(call.get("verdict"), claude.get("verdict"), bool(call.get("confident")))]
+        jev = call.get("verdict")
+        return [(jev, jev, claude.get("verdict"), bool(call.get("confident")))]
     if kind == "picks":
-        return [(detail.get("choices", {}).get(k), v, bool(detail.get("confident_keys", {}).get(k)))
+        choices = detail.get("choices") or {}
+        confident = detail.get("confident_keys") or {}
+        verdict = call.get("verdict") if isinstance(call.get("verdict"), dict) else {}
+        return [(choices.get(k), verdict.get(k), v, bool(confident.get(k)))
                 for k, v in (claude.get("picks") or {}).items()]
     if kind == "items":
-        by_index = {it["index"]: it for it in call.get("items") or []}
+        by_index = {it.get("index"): it for it in call.get("items") or []}
         out = []
         for i, v in enumerate(claude.get("items") or []):
-            it = by_index.get(i)
-            out.append((it["pick"] if it else None, v, bool(it and it["confident"])))
+            it = by_index.get(i) or {}
+            out.append((it.get("pick"), it.get("pick"), v, bool(it.get("confident"))))
         return out
     if kind == "coverage":
         n = detail.get("n_requirements", 0)
         jev = _coverage_classes(call.get("verdict") or {}, n)
         cla = _coverage_classes(claude, n)
-        return [(a, b, bool(call.get("confident"))) for a, b in zip(jev, cla)]
+        return [(a, a, b, bool(call.get("confident"))) for a, b in zip(jev, cla)]
     return []
 
 
@@ -67,7 +80,8 @@ def build_report(entries, since=None, point=None):
             continue
         r = rows.setdefault(c.get("point"), {
             "calls": 0, "errors": 0, "recorded": 0, "units": 0, "agree": 0,
-            "confident_units": 0, "confident_wrong": 0, "would_skip": 0, "unrecorded": []})
+            "confident_units": 0, "confident_wrong": 0, "would_skip": 0, "unrecorded": [],
+            "acted_units": 0, "acted_agree": 0, "abstained": 0})
         r["calls"] += 1
         if c.get("error"):
             r["errors"] += 1
@@ -80,15 +94,23 @@ def build_report(entries, since=None, point=None):
             r["unrecorded"].append(cid)
             continue
         r["recorded"] += 1
-        for jev_v, claude_v, confident in units(c, claude):
+        for jev_v, acted_v, claude_v, confident in units(c, claude):
             agree = jev_v == claude_v
             r["units"] += 1
             r["agree"] += int(agree)
             if confident:
                 r["confident_units"] += 1
                 r["confident_wrong"] += int(not agree)
+            # Acted-on verdict: None means Jev took no action. That matches Claude's explicit
+            # "none" (the gate was right); otherwise it is an abstention, not scored.
+            if acted_v is None and claude_v != "none":
+                r["abstained"] += 1
+            else:
+                r["acted_units"] += 1
+                r["acted_agree"] += int(acted_v == claude_v or (acted_v is None and claude_v == "none"))
     for r in rows.values():
         r["agreement"] = r["agree"] / r["units"] if r["units"] else None
+        r["acted_agreement"] = r["acted_agree"] / r["acted_units"] if r["acted_units"] else None
         r["confident_wrong_rate"] = (r["confident_wrong"] / r["confident_units"]
                                      if r["confident_units"] else None)
     return rows
@@ -99,15 +121,17 @@ def _frac(rate, num, den):
 
 
 def format_report(rows):
-    lines = ["%-18s %5s %4s %4s %-15s %-15s %s" % ("point", "calls", "err", "rec", "agreement",
-                                                     "conf-wrong", "would-skip")]
+    lines = ["%-18s %5s %4s %4s %-15s %-15s %-15s %-7s %s" % (
+        "point", "calls", "err", "rec", "agreement", "acted-agreement", "conf-wrong", "abstain",
+        "would-skip")]
     for name in sorted(rows):
         r = rows[name]
-        lines.append("%-18s %5d %4d %4d %-15s %-15s %d" % (
+        lines.append("%-18s %5d %4d %4d %-15s %-15s %-15s %-7d %d" % (
             name, r["calls"], r["errors"], r["recorded"],
             _frac(r["agreement"], r["agree"], r["units"]),
+            _frac(r["acted_agreement"], r["acted_agree"], r["acted_units"]),
             _frac(r["confident_wrong_rate"], r["confident_wrong"], r["confident_units"]),
-            r["would_skip"]))
+            r["abstained"], r["would_skip"]))
     return "\n".join(lines)
 
 
@@ -119,6 +143,10 @@ def cmd_record(args, env):
     except (OSError, ValueError) as exc:
         sys.stderr.write("jev record: %s\n" % exc)
         return 2
+    if not any(e.get("type") == "call" and e.get("call_id") == args.call_id
+               for e in log.read_entries(env)):
+        sys.stderr.write("jev record: warning: unknown call_id %s (recorded anyway; it will not "
+                         "appear in `jev report`)\n" % args.call_id)
     return 0
 
 
