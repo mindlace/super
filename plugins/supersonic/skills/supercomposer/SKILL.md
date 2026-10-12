@@ -126,11 +126,13 @@ installed (load `superpowers-jev:jev`), run `jev coverage --design <design
 doc> --spec <spec> [--spec <spec> ...]` before you dispatch the fresh-eyes
 agent.
 
-- On: its `targets` become a mandatory target list in that agent's brief.
-  The targets are the traceability requirements carried by zero specs, or
-  by two or more. The agent still runs every leg, including the
-  contradiction check and the delegation check.
-- In shadow mode, brief the agent as you do today.
+- On, and only when the result is `confident`: its `targets` become a
+  mandatory target list in that agent's brief. The targets are the
+  traceability requirements carried by zero specs, or by two or more. The
+  agent still runs every leg, including the contradiction check and the
+  delegation check.
+- In shadow mode, or when the result is not `confident`, brief the agent
+  as you do today.
 
 Either way, record the agent's coverage result with `jev record <call_id>
 '{"uncovered": [...], "multiply_covered": [...]}'`, using requirement

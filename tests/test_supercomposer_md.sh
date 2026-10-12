@@ -23,7 +23,7 @@ done
 grep -qF 'superconductor' "$skill" || { echo "FAIL: supercomposer SKILL.md never references superconductor"; exit 1; }
 grep -qF 'supersonic:superconductor' "$skill" \
   || { echo "FAIL: supercomposer must hand off to supersonic:superconductor"; exit 1; }
-for s in 'superpowers-jev:jev' 'jev ask citation' 'jev coverage' 'still runs every leg' 'jev record'; do
+for s in 'superpowers-jev:jev' 'jev ask citation' 'jev coverage' 'still runs every leg' 'jev record' 'only when the result is `confident`'; do
   grep -qF -- "$s" "$skill" || { echo "FAIL: supercomposer SKILL.md Jev points missing: $s"; exit 1; }
 done
 echo "PASS: supercomposer SKILL.md structure"
