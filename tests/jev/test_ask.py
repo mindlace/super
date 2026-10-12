@@ -177,7 +177,34 @@ class TruncatedBodyServer:
         self.thread.join(timeout=5)
 
 
+class SlowDripServer(TruncatedBodyServer):
+    """Sends a valid header, then one body byte per second: every socket op is quick."""
+
+    def _serve(self):
+        conn, _ = self.sock.accept()
+        try:
+            conn.recv(65536)
+            conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                         b"Content-Length: 500\r\n\r\n")
+            for byte in b'{"answers": {' + b" " * 30:
+                conn.sendall(bytes([byte]))
+                time.sleep(1)
+        except OSError:
+            pass
+        finally:
+            conn.close()
+
+
 class TransportFailureTest(unittest.TestCase):
+    def test_slow_drip_hits_overall_deadline(self):
+        with SlowDripServer() as srv:
+            t0 = time.monotonic()
+            out = ask.ask("toy", STATE, toy_env(JEV_ENDPOINT=srv.url))
+            elapsed = time.monotonic() - t0
+        self.assertFalse(out["enabled"])
+        self.assertIn("unavailable", out["reason"])
+        self.assertLess(elapsed, client.TIMEOUT_S + 1.0)
+
     def test_truncated_body_is_jev_unavailable(self):
         with TruncatedBodyServer() as srv:
             with self.assertRaises(client.JevUnavailable):
