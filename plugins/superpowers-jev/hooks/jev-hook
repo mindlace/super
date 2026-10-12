@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# superpowers-jev hook launcher: jev-hook <session-start|prompt-route|stop-verify>
+# Reads the hook JSON on stdin, prints hook JSON or nothing, and always exits 0.
+# Fail-open: no python3, a broken install, or any error means no output.
+
+# Resolve the plugin root without dirname (same PATH-independence as superpowers'
+# session-start: a SessionStart hook can run with a broken PATH).
+case "$0" in
+  */*|*\\*) SCRIPT_DIR="$(cd "${0%[/\\]*}" && pwd)" ;;
+  *) SCRIPT_DIR="$(pwd)" ;;
+esac
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+command -v python3 >/dev/null 2>&1 || exit 0
+python3 "${PLUGIN_ROOT}/bin/jev" hook "${1:-}" 2>/dev/null || true
+exit 0
