@@ -1,0 +1,17 @@
+{
+  "prompt": "The checkout page crashes when the cart is empty, can you find out why and fix it?",
+  "skills": [
+    {
+      "name": "superpowers:brainstorming",
+      "description": "You MUST use this before any creative work - creating features, building components, adding functionality, or modifying behavior."
+    },
+    {
+      "name": "superpowers:systematic-debugging",
+      "description": "Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes"
+    },
+    {
+      "name": "superpowers:test-driven-development",
+      "description": "Use when implementing any feature or bugfix, before writing implementation code"
+    }
+  ]
+}

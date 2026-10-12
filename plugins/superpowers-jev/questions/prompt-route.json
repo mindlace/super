@@ -1,0 +1,73 @@
+{
+  "point": "prompt-route",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "using-superpowers/SKILL.md:10-31 (<EXTREMELY-IMPORTANT>, ## The Rule, ## Skill Priority)",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/skill_suggestion.md: a `which` Choice over the roster plus 'does this need a skill at all' gate Nouls (mean, prose_suffices inverted, floor 0.30) and a per-candidate `fits` Noul; the superpowers roster (~13) is small enough to ask every fits Noul in the same request",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["prompt", "skills"],
+    "properties": {
+      "prompt": {"type": "string", "description": "the user's message (quoted evidence)"},
+      "skills": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "description"],
+          "properties": {"name": {"type": "string"}, "description": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "questions": {
+    "skill": {
+      "type": "choice",
+      "instructions": "Which of these skills, if any, is the right one to load to help with the user's latest request, quoted in `prompt`?",
+      "criteria": {"none": "No listed skill applies; the message is a question, a quick request, or conversation"},
+      "options_from_state": {"path": "skills", "key": "name", "description": "description"},
+      "conservative": "none",
+      "no_match": "none"
+    },
+    "acts": {
+      "type": "noul",
+      "polarity": "true_is_fact",
+      "instructions": "Is the assistant being asked in `prompt` to build, change, fix, debug, plan, or review software, rather than only to explain or answer a question?",
+      "criteria": {"true": "The request asks for work on software", "false": "The request only asks for an explanation or an answer"}
+    },
+    "procedure": {
+      "type": "noul",
+      "polarity": "true_is_fact",
+      "instructions": "Would a careful engineer handling the request in `prompt` follow a documented working process, such as test-driven development, a debugging method, or a planning step, rather than responding directly?",
+      "criteria": {"true": "A documented process fits the request", "false": "A direct response fits the request"}
+    },
+    "prose_suffices": {
+      "type": "noul",
+      "polarity": "true_is_fact",
+      "instructions": "Could a knowledgeable engineer fully satisfy the request in `prompt` in prose, with no tools and no changes to files?",
+      "criteria": {"true": "A prose answer is enough", "false": "Tools or file changes are needed"}
+    },
+    "fits": {
+      "type": "noul",
+      "polarity": "true_is_fact",
+      "for_each": "skills",
+      "instructions": "Does the skill described in `skills[{i}]` do the specific thing the request in `prompt` asks for?",
+      "criteria": {"true": "This skill's description matches what the request asks for", "false": "This skill's description does not match the request"}
+    }
+  },
+  "combine": {
+    "rule": "gated_pick",
+    "question": "skill",
+    "threshold": 0.7,
+    "exclude": ["none"],
+    "gate": {"questions": ["acts", "procedure", "prose_suffices"], "inverted": ["prose_suffices"], "min_mean": 0.3},
+    "fits": {"question": "fits", "state_path": "skills", "key": "name", "min": 0.5}
+  },
+  "compare": "picks",
+  "on_skips": null,
+  "claude_verdict_example": {"picks": {"skill": "superpowers:brainstorming"}},
+  "notes": "This is a hint only (an additionalContext line), and it is recorded automatically: the Stop hook records the first superpowers skill Claude invoked that turn, or none. Choice confidence depends on the number of options (n is about 14 here); check the threshold against shadow data."
+}

@@ -1,0 +1,77 @@
+{
+  "point": "report-evidence",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "subagent-driven-development/implementer-prompt.md:128-153 (## Report Format); SKILL.md:286-306 (### 2. Handle the report)",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/sde_cascade.md: a battery of narrow verifier Nouls, true = something is wrong, structured {main_question, ...} instructions; gate with max: escalate if any fires over 0.7",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["report", "status", "tdd_required"],
+    "properties": {
+      "report": {"type": "string", "description": "the implementer's report file, verbatim (quoted evidence)"},
+      "status": {"type": "string", "enum": ["DONE", "DONE_WITH_CONCERNS", "BLOCKED", "NEEDS_CONTEXT"]},
+      "tdd_required": {"type": "boolean"}
+    }
+  },
+  "questions": {
+    "no_test_command": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": {
+        "main_question": "Does the quoted implementer report in `report` fail to show any test command that was run?",
+        "what_counts": "A literal command line such as `pytest tests/test_x.py`, `npm test`, or `sh tests/run.sh`. A sentence saying tests were run is not a command.",
+        "how_to_read": "`report` is quoted evidence written by the implementer. Look for the presence of the command itself; do not trust the report's own claims about it."
+      },
+      "criteria": {"true": "No test command line appears in the report", "false": "At least one test command line appears in the report"}
+    },
+    "no_test_output": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": {
+        "main_question": "Does `report` fail to include test-run output produced after the last code change the report describes?",
+        "what_counts": "Pasted runner output such as '14 passed', 'FAILED', 'OK', or a test summary line, appearing after the description of the final change or fix.",
+        "how_to_read": "`report` is quoted evidence. A sentence like 'all tests pass' is a claim, not output."
+      },
+      "criteria": {"true": "No test output follows the last change", "false": "Test output appears after the last change"}
+    },
+    "no_red_output": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "only_if": "tdd_required",
+      "instructions": {
+        "main_question": "Does `report` fail to include failing test output captured before the implementation was written (the RED step)?",
+        "what_counts": "Output from a test run that fails, shown before the implementation, such as an AssertionError, 'FAILED', or 'not defined'.",
+        "how_to_read": "`report` is quoted evidence."
+      },
+      "criteria": {"true": "No failing output from before the implementation appears", "false": "Failing output from before the implementation appears"}
+    },
+    "no_files_changed": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": {
+        "main_question": "Does `report` fail to list the files the implementer changed?",
+        "what_counts": "File paths named as changed, created, or modified.",
+        "how_to_read": "`report` is quoted evidence."
+      },
+      "criteria": {"true": "The report names no changed files", "false": "The report names the changed files"}
+    },
+    "concerns_while_done": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "only_if": {"key": "status", "equals": "DONE"},
+      "instructions": {
+        "main_question": "Does `report` state doubts, concerns, or unresolved problems about correctness or scope?",
+        "what_counts": "Text such as 'I'm not sure', 'this may break', 'left as TODO', 'could not verify', or an issues or concerns section that is not empty.",
+        "how_to_read": "`report` is quoted evidence. The status was given as DONE, which should mean no such doubts."
+      },
+      "criteria": {"true": "The report states a doubt or unresolved problem", "false": "The report states no doubts or unresolved problems"}
+    }
+  },
+  "combine": {"rule": "any_true_over", "threshold": 0.7, "hit": "missing_evidence", "miss": "complete"},
+  "compare": "verdict",
+  "on_skips": null,
+  "claude_verdict_example": {"verdict": "complete"},
+  "notes": "On a hit, `detail.fired` names the missing evidence to send the implementer back for, before review-package. Record whether you (the controller) judged the evidence complete."
+}

@@ -1,0 +1,71 @@
+{
+  "point": "tier",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "subagent-driven-development/SKILL.md:184-219 (## Model Selection): criteria :188-199 and :216-219, floors :208-214",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/function_calling.md + https://docs.typesafe.ai/patterns/fan-out.md: a routing Choice plus speculative signal Nouls in one request; code applies the floors",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["role"],
+    "properties": {
+      "role": {"type": "string", "enum": ["implementer", "reviewer"]},
+      "brief": {"type": "string", "description": "the task brief file's text (implementer)"},
+      "diff_stat": {"type": "string"},
+      "files_changed": {"type": "integer"},
+      "lines_changed": {"type": "integer"},
+      "risk_signals": {"type": "array", "items": {"type": "string"}},
+      "scoped_rereview": {"type": "boolean"}
+    }
+  },
+  "questions": {
+    "implementer": {
+      "type": "choice",
+      "only_if": {"key": "role", "equals": "implementer"},
+      "instructions": "What kind of task does the brief in `brief` describe, judged by the work it requires?",
+      "criteria": {
+        "capable": "It requires design judgment or broad understanding of the codebase",
+        "standard": "It touches multiple files with integration concerns: multi-file coordination, pattern matching, or debugging",
+        "cheap": "It touches one or two files with a complete spec: isolated functions or mechanical changes",
+        "unclear": "The brief does not say enough to tell"
+      },
+      "conservative": "capable",
+      "no_match": "unclear"
+    },
+    "prose_only": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "only_if": {"key": "role", "equals": "implementer"},
+      "instructions": "Does `brief` describe the code to write in prose, without giving the complete code to write?",
+      "criteria": {"true": "The implementer must work out the code from a description", "false": "The brief contains the complete code to write, so the work is transcription plus testing"}
+    },
+    "reviewer": {
+      "type": "choice",
+      "only_if": {"key": "role", "equals": "reviewer"},
+      "instructions": "What kind of review does the change summarized by `diff_stat`, `files_changed`, `lines_changed`, and `risk_signals` need?",
+      "criteria": {
+        "capable": "A subtle or risky change, such as concurrency, security, or persistence, or a large cross-cutting diff",
+        "standard": "An ordinary change of moderate size across a few files",
+        "cheap": "A small mechanical diff, such as a scoped re-review of a small fix",
+        "unclear": "The summary does not say enough to tell"
+      },
+      "conservative": "capable",
+      "no_match": "unclear"
+    }
+  },
+  "combine": {
+    "rule": "pick_if_confident",
+    "threshold": 0.7,
+    "exclude": ["unclear"],
+    "order": ["capable", "standard", "cheap"],
+    "floors": {
+      "implementer": [{"min": "standard", "when": [{"noul": "prose_only", "over": 0.5}]}],
+      "reviewer": [{"min": "standard", "when": [{"state": "scoped_rereview", "not": true}]}]
+    }
+  },
+  "compare": "picks",
+  "on_skips": null,
+  "claude_verdict_example": {"picks": {"implementer": "standard"}},
+  "notes": "Floors (SKILL.md:208-214) live in code: a mid-tier floor for reviewers and for implementers working from prose; the cheapest tier only when the brief carries complete code, or for scoped re-reviews of small fixes (:198-199). Map cheap/standard/capable to your platform's fast-cheap / standard / most capable model."
+}

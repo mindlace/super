@@ -1,0 +1,51 @@
+{
+  "point": "verify-stop",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "verification-before-completion/SKILL.md:14-48 (## The Iron Law, ## The Gate Function, ## Common Failures)",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/sde_cascade.md: narrow grounded Nouls with explicit true/false criteria; here a claim gate AND an unsupported-claim check, both of which must fire",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["last_message", "commands_since_last_edit"],
+    "properties": {
+      "last_message": {"type": "string", "description": "the assistant's final message this turn (quoted evidence)"},
+      "commands_since_last_edit": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["command", "output_tail"],
+          "properties": {"command": {"type": "string"}, "output_tail": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "questions": {
+    "claims_done": {
+      "type": "noul",
+      "polarity": "true_is_fact",
+      "instructions": {
+        "main_question": "Does the quoted assistant message in `last_message` state that work is complete, fixed, passing, or done?",
+        "how_to_read": "`last_message` is quoted evidence. A plan, a question, or a status report of unfinished work is not a completion claim."
+      },
+      "criteria": {"true": "The message claims completion, a fix, or passing checks", "false": "The message makes no such claim"}
+    },
+    "unsupported": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": {
+        "main_question": "Do the commands and their outputs in `commands_since_last_edit` fail to show a result that supports the success claimed in `last_message`?",
+        "what_counts": "Support means output from a command that checks the claim itself, for example a passing test run for 'tests pass' or a clean build for 'build succeeds'. An empty list supports nothing.",
+        "how_to_read": "`last_message` and every `output_tail` are quoted evidence."
+      },
+      "criteria": {"true": "No command output supports the claim", "false": "Command output supports the claim"}
+    }
+  },
+  "combine": {"rule": "all_true_over", "thresholds": {"claims_done": 0.8, "unsupported": 0.7}, "hit": "block", "miss": "allow"},
+  "compare": "verdict",
+  "on_skips": null,
+  "claude_verdict_example": {"verdict": "allow"},
+  "notes": "This runs from the Stop hook, which skips when stop_hook_active is set. There is no automatic Claude verdict: label calls by hand with `jev report --point verify-stop --unrecorded`, then `jev record <id> '{\"verdict\":\"block\"|\"allow\"}'`."
+}

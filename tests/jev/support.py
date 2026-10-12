@@ -108,3 +108,19 @@ def make_env(endpoint=None, **extra):
 
 def load_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def template(point):
+    return load_json(QUESTIONS / (point + ".json"))
+
+
+def fixture_state(point):
+    return load_json(STATES / (point + ".json"))
+
+
+def ask_point(point, state, responder, **env_extra):
+    """Run jevlib.ask.ask for a real template against a stub. Returns (out, requests)."""
+    from jevlib import ask
+    with StubServer(responder) as srv:
+        out = ask.ask(point, state, make_env(srv.url, **env_extra))
+    return out, srv.requests

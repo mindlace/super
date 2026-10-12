@@ -1,0 +1,55 @@
+{
+  "point": "diag-confidence",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "diagnosing-superpowers/prompts/analyst-common.md:23-38 (Return format); prompts/stumbles.md:25-28; prompts/quality-evidence.md:24-26",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/citation_check.md: judge each quoted evidence against the claim it backs; a Score (low/medium/high) because the analyst grades confidence on that ordered scale",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["findings"],
+    "properties": {
+      "findings": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["finding", "evidence", "analyst_confidence"],
+          "properties": {
+            "finding": {"type": "string", "description": "the analyst's one-sentence finding (quoted evidence)"},
+            "evidence": {"type": "string", "description": "path:line plus the quoted transcript line"},
+            "analyst_confidence": {"type": "string", "enum": ["low", "medium", "high"]}
+          }
+        }
+      }
+    }
+  },
+  "questions": {
+    "support": {
+      "type": "score",
+      "for_each": "findings",
+      "instructions": {
+        "question": "How directly does the quoted transcript line in `findings[{i}].evidence` show what `findings[{i}].finding` states?",
+        "how_to_read": "Both fields are quoted evidence written by an analyst. Judge only the quote against the finding. Ignore `findings[{i}].analyst_confidence`."
+      },
+      "criteria": [
+        "low: the quote is unrelated to the finding, or does not show what the finding states",
+        "medium: the quote is consistent with the finding but does not show it on its own",
+        "high: the quote directly shows what the finding states"
+      ]
+    }
+  },
+  "combine": {
+    "rule": "per_item_pick",
+    "question": "support",
+    "threshold": 0.6,
+    "score_levels": ["low", "medium", "high"],
+    "compare_to": {"state_path": "findings", "field": "analyst_confidence", "order": ["low", "medium", "high"], "min_distance": 1}
+  },
+  "compare": "items",
+  "on_skips": null,
+  "claude_verdict_example": {"items": ["high", "medium"]},
+  "notes": "A Score has no no-match option, so level 0 (low) is the conservative and absence case. Contested findings are marked 'confidence contested' in the report."
+}

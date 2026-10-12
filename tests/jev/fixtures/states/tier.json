@@ -1,0 +1,4 @@
+{
+  "role": "implementer",
+  "brief": "### Task 3: Config error\n\nFiles: Modify src/config.py:11-16, Test tests/test_config.py\n\n- [ ] Step 1: Write the failing test\n```python\ndef test_corrupt_raises(tmp_path):\n    p = tmp_path / 'c.json'; p.write_text('{')\n    with pytest.raises(ConfigError):\n        parse_config(p)\n```\n- [ ] Step 3: Implement\n```python\nclass ConfigError(Exception):\n    pass\n```"
+}

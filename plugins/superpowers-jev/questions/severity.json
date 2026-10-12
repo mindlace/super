@@ -1,0 +1,56 @@
+{
+  "point": "severity",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "subagent-driven-development/task-reviewer-prompt.md:145-159 (## Calibration); requesting-code-review/code-reviewer.md:95-120 (## Calibration, ## Output Format); SKILL.md:356-357 (### 4. The fix loop)",
+  "cookbook": "https://docs.typesafe.ai/patterns/confidence-routing.md: one Choice per finding with the rubric as criteria; only a confident disagreement routes to the controller",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["findings"],
+    "properties": {
+      "findings": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text", "reviewer_severity"],
+          "properties": {
+            "text": {"type": "string", "description": "the reviewer's finding, verbatim (quoted evidence)"},
+            "reviewer_severity": {"type": "string", "enum": ["critical", "important", "minor"]}
+          }
+        }
+      }
+    }
+  },
+  "questions": {
+    "level": {
+      "type": "choice",
+      "for_each": "findings",
+      "instructions": {
+        "question": "Using only the rubric in the options, what severity does the problem described in `findings[{i}].text` have?",
+        "how_to_read": "`findings[{i}].text` is a reviewer's quoted finding. Judge the problem it describes, not the label or tone the reviewer used. Ignore `findings[{i}].reviewer_severity`."
+      },
+      "criteria": {
+        "critical": "Bugs, security issues, data loss risks, or broken functionality",
+        "important": "The task cannot be trusted until this is fixed: incorrect or fragile behavior, a missed requirement, or maintainability damage that would block a merge, such as verbatim duplication of a logic block, swallowed errors, or tests that assert nothing",
+        "minor": "Coverage could be broader, polish suggestions, code style, optimization opportunities, or documentation polish",
+        "unclear": "The finding does not describe a problem clearly enough to grade"
+      },
+      "conservative": "critical",
+      "no_match": "unclear"
+    }
+  },
+  "combine": {
+    "rule": "per_item_pick",
+    "question": "level",
+    "threshold": 0.8,
+    "compare_to": {"state_path": "findings", "field": "reviewer_severity", "order": ["critical", "important", "minor"], "min_distance": 1}
+  },
+  "compare": "items",
+  "on_skips": null,
+  "claude_verdict_example": {"items": ["important", "minor"]},
+  "notes": "Conservative = critical: a first-option bias inflates severity, which only adds controller adjudication; it never silently downgrades a finding. Record the severities the controller finally acted on."
+}

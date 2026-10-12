@@ -1,0 +1,5 @@
+{
+  "report": "Implemented ConfigError.\n\nTDD Evidence:\nRED: `pytest tests/test_config.py -q` -> 1 failed (ConfigError not defined)\nGREEN: `pytest tests/test_config.py -q` -> 3 passed in 0.02s\n\nFiles changed: src/config.py, tests/test_config.py\n\nConcerns: none",
+  "status": "DONE",
+  "tdd_required": true
+}
