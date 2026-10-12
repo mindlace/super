@@ -41,10 +41,11 @@ def cond_true(cond, answers, index, state, missing):
 def any_true_over(params, answers, index, state):
     """SDE-cascade max gate: hit if any Noul's P(yes) >= its threshold."""
     thresholds = params.get("thresholds", {})
-    fired, confident = [], True
+    fired, confident, seen = [], True, 0
     for qid, a in answers.items():
         if a.get("type") != "noul":
             continue
+        seen += 1
         t = thresholds.get(index[qid]["base"], params["threshold"])
         p = _noul(a)
         if p >= t:
@@ -53,6 +54,8 @@ def any_true_over(params, answers, index, state):
             confident = False
     if fired:
         return {"verdict": params["hit"], "confident": True, "detail": {"fired": sorted(fired)}}
+    # No Noul answered (all skipped, or none returned): a miss is not evidence of clean.
+    confident = confident and seen > 0
     return {"verdict": params["miss"], "confident": confident, "detail": {"fired": []}}
 
 

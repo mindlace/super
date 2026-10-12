@@ -44,6 +44,12 @@ class AnyTrueOverTest(unittest.TestCase):
         r = combine.any_true_over(p, {"a": noul(0.9)}, idx("a"), {})
         self.assertEqual(r["verdict"], "complete")
 
+    def test_zero_noul_answers_is_not_a_confident_miss(self):
+        r = combine.any_true_over(self.P, {}, idx(), {})
+        self.assertEqual((r["verdict"], r["confident"]), ("complete", False))
+        r = combine.any_true_over(self.P, {"k.0": choice("a", 0.99)}, idx("k.0"), {})
+        self.assertEqual((r["verdict"], r["confident"]), ("complete", False))
+
 
 class AllTrueOverTest(unittest.TestCase):
     P = {"thresholds": {"claims_done": 0.8, "unsupported": 0.7}, "hit": "block", "miss": "allow"}
