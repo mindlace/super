@@ -1,0 +1,149 @@
+"""`jev record` and `jev report`: per-point agreement between Jev and Claude.
+
+A call entry carries its template's `compare` kind and `on_skips` at call time, so
+reports stay correct across template versions. A record entry attaches Claude's
+verdict to a call_id; the latest record for a call wins.
+
+Units of agreement by compare kind:
+  verdict  - one unit: Jev `verdict` vs Claude {"verdict": ...}
+  picks    - one unit per key in Claude {"picks": {...}}: Jev's raw choice for that key
+  items    - one unit per index in Claude {"items": [...]}: Jev's item pick
+  coverage - one unit per requirement: ok | uncovered | multi, from {"uncovered", "multiply_covered"}
+"""
+import json
+import sys
+
+from . import ask, log
+
+
+def record(call_id, claude_verdict, env, cwd=None):
+    if not isinstance(claude_verdict, dict):
+        raise ValueError("claude verdict must be a JSON object")
+    log.append({"type": "record", "call_id": call_id, "ts": ask.now(),
+                "claude_verdict": claude_verdict}, env, cwd)
+
+
+def _coverage_classes(v, n):
+    unc, multi = set(v.get("uncovered", [])), set(v.get("multiply_covered", []))
+    return ["uncovered" if i in unc else "multi" if i in multi else "ok" for i in range(n)]
+
+
+def units(call, claude):
+    """[(jev_value, claude_value, jev_confident)] for one recorded call."""
+    kind = call.get("compare")
+    detail = call.get("detail") or {}
+    if kind == "verdict":
+        return [(call.get("verdict"), claude.get("verdict"), bool(call.get("confident")))]
+    if kind == "picks":
+        return [(detail.get("choices", {}).get(k), v, bool(detail.get("confident_keys", {}).get(k)))
+                for k, v in (claude.get("picks") or {}).items()]
+    if kind == "items":
+        by_index = {it["index"]: it for it in call.get("items") or []}
+        out = []
+        for i, v in enumerate(claude.get("items") or []):
+            it = by_index.get(i)
+            out.append((it["pick"] if it else None, v, bool(it and it["confident"])))
+        return out
+    if kind == "coverage":
+        n = detail.get("n_requirements", 0)
+        jev = _coverage_classes(call.get("verdict") or {}, n)
+        cla = _coverage_classes(claude, n)
+        return [(a, b, bool(call.get("confident"))) for a, b in zip(jev, cla)]
+    return []
+
+
+def build_report(entries, since=None, point=None):
+    calls, records = {}, {}
+    for e in entries:
+        if e.get("type") == "record":
+            records[e.get("call_id")] = e.get("claude_verdict") or {}
+        elif e.get("type") == "call":
+            calls[e.get("call_id")] = e
+    rows = {}
+    for cid, c in calls.items():
+        if point and c.get("point") != point:
+            continue
+        if since and (c.get("ts") or "")[:10] < since:
+            continue
+        r = rows.setdefault(c.get("point"), {
+            "calls": 0, "errors": 0, "recorded": 0, "units": 0, "agree": 0,
+            "confident_units": 0, "confident_wrong": 0, "would_skip": 0, "unrecorded": []})
+        r["calls"] += 1
+        if c.get("error"):
+            r["errors"] += 1
+            continue
+        skip = c.get("on_skips")
+        if skip and c.get("confident") and c.get("verdict") == skip.get("verdict"):
+            r["would_skip"] += 1
+        claude = records.get(cid)
+        if claude is None:
+            r["unrecorded"].append(cid)
+            continue
+        r["recorded"] += 1
+        for jev_v, claude_v, confident in units(c, claude):
+            agree = jev_v == claude_v
+            r["units"] += 1
+            r["agree"] += int(agree)
+            if confident:
+                r["confident_units"] += 1
+                r["confident_wrong"] += int(not agree)
+    for r in rows.values():
+        r["agreement"] = r["agree"] / r["units"] if r["units"] else None
+        r["confident_wrong_rate"] = (r["confident_wrong"] / r["confident_units"]
+                                     if r["confident_units"] else None)
+    return rows
+
+
+def _frac(rate, num, den):
+    return "-" if rate is None else "%.2f (%d/%d)" % (rate, num, den)
+
+
+def format_report(rows):
+    lines = ["%-18s %5s %4s %4s %-15s %-15s %s" % ("point", "calls", "err", "rec", "agreement",
+                                                     "conf-wrong", "would-skip")]
+    for name in sorted(rows):
+        r = rows[name]
+        lines.append("%-18s %5d %4d %4d %-15s %-15s %d" % (
+            name, r["calls"], r["errors"], r["recorded"],
+            _frac(r["agreement"], r["agree"], r["units"]),
+            _frac(r["confident_wrong_rate"], r["confident_wrong"], r["confident_units"]),
+            r["would_skip"]))
+    return "\n".join(lines)
+
+
+def cmd_record(args, env):
+    from .cli import read_json_arg
+    try:
+        verdict = read_json_arg(args.verdict)
+        record(args.call_id, verdict, env)
+    except (OSError, ValueError) as exc:
+        sys.stderr.write("jev record: %s\n" % exc)
+        return 2
+    return 0
+
+
+def cmd_report(args, env):
+    rows = build_report(log.read_entries(env), since=args.since, point=args.point)
+    if args.json:
+        sys.stdout.write(json.dumps(rows, indent=2, sort_keys=True) + "\n")
+    elif args.unrecorded:
+        for name in sorted(rows):
+            for cid in rows[name]["unrecorded"]:
+                sys.stdout.write("%s %s\n" % (name, cid))
+    else:
+        sys.stdout.write(format_report(rows) + "\n")
+    return 0
+
+
+def add_parser(sub):
+    p = sub.add_parser("record", help="attach Claude's verdict to a call")
+    p.add_argument("call_id")
+    p.add_argument("verdict", help="JSON object, or @file")
+    p.set_defaults(func=cmd_record)
+    p = sub.add_parser("report", help="per-point agreement table")
+    p.add_argument("--since", help="YYYY-MM-DD")
+    p.add_argument("--point")
+    g = p.add_mutually_exclusive_group()
+    g.add_argument("--json", action="store_true")
+    g.add_argument("--unrecorded", action="store_true", help="list call ids with no Claude verdict")
+    p.set_defaults(func=cmd_report)
