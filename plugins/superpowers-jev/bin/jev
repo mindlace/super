@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""jev: the superpowers-jev helper. Python 3 stdlib only. Contract: skills/jev/SKILL.md."""
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "lib"))
+
+try:
+    from jevlib.cli import main
+except Exception as exc:  # a broken install must never block a caller
+    print(json.dumps({"enabled": False, "reason": "jev import failed: %s" % exc}))
+    sys.exit(0)
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

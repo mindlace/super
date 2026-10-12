@@ -1,0 +1,82 @@
+"""`jev ask`: validate → size-check → call Jev → combine in code → log. Fails open, always."""
+import secrets
+import time
+
+from . import client, combine, log, schema, templates
+from .mode import resolve_mode
+
+
+def new_call_id():
+    return time.strftime("%Y%m%dT%H%M%S") + "-" + secrets.token_hex(3)
+
+
+def now():
+    return time.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def disabled(reason, **extra):
+    out = {"enabled": False, "reason": reason}
+    out.update(extra)
+    return out
+
+
+def summary_confidence(answers):
+    """Per question: Choice/Score confidence, or the Noul's P(yes)."""
+    return {qid: a.get("confidence", a.get("noul")) for qid, a in answers.items()}
+
+
+def ask(point, state, env, call_id=None, cwd=None, post=None, write_log=True):
+    post = post or client.post
+    mode = resolve_mode(env, point)
+    if mode == "off":
+        return disabled("mode off")
+    call_id = call_id or new_call_id()
+    try:
+        template = templates.load_template(point, env)
+    except templates.TemplateError as exc:
+        return disabled(str(exc), call_id=call_id, point=point)
+    entry = {"type": "call", "call_id": call_id, "ts": now(), "point": point,
+             "template_version": template.get("version"), "mode": mode,
+             "compare": template.get("compare"), "on_skips": template.get("on_skips")}
+
+    def fail(reason):
+        if write_log:
+            log.safe_append(dict(entry, verdict=None, confident=False, error=reason), env, cwd)
+        return disabled(reason, call_id=call_id, point=point, mode=mode)
+
+    errors = schema.validate(template["state_schema"], state)
+    if errors:
+        return fail("state invalid: " + errors[0])
+    tokens = templates.estimate_tokens(state)
+    if tokens > templates.STATE_TOKEN_LIMIT:
+        return fail("state over budget: ~%d tokens > %d (refused, not truncated)"
+                    % (tokens, templates.STATE_TOKEN_LIMIT))
+    try:
+        payload, index = templates.build_request(template, state)
+    except templates.TemplateError as exc:
+        return fail(str(exc))
+    except Exception as exc:  # fail open on any unexpected expansion error
+        return fail("expansion failed: %r" % (exc,))
+    if not payload["questions"]:
+        return fail("no questions apply to this state")
+    if templates.estimate_tokens(payload) > templates.REQUEST_TOKEN_LIMIT:
+        return fail("request over budget")
+    try:
+        response = post(payload, env.get("TYPESAFE_API_KEY", ""), endpoint=env.get("JEV_ENDPOINT"))
+    except client.JevUnavailable as exc:
+        return fail("jev unavailable: %s" % exc)
+    answers = response["answers"]
+    try:
+        result = combine.apply(template, answers, index, state)
+    except Exception as exc:  # fail open on any unexpected combination error
+        return fail("combine failed: %r" % (exc,))
+    out = {"enabled": True, "call_id": call_id, "point": point, "mode": mode,
+           "template_version": template.get("version"), "verdict": result["verdict"],
+           "confident": result["confident"], "items": result.get("items"),
+           "detail": result.get("detail", {}), "raw": answers}
+    if write_log:
+        log.safe_append(dict(entry, verdict=result["verdict"], confident=result["confident"],
+                             items=result.get("items"), detail=result.get("detail", {}),
+                             confidence=summary_confidence(answers), raw=answers,
+                             model=response.get("model")), env, cwd)
+    return out
