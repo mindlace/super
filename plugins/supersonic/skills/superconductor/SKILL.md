@@ -201,6 +201,51 @@ operator uses its agentId.
   ledger makes mid-plan resume cheap. Second consecutive death on one spec:
   stop and surface to your partner.
 
+## Optional Jev judgments
+
+If the `superpowers-jev` plugin is installed, load `superpowers-jev:jev`
+once per session. It gives the `jev` helper and its protocol. If the plugin
+is not installed, skip this section: every rule above stands unchanged.
+
+- `{"enabled": false}` always means: proceed as if Jev did not exist.
+- In `shadow` mode, which is the default, run the existing path exactly as
+  written, then `jev record` your own verdict.
+- Act on Jev only for a point that `jev mode --point <point>` reports as
+  `on`, and only on a `confident` answer.
+
+- **defect-class** (Frame-defect tally). Before tagging an escalation,
+  workaround, or adjudication, run `jev defect-state --ledger <ledger>
+  --escalation <file> | jev ask defect-class --state -`.
+  - On: a confident existing class is the tag, which keeps the tripwire
+    counts consistent. Otherwise, name the class yourself.
+  - Record: `{"picks": {"class": "<class you tagged, or new_class>"}}`.
+- **bounce** (Bounce rule). For a message you cannot attribute at a glance,
+  run `jev bounce-state --ledger <ledger> --message <file> |
+  jev ask bounce --state -`.
+  - On: a confident operator pick means you relay the message verbatim to
+    that operator's recorded agentId. Otherwise, ledger the message and
+    take no action.
+  - Record: `{"picks": {"operator": "<slug or unattributable>"}}`.
+- **operator-tier** (Operator tier). At dispatch, run `jev spec-state
+  <spec> | jev ask operator-tier --state -`. Its state holds the spec text
+  and the interface-row count only. Budget state is not in its schema, so
+  the invariant above holds.
+  - On: use a confident tier, and ledger it as `rationale: tier from jev
+    p=<confidence>`.
+  - Record: `{"picks": {"tier": "<tier you dispatched at>"}}`.
+- **surface-route** (Supervision, "Surface to your partner only"). For each
+  escalation or event, run `jev state event=@<file>
+  consecutive_deaths:=<n> | jev ask surface-route --state -`.
+  - On: a confident route other than `routine` means you surface the event
+    to your partner. `routine` goes into the wave-boundary summary.
+  - Record: `{"picks": {"route": "<route you took>"}}`.
+- **citation** (Supervision, "Adjudicate yourself"). Before ruling from an
+  operator report's verified-at claims, run `jev cite <report> --root
+  <operator worktree> | jev ask citation --state -`.
+  - On: ledger every claim in `detail.flagged` or `detail.also_flagged` as
+    *unverified*, and re-check it before it enters a ruling.
+  - Record: `{"items": ["<supports | contradicts | says_nothing>", ...]}`.
+
 ## Context economics
 
 The spine and its operators outlive any cache window; engineer for cheap

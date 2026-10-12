@@ -36,7 +36,10 @@ assignment` block below sets your slug, spec, and project.
    embeds the interface slice and global constraints — the plan's Global
    Constraints section copies them verbatim.
 3. Invoke `superpowers:subagent-driven-development` to execute the plan.
-   Follow it exactly, with the addressing rules above layered on top.
+   Follow it exactly, with the addressing rules above layered on top. If
+   the `superpowers-jev` plugin is installed, also load
+   `superpowers-jev:jev-gates` alongside SDD so its decision points fire
+   in your run; if it is not installed, skip this.
 4. On completion, message `main` with: branch name, commit range, one-line
    test summary, deferred minor findings, and your SDD ledger path.
    Completion does not retire you: fix rounds and review findings on your

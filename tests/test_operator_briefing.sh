@@ -10,4 +10,5 @@ grep -qF 'superpowers:using-git-worktrees' "$briefing" || { echo "FAIL: missing 
 grep -qF 'superpowers:writing-plans' "$briefing" || { echo "FAIL: missing writing-plans handoff"; exit 1; }
 grep -qF 'superpowers:subagent-driven-development' "$briefing" || { echo "FAIL: missing SDD handoff"; exit 1; }
 grep -qF 'SendMessage' "$briefing" || { echo "FAIL: missing SendMessage escalation channel"; exit 1; }
+grep -qF 'superpowers-jev:jev-gates' "$briefing" || { echo "FAIL: briefing must load superpowers-jev:jev-gates alongside SDD"; exit 1; }
 echo "PASS: operator briefing"

@@ -56,6 +56,15 @@ section stating what changed and why. Otherwise this is fresh composition.
    "files read / dirs listed / NOT examined" appendix; claims marked
    verified-at-`file:line` vs inferred. Treat *unexamined* as unknown —
    never as absent.
+   *Optional Jev citation check:* if the `superpowers-jev` plugin is
+   installed, load `superpowers-jev:jev` and run `jev cite <report>
+   --root <project> | jev ask citation --state -` on each returned
+   survey report.
+   - In shadow mode, read the report as you do today, then `jev record`
+     your verdict for each claim.
+   - On: mark every claim in `detail.flagged` or `detail.also_flagged`
+     as *unverified* in the report, and re-check it at primary source
+     before it enters the design.
 4. **Negative-space diff.** After surveys return, diff the inventory against
    the union of report mentions; every unmentioned item gets a disposition.
 5. **Primary reading for load-bearing subsystems.** Anything the design will
@@ -111,6 +120,21 @@ each spec, is there a behavioural decision the spec *names* but delegates to
 the implementer whose consequences are visible outside the module? If so,
 the spec must decide it, not name it. This is a reading task for a judging
 agent — do not attempt to score it lexically. Fix findings inline.
+
+**Optional Jev coverage pre-pass.** If the `superpowers-jev` plugin is
+installed (load `superpowers-jev:jev`), run `jev coverage --design <design
+doc> --spec <spec> [--spec <spec> ...]` before you dispatch the fresh-eyes
+agent.
+
+- On: its `targets` become a mandatory target list in that agent's brief.
+  The targets are the traceability requirements carried by zero specs, or
+  by two or more. The agent still runs every leg, including the
+  contradiction check and the delegation check.
+- In shadow mode, brief the agent as you do today.
+
+Either way, record the agent's coverage result with `jev record <call_id>
+'{"uncovered": [...], "multiply_covered": [...]}'`, using requirement
+indices in traceability-table order.
 
 ## Phase C5 — Handoff
 
