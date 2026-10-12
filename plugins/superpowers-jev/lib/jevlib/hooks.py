@@ -10,8 +10,9 @@ import json
 import sys
 
 from . import ask as ask_mod
-from . import log
+from . import log, report
 from .builders import superpowers as sp
+from .builders import transcript
 from .mode import resolve_mode
 
 SESSION_NOTE = (
@@ -22,6 +23,13 @@ SESSION_NOTE = (
 )
 
 MIN_PROMPT_WORDS = 3
+
+VERIFY_BLOCK_REASON = (
+    "Jev verify-stop: your last message claims the work is complete, fixed, or passing, but no "
+    "command output since your last edit supports that claim. Per "
+    "superpowers:verification-before-completion (The Gate Function), run the command that proves "
+    "it and show its output, or state the actual status."
+)
 
 
 def _context(event, text):
@@ -42,7 +50,18 @@ def _pending_path(inp, env):
     return log.log_dir(env, inp.get("cwd")) / "sessions" / (sid + ".json")
 
 
+def _clear_pending(path):
+    try:
+        if path:
+            path.unlink()
+    except OSError:
+        pass
+
+
 def prompt_route(inp, env):
+    # A new prompt supersedes the previous one: drop its pending call id first, so every skip
+    # path below leaves nothing for the Stop hook to record against a stale call.
+    _clear_pending(_pending_path(inp, env))
     if resolve_mode(env, "prompt-route") == "off":
         return None
     prompt = (inp.get("prompt") or "").strip()
@@ -70,7 +89,39 @@ def prompt_route(inp, env):
     return None
 
 
-HOOKS = {"session-start": session_start, "prompt-route": prompt_route}
+def _record_prompt_route(inp, env, entries):
+    """Claude's verdict for the turn's prompt-route call: the first superpowers skill it invoked."""
+    path = _pending_path(inp, env)
+    if not path or not path.exists():
+        return
+    try:
+        call_id = json.loads(path.read_text(encoding="utf-8"))["prompt_route_call_id"]
+    except (OSError, ValueError, KeyError):
+        _clear_pending(path)
+        return
+    used = [s for s in transcript.skills_used_since_last_prompt(entries) if s.startswith("superpowers:")]
+    report.record(call_id, {"picks": {"skill": used[0] if used else "none"}}, env, inp.get("cwd"))
+    _clear_pending(path)  # consumed: one prompt-route call is recorded at most once
+
+
+def stop_verify(inp, env):
+    if resolve_mode(env) == "off":
+        return None
+    if inp.get("stop_hook_active"):
+        return None   # loop guard: this stop was already continued by a stop hook
+    entries = transcript.load(inp.get("transcript_path"))
+    _record_prompt_route(inp, env, entries)
+    last = inp.get("last_assistant_message") or transcript.last_assistant_text(entries)
+    if not last or not last.strip():
+        return None
+    state = transcript.stop_state(entries, last)
+    res = ask_mod.ask("verify-stop", state, env, cwd=inp.get("cwd"))
+    if res.get("enabled") and res.get("mode") == "on" and res.get("verdict") == "block":
+        return {"decision": "block", "reason": VERIFY_BLOCK_REASON}
+    return None
+
+
+HOOKS = {"session-start": session_start, "prompt-route": prompt_route, "stop-verify": stop_verify}
 
 
 def run(name, stdin, env):

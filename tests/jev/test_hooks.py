@@ -9,6 +9,7 @@ import support
 from jevlib import hooks, log
 from test_builders_superpowers import fake_superpowers
 
+FX = support.FIXTURES
 HOOK = support.PLUGIN / "hooks" / "run-hook.cmd"
 
 
@@ -117,6 +118,86 @@ class PromptRouteTest(unittest.TestCase):
             env = support.make_env(srv.url)
             self.assertIsNone(hooks.prompt_route(self.inp("fix the crash in checkout please"), env))
         self.assertEqual(srv.requests, [])
+
+
+class StopVerifyTest(unittest.TestCase):
+    def inp(self, **kw):
+        base = {"hook_event_name": "Stop", "session_id": "sess-1", "cwd": "/tmp",
+                "transcript_path": str(FX / "transcript.jsonl"), "stop_hook_active": False,
+                "last_assistant_message": "Fixed: corrupt configs now raise ConfigError. Tests pass."}
+        base.update(kw)
+        return base
+
+    def test_on_blocks_unsupported_claim(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            out = hooks.stop_verify(self.inp(), support.make_env(srv.url, SUPERPOWERS_JEV_ON="verify-stop"))
+        self.assertEqual(out["decision"], "block")
+        self.assertIn("verification-before-completion", out["reason"])
+        state = srv.requests[0]["payload"]["state"]
+        self.assertEqual(state["commands_since_last_edit"][0]["command"], "pytest tests/test_config.py")
+
+    def test_shadow_never_blocks(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            env = support.make_env(srv.url)
+            self.assertIsNone(hooks.stop_verify(self.inp(), env))
+        self.assertEqual(log.read_entries(env)[-1]["verdict"], "block")
+
+    def test_loop_guard(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            out = hooks.stop_verify(self.inp(stop_hook_active=True),
+                                    support.make_env(srv.url, SUPERPOWERS_JEV_ON="verify-stop"))
+        self.assertIsNone(out)
+        self.assertEqual(srv.requests, [])
+
+    def test_unavailable_jev_never_blocks(self):
+        code, out = run_hook("stop-verify", self.inp(),
+                             support.make_env("http://127.0.0.1:9/x", SUPERPOWERS_JEV="on"))
+        self.assertEqual((code, out), (0, ""))
+
+    def test_falls_back_to_transcript_when_last_message_absent(self):
+        inp = self.inp()
+        del inp["last_assistant_message"]
+        with support.StubServer(support.ok(noul=0.1)) as srv:
+            hooks.stop_verify(inp, support.make_env(srv.url))
+        self.assertTrue(srv.requests[0]["payload"]["state"]["last_message"].startswith("Fixed: corrupt"))
+
+    def test_records_prompt_route_verdict_from_transcript(self):
+        with support.StubServer(support.ok(noul=0.1)) as srv:
+            env = support.make_env(srv.url)
+            pending = log.log_dir(env) / "sessions" / "sess-1.json"
+            pending.parent.mkdir(parents=True)
+            pending.write_text(json.dumps({"prompt_route_call_id": "pr-1"}))
+            hooks.stop_verify(self.inp(), env)
+        recs = [e for e in log.read_entries(env) if e["type"] == "record"]
+        self.assertEqual(recs, [dict(recs[0], call_id="pr-1",
+                                     claude_verdict={"picks": {"skill": "superpowers:systematic-debugging"}})])
+        self.assertFalse(pending.exists())
+
+    def test_skipped_later_prompt_clears_stale_pending(self):
+        route = PromptRouteTest()
+        routed = "the checkout page crashes on an empty cart, fix it"
+        with support.StubServer(route.pick_debugging()) as srv:
+            env = route.env(srv)
+            pending = log.log_dir(env) / "sessions" / "sess-1.json"
+            for skipped in ("/plugin list", "ok go", ""):
+                hooks.prompt_route(route.inp(routed), env)       # prompt A routes
+                self.assertTrue(pending.exists())
+                hooks.prompt_route(route.inp(skipped), env)      # prompt B skips Jev
+                self.assertFalse(pending.exists(), skipped)
+            hooks.prompt_route(route.inp(routed), env)
+            hooks.prompt_route(route.inp("/plugin list"), env)
+            hooks.stop_verify(self.inp(), env)
+        self.assertEqual([e for e in log.read_entries(env) if e["type"] == "record"], [])
+
+    def test_stop_consumes_pending_so_a_call_records_once(self):
+        with support.StubServer(support.ok(noul=0.1)) as srv:
+            env = support.make_env(srv.url)
+            pending = log.log_dir(env) / "sessions" / "sess-1.json"
+            pending.parent.mkdir(parents=True)
+            pending.write_text(json.dumps({"prompt_route_call_id": "pr-1"}))
+            hooks.stop_verify(self.inp(), env)
+            hooks.stop_verify(self.inp(), env)
+        self.assertEqual(len([e for e in log.read_entries(env) if e["type"] == "record"]), 1)
 
 
 if __name__ == "__main__":
