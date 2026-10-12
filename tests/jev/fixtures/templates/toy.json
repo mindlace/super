@@ -1,0 +1,46 @@
+{
+  "point": "toy",
+  "version": 1,
+  "plugin": "superpowers",
+  "anchor": "test fixture",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/sde_cascade.md (fixture)",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["text", "items"],
+    "properties": {
+      "text": {"type": "string"},
+      "items": {"type": "array", "items": {"type": "string"}},
+      "strict": {"type": "boolean"}
+    }
+  },
+  "questions": {
+    "wrong": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": "Does `text` contain a factual error?",
+      "criteria": {"true": "An error is present", "false": "No error is present"}
+    },
+    "informal": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "only_if": "strict",
+      "instructions": "Does `text` use informal language?",
+      "criteria": {"true": "Informal language appears", "false": "The language is formal"}
+    },
+    "kind": {
+      "type": "choice",
+      "for_each": "items",
+      "instructions": "What kind of thing is `items[{i}]`?",
+      "criteria": {"unclear": "Cannot tell", "fruit": "A fruit", "tool": "A tool"},
+      "conservative": "unclear",
+      "no_match": "unclear"
+    }
+  },
+  "combine": {"rule": "any_true_over", "threshold": 0.7, "hit": "flagged", "miss": "clean"},
+  "compare": "verdict",
+  "on_skips": null,
+  "claude_verdict_example": {"verdict": "clean"},
+  "notes": "Fixture for expansion, ask, and fail-open tests."
+}
