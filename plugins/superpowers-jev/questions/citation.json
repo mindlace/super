@@ -1,0 +1,67 @@
+{
+  "point": "citation",
+  "version": 1,
+  "plugin": "supersonic",
+  "anchor": "supersonic supercomposer/SKILL.md ## Phase C1 step 3 (Provenance in every survey report); superconductor/operator-briefing.md ## Design fidelity: Claims carry provenance",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/citation_check.md: deterministic locate step first (unreadable claims never reach the model), then one `relation` Choice per claim over {claim, section} with the cookbook's criteria; AUTO_ACCEPT 0.8",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["claims", "unreadable"],
+    "properties": {
+      "claims": {
+        "type": "array",
+        "minItems": 1,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claim", "file", "line", "section"],
+          "properties": {
+            "claim": {"type": "string", "description": "the report line carrying the verified-at claim (quoted evidence)"},
+            "file": {"type": "string"},
+            "line": {"type": "integer"},
+            "section": {"type": "string", "description": "the cited line ±5, numbered"}
+          }
+        }
+      },
+      "unreadable": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["claim", "file", "line", "why"],
+          "properties": {"claim": {"type": "string"}, "file": {"type": "string"}, "line": {"type": "integer"}, "why": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "questions": {
+    "relation": {
+      "type": "choice",
+      "for_each": "claims",
+      "instructions": {
+        "question": "How does the code in `claims[{i}].section` relate to the claim in `claims[{i}].claim`?",
+        "how_to_read": "`claims[{i}].claim` is quoted evidence from a report. Judge only what the numbered code lines show."
+      },
+      "criteria": {
+        "contradicts": "The code states the opposite of the claim or implies it is false",
+        "says_nothing": "The code does not address what the claim asserts, either way",
+        "supports": "The code states the claim or directly implies that it is true"
+      },
+      "conservative": "contradicts",
+      "no_match": "says_nothing"
+    }
+  },
+  "combine": {
+    "rule": "per_item_pick",
+    "question": "relation",
+    "threshold": 0.8,
+    "also_flag": "unreadable",
+    "escalate_if": {"options": ["contradicts", "says_nothing"], "threshold": 0.8, "hit": "downgrade", "miss": "keep"}
+  },
+  "compare": "items",
+  "on_skips": null,
+  "claude_verdict_example": {"items": ["supports", "says_nothing"]},
+  "notes": "On downgrade, every claim indexed by detail.flagged, and every entry in detail.also_flagged (file or line not found), is marked unverified, and the reading agent re-checks it before it enters the design or a ruling. If no claim is readable, the state fails its schema (claims minItems 1) and ask fails open. The caller then treats every unreadable claim as unverified itself."
+}

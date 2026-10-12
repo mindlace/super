@@ -1,0 +1,24 @@
+{
+  "claims": [
+    {
+      "claim": "- parse_config returns {} for an empty file (verified-at-`cited.py:8`).",
+      "file": "cited.py",
+      "line": 8,
+      "section": "3: \n4: def parse_config(path):\n5:     \"\"\"Load a JSON config file.\"\"\"\n6:     with open(path) as fh:\n7:         text = fh.read()\n8:     if not text:\n9:         return {}\n10:     return json.loads(text)"
+    },
+    {
+      "claim": "- parse_config retries on failure, verified-at cited.py:4-5.",
+      "file": "cited.py",
+      "line": 4,
+      "section": "1: import json\n2: \n3: \n4: def parse_config(path):\n5:     \"\"\"Load a JSON config file.\"\"\"\n6:     with open(path) as fh:\n7:         text = fh.read()\n8:     if not text:\n9:         return {}\n10:     return json.loads(text)"
+    }
+  ],
+  "unreadable": [
+    {
+      "claim": "- The loader caches results (verified-at-`missing.py:3`).",
+      "file": "missing.py",
+      "line": 3,
+      "why": "file not found"
+    }
+  ]
+}

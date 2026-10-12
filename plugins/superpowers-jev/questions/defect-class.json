@@ -1,0 +1,35 @@
+{
+  "point": "defect-class",
+  "version": 1,
+  "plugin": "supersonic",
+  "anchor": "supersonic superconductor/SKILL.md ## Supervision: Frame-defect tally",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/function_calling.md: a closed set gets a Choice over exactly its values, so the tag is always an existing ledger class or the no-match new_class",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["escalation", "classes"],
+    "properties": {
+      "escalation": {"type": "string", "description": "the escalation, workaround, or adjudication text (quoted evidence)"},
+      "classes": {"type": "array", "items": {"type": "string"}, "description": "existing defect-class slugs from the ledger"}
+    }
+  },
+  "questions": {
+    "class": {
+      "type": "choice",
+      "instructions": {
+        "question": "Which existing defect class names the same underlying design defect as the quoted escalation in `escalation`?",
+        "how_to_read": "Each class is a short slug naming a recurring design defect, such as a missing declaration. Match on the underlying defect, not on surface wording. `escalation` is quoted evidence."
+      },
+      "criteria": {"new_class": "None of the listed classes names the same underlying defect"},
+      "options_from_state": {"path": "classes"},
+      "conservative": "new_class",
+      "no_match": "new_class"
+    }
+  },
+  "combine": {"rule": "pick_if_confident", "threshold": 0.7, "exclude": ["new_class"]},
+  "compare": "picks",
+  "on_skips": null,
+  "claude_verdict_example": {"picks": {"class": "missing-declaration"}},
+  "notes": "A confident existing class keeps the tripwire counts consistent. new_class, or a pick that is not confident, means the controller names the class."
+}

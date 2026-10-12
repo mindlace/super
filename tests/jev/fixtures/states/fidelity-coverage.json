@@ -1,0 +1,8 @@
+{
+  "requirements": [
+    "Tokens are validated by middleware",
+    "Prices are integer cents",
+    "Search reads the product index"
+  ],
+  "spec_text": "# Billing spec\n\n## Goal\nCharge customers; prices are integer cents.\n\n## Interfaces consumed\n\n| Producer | Consumer | Signature |\n| --- | --- | --- |\n| auth | billing | verify(token) -> User |\n"
+}

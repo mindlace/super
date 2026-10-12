@@ -1,0 +1,56 @@
+{
+  "point": "operator-tier",
+  "version": 1,
+  "plugin": "supersonic",
+  "anchor": "supersonic superconductor/SKILL.md ## Phase 2 — Dispatch: Operator tier (+ INVARIANT: budget state MUST NOT be an input to tier selection)",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/function_calling.md + https://docs.typesafe.ai/patterns/fan-out.md: a tier Choice plus speculative signal Nouls in one request; code applies the floor",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["spec_text", "interface_rows"],
+    "properties": {
+      "spec_text": {"type": "string", "description": "the spec file's text"},
+      "interface_rows": {"type": "integer", "description": "interface-table rows embedded in the spec, counted in code"}
+    }
+  },
+  "questions": {
+    "tier": {
+      "type": "choice",
+      "instructions": "What kind of work does the spec in `spec_text` ask its operator to plan and carry out?",
+      "criteria": {
+        "capable": "Greenfield design judgment, cross-subsystem coordination, or decisions the spec leaves to the operator",
+        "standard": "Ordinary implementation against settled interfaces, with some integration work",
+        "cheap": "Genuinely mechanical work: few interface rows, no greenfield judgment, and nothing consumed from other subsystems",
+        "unclear": "The spec does not say enough to tell"
+      },
+      "conservative": "capable",
+      "no_match": "unclear"
+    },
+    "greenfield": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": "Does `spec_text` ask for a new design decision that no existing code or interface row settles?",
+      "criteria": {"true": "The operator must make a new design decision", "false": "Every design decision is already settled"}
+    },
+    "cross_consumption": {
+      "type": "noul",
+      "polarity": "true_is_problem",
+      "instructions": "Does `spec_text` consume an interface produced by another subsystem's spec?",
+      "criteria": {"true": "The spec depends on another subsystem's interface", "false": "The spec depends on no other subsystem's interface"}
+    }
+  },
+  "combine": {
+    "rule": "pick_if_confident",
+    "threshold": 0.7,
+    "exclude": ["unclear"],
+    "order": ["capable", "standard", "cheap"],
+    "floors": {
+      "tier": [{"min": "capable", "when": [{"noul": "greenfield", "over": 0.3}, {"noul": "cross_consumption", "over": 0.3}, {"state": "interface_rows", "over": 3}]}]
+    }
+  },
+  "compare": "picks",
+  "on_skips": null,
+  "claude_verdict_example": {"picks": {"tier": "capable"}},
+  "notes": "Default to the top tier, and lower it only when the work is genuinely mechanical. The floor keeps capable whenever any mechanical-ness signal fails. Tier depends on task demand alone: budget state is not in this schema, and the schema is closed, so no budget field can be sent (tests assert this)."
+}

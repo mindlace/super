@@ -1,0 +1,13 @@
+{
+  "message": "Task 4 review: the currency column should be integer cents, not float. Fix round 2 starting.",
+  "operators": [
+    {
+      "slug": "auth",
+      "summary": "Auth spec: Validate session tokens in middleware for every route."
+    },
+    {
+      "slug": "billing",
+      "summary": "Billing spec: Charge customers; prices are integer cents."
+    }
+  ]
+}

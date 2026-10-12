@@ -1,0 +1,31 @@
+{
+  "point": "fidelity-coverage",
+  "version": 1,
+  "plugin": "supersonic",
+  "anchor": "supersonic supercomposer/SKILL.md ## Phase C4 — Specs + fidelity check (the fidelity leg; traceability table as checklist)",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/rerank_typesafe.md: one Noul per (query, candidate) pair; here one per (requirement, spec), asked per spec, with carriers counted in code (count_exactly_one)",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["requirements", "spec_text"],
+    "properties": {
+      "requirements": {"type": "array", "minItems": 1, "items": {"type": "string"}, "description": "traceability-table requirements, in table order"},
+      "spec_text": {"type": "string"}
+    }
+  },
+  "questions": {
+    "carries": {
+      "type": "noul",
+      "polarity": "true_is_fact",
+      "for_each": "requirements",
+      "instructions": "Does the spec in `spec_text` carry the design requirement `requirements[{i}]`, by stating it or through a section or interface row that implements it?",
+      "criteria": {"true": "This spec states or implements the requirement", "false": "This spec neither states nor implements the requirement"}
+    }
+  },
+  "combine": {"rule": "items_true_over", "question": "carries", "threshold": 0.5, "min_confidence": 0.6},
+  "compare": "coverage",
+  "on_skips": null,
+  "claude_verdict_example": {"uncovered": [2], "multiply_covered": []},
+  "notes": "This is a census, not a check, so true means the spec carries the requirement (spec wording: 'this spec carries requirement r'). Run it through `jev coverage`, never through `jev ask` directly: coverage asks once per spec and logs one aggregate entry. Requirements with 0 or 2+ carriers become a mandatory target list for the fresh-eyes agent, which still runs."
+}

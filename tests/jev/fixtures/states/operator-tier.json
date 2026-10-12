@@ -1,0 +1,4 @@
+{
+  "spec_text": "# Rename sweep spec\n\n## Goal\nRename `fooBar` to `foo_bar` across src/. No behaviour change.\n\n## Interface rows\n\n(none)\n",
+  "interface_rows": 0
+}

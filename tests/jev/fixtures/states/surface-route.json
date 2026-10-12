@@ -1,0 +1,4 @@
+{
+  "event": "While wiring search I found a second consumer of the product index: the recommendations worker reads it too, and the design doc does not model it.",
+  "consecutive_deaths": 0
+}

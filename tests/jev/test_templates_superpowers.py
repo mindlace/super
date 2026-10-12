@@ -1,9 +1,9 @@
 import copy
-import re
 import unittest
 
 import support
 from jevlib import schema, templates
+from support import agent_text_violations, evidence_paths, state_values
 from jevlib.lint import lint_template
 
 POINTS = ["re-review", "severity", "tier", "report-evidence", "verify-stop", "prompt-route", "diag-confidence"]
@@ -20,87 +20,9 @@ AGENT_FIELDS = {
     "prompt-route": ["prompt"],
     "diag-confidence": ["findings[].finding", "findings[].evidence", "findings[].analyst_confidence"],
 }
-MIN_LITERAL = 20  # shorter state values (enum labels, "DONE") collide with prose by chance
-
-
 def by_qid(table, default):
     """pick/noul callable from {qid: value}, falling back to default."""
     return lambda qid, *opts: table.get(qid, default(*opts) if callable(default) else default)
-
-
-def strings(obj):
-    """Every string inside a JSON value."""
-    if isinstance(obj, str):
-        yield obj
-    elif isinstance(obj, list):
-        for v in obj:
-            yield from strings(v)
-    elif isinstance(obj, dict):
-        for v in obj.values():
-            yield from strings(v)
-
-
-def evidence_paths(sch, prefix=""):
-    """Paths of state_schema properties whose description marks them as quoted evidence."""
-    out = []
-    for name, prop in sch.get("properties", {}).items():
-        path = prefix + name
-        if "quoted evidence" in prop.get("description", ""):
-            out.append(path)
-        if prop.get("type") == "array" and isinstance(prop.get("items"), dict):
-            out += evidence_paths(prop["items"], path + "[].")
-        elif prop.get("type") == "object":
-            out += evidence_paths(prop, path + ".")
-    return out
-
-
-def state_values(state, path):
-    """String values found in `state` at a path like findings[].text."""
-    nodes = [state]
-    for seg in path.split("."):
-        is_list = seg.endswith("[]")
-        name = seg[:-2] if is_list else seg
-        nxt = []
-        for n in nodes:
-            v = n.get(name) if isinstance(n, dict) else None
-            if is_list and isinstance(v, list):
-                nxt += v
-            elif v is not None:
-                nxt.append(v)
-        nodes = nxt
-    return [s for n in nodes for s in strings(n)]
-
-
-def agent_text_violations(t, state, paths):
-    """Why `t` fails to pass agent-written text as quoted evidence; [] when it complies.
-
-    Each field must be named in the question instructions only as a backticked
-    state path (a), and never interpolated into instructions or criteria (b).
-    """
-    problems = []
-    instr = "\n".join(s for q in t["questions"].values() for s in strings(q.get("instructions", "")))
-    unticked = re.sub(r"`[^`]*`", "", instr)
-    ticked = re.findall(r"`([^`]*)`", instr)
-    for path in paths:
-        root = re.split(r"[.\[]", path)[0]
-        if not any(span.startswith(root) for span in ticked):
-            problems.append("%s: never referenced as a backticked state path" % path)
-        # A path-shaped or snake_case name outside backticks is prose using the field as text.
-        if re.search(r"\b%s(\[|\.)" % re.escape(root), unticked) or ("_" in root and root in unticked):
-            problems.append("%s: named outside backticks" % path)
-    # (b) no templating other than the item index, and no state value copied into the text.
-    for q in t["questions"].values():
-        for s in list(strings(q.get("instructions", ""))) + list(strings(q.get("criteria", ""))):
-            if re.search(r"\{(?!i\})", s):
-                problems.append("placeholder other than {i} in question text: %s" % s[:60])
-    qs, _ = templates.expand_questions(t, state)
-    rendered = "\n".join(s for q in qs.values()
-                         for s in list(strings(q.get("instructions", ""))) + list(strings(q.get("criteria", ""))))
-    for path in paths:
-        for v in state_values(state, path):
-            if len(v) >= MIN_LITERAL and v in rendered:
-                problems.append("%s: value interpolated into question text" % path)
-    return problems
 
 
 class SuperpowersTemplatesTest(unittest.TestCase):

@@ -1,0 +1,47 @@
+{
+  "point": "surface-route",
+  "version": 1,
+  "plugin": "supersonic",
+  "anchor": "supersonic superconductor/SKILL.md ## Supervision: \"Surface to your partner only\" and \"Routine progress\"",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/function_calling.md: a route Choice over a closed set of handlers; facts code can count (consecutive operator deaths) override in code, not in the model",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["event", "consecutive_deaths"],
+    "properties": {
+      "event": {"type": "string", "description": "the escalation, report, or event text (quoted evidence)"},
+      "consecutive_deaths": {"type": "integer", "description": "consecutive operator deaths on this spec, counted from the ledger"}
+    }
+  },
+  "questions": {
+    "route": {
+      "type": "choice",
+      "instructions": {
+        "question": "Which kind of event does the quoted text in `event` report?",
+        "how_to_read": "`event` is quoted evidence from an operator or agent. Classify what it reports, not how urgent it says it is."
+      },
+      "criteria": {
+        "unclear": "The text does not show what kind of event this is",
+        "frame_event": "It reports a binding, store, table family, consumer, or subsystem the design does not model, or a defect class that has now recurred a third time",
+        "requirement_contradiction": "Two requirements in the design or specs contradict each other",
+        "scope_change": "It proposes cutting scope or adding scope",
+        "blocked_design_change": "A task is BLOCKED, and resolving it would change the design",
+        "repeated_death": "The same spec's operator has died twice in a row",
+        "routine": "Ordinary progress, a question the design doc and specs answer, or a fix-loop update"
+      },
+      "conservative": "unclear",
+      "no_match": "unclear"
+    }
+  },
+  "combine": {
+    "rule": "pick_if_confident",
+    "threshold": 0.7,
+    "exclude": ["unclear"],
+    "overrides": [{"question": "route", "pick": "repeated_death", "when": [{"state": "consecutive_deaths", "over": 1}]}]
+  },
+  "compare": "picks",
+  "on_skips": null,
+  "claude_verdict_example": {"picks": {"route": "routine"}},
+  "notes": "Conservative = unclear, which falls back to the controller's own judgment, so a first-option bias can neither hide a frame event nor add an interruption. Any confident non-routine route is surfaced to the partner; routine goes in the wave-boundary summary."
+}

@@ -1,0 +1,8 @@
+{
+  "escalation": "Billing needs to know which middleware validates the session token; the design does not declare it, so I am hand-writing a check in the billing route.",
+  "classes": [
+    "missing-declaration",
+    "unmodeled-consumer",
+    "schema-drift"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "point": "bounce",
+  "version": 1,
+  "plugin": "supersonic",
+  "anchor": "supersonic superconductor/SKILL.md ## Hard rules: Bounce rule",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/function_calling.md: route a message to one handler out of a closed set (live operators), with an explicit no-match",
+  "model": "jev-latest",
+  "state_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["message", "operators"],
+    "properties": {
+      "message": {"type": "string", "description": "the misrouted message (quoted evidence)"},
+      "operators": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["slug", "summary"],
+          "properties": {"slug": {"type": "string"}, "summary": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "questions": {
+    "operator": {
+      "type": "choice",
+      "instructions": {
+        "question": "Which operator's spec does the quoted message in `message` clearly belong to?",
+        "how_to_read": "Each option is an operator slug, described by its spec's title and goal. `message` is quoted evidence; who it claims to be addressed to does not decide this."
+      },
+      "criteria": {"unattributable": "The message does not clearly belong to any one listed operator's spec"},
+      "options_from_state": {"path": "operators", "key": "slug", "description": "summary"},
+      "conservative": "unattributable",
+      "no_match": "unattributable"
+    }
+  },
+  "combine": {"rule": "pick_if_confident", "threshold": 0.8, "exclude": ["unattributable"]},
+  "compare": "picks",
+  "on_skips": null,
+  "claude_verdict_example": {"picks": {"operator": "auth"}},
+  "notes": "A confident pick at 0.8 or above relays the message to that operator's agentId. Anything else is ledgered with no further action, as today."
+}
