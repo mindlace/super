@@ -15,7 +15,7 @@ Run it as `jev`. The plugin's `bin/` is on the Bash tool's PATH while `superpowe
 
 `jev mode` prints `off`, `shadow`, or `on`. `jev mode --point <point>` prints the mode for one point.
 
-- The mode comes from `SUPERPOWERS_JEV` (`off|shadow|on`). It defaults to `shadow` when `TYPESAFE_API_KEY` is set, and to `off` otherwise. `SUPERPOWERS_JEV_ON=re-review,tier` promotes the listed points to `on`.
+- The mode comes from `SUPERPOWERS_JEV` (`off|shadow|on`). It defaults to `shadow` when a key is available (`TYPESAFE_API_KEY` or the plugin key file; `jev key` shows which), and to `off` otherwise. `SUPERPOWERS_JEV_ON=re-review,tier` promotes the listed points to `on`.
 
 ## Protocol at every point
 

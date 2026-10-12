@@ -22,17 +22,30 @@ For local development, add the checkout as a directory marketplace instead:
 
 ## Jev modes
 
-`superpowers-jev` sends nothing until `TYPESAFE_API_KEY` is set.
+`superpowers-jev` sends nothing until a TypeSafe API key is available, either as `TYPESAFE_API_KEY` or in a key file.
+
+### Storing the key
+
+The environment variable wins when it is non-empty. Otherwise the key is read from the first line of `typesafe-api-key` in the plugin's data directory, so hooks and `bin/jev` runs from the Bash tool agree:
+
+```sh
+umask 077
+mkdir -p ~/.claude/plugins/data/superpowers-jev-super
+printf '%s\n' "$KEY" > ~/.claude/plugins/data/superpowers-jev-super/typesafe-api-key
+chmod 600 ~/.claude/plugins/data/superpowers-jev-super/typesafe-api-key
+```
+
+A key file readable by group or world is ignored, with a warning on stderr. `JEV_KEY_FILE=/path` points at a different file. Run `jev key` to check: it prints `{"source": "env"|"file:<path>"|null, "present": bool}` and never the key.
 
 | Variable | Effect |
 |---|---|
-| `SUPERPOWERS_JEV=off\|shadow\|on` | Defaults to `shadow` when `TYPESAFE_API_KEY` is set, and to `off` otherwise. |
+| `SUPERPOWERS_JEV=off\|shadow\|on` | Defaults to `shadow` when a key is available, and to `off` otherwise. |
 | `SUPERPOWERS_JEV_ON=re-review,tier` | Promotes the listed points to `on` while the rest stay in shadow. |
 | `SUPERPOWERS_JEV_HOOKS=off` | Turns the three hooks off (nothing is sent from them, and the session note is not injected). Skill points keep working. |
 
 ## What is sent
 
-Once `TYPESAFE_API_KEY` is set, text leaves your machine for `https://api.typesafe.ai/v1/systemone` (or `JEV_ENDPOINT`), **including in shadow mode**, where Jev only logs and never acts. Each request carries the point's state and its questions. Nothing is sent without the key.
+Once a key is available (`TYPESAFE_API_KEY` or the key file), text leaves your machine for `https://api.typesafe.ai/v1/systemone` (or `JEV_ENDPOINT`), **including in shadow mode**, where Jev only logs and never acts. Each request carries the point's state and its questions. Nothing is sent without the key.
 
 | Source | What it sends | When |
 |---|---|---|
@@ -43,7 +56,7 @@ Once `TYPESAFE_API_KEY` is set, text leaves your machine for `https://api.typesa
 
 The `session-start` hook sends nothing. Every request and answer is also written to the local log.
 
-To keep skill points and stop the hooks, set `SUPERPOWERS_JEV_HOOKS=off`. To keep the hooks off and still send nothing from skills, unset `TYPESAFE_API_KEY` (or set `SUPERPOWERS_JEV=off`), which turns every path off: hooks, skill points, and `jev ask`. Disabling or uninstalling the plugin also stops everything.
+To keep skill points and stop the hooks, set `SUPERPOWERS_JEV_HOOKS=off`. To keep the hooks off and still send nothing from skills, remove the key (unset `TYPESAFE_API_KEY` and delete the key file) or set `SUPERPOWERS_JEV=off`, which turns every path off: hooks, skill points, and `jev ask`. Disabling or uninstalling the plugin also stops everything.
 
 In shadow mode, Jev's verdict is logged next to Claude's in `.superpowers/jev/log.jsonl`, at the main checkout's root, and nothing acts on it. `jev report` prints per-point agreement, the confident-and-wrong rate, and the Claude dispatches that `on` mode would have skipped.
 
