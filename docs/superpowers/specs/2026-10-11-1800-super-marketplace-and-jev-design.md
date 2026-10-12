@@ -1,11 +1,12 @@
-# mindlace/super — marketplace, conductor plugin, and optional Jev judgments
+# mindlace/super — marketplace with the supersonic plugin and optional Jev judgments
 
 Status: DRAFT — discussion surface. Edit inline; open questions are marked **OPEN**.
 
 ## Goal
 
-1. Move superconductor + supercomposer out of dotfiles into a versioned Claude Code
-   plugin marketplace repo, `mindlace/super`.
+1. Move superconductor + supercomposer out of dotfiles into the `supersonic` plugin
+   (conductor and composer: orchestral, hence sonic), published from a public
+   Claude Code plugin marketplace repo, `mindlace/super`.
 2. Add optional TypeSafe **Jev** typed judgments at every decision point rated a
    STRONG fit in the 2026-10-11 assessment, so cheap ~100 ms typed calls replace or
    pre-gate Claude subagent assessments.
@@ -24,7 +25,7 @@ points are safe to switch to `on`.
 super/
   .claude-plugin/marketplace.json      # lists both plugins
   plugins/
-    super/                             # conductor plugin
+    supersonic/                        # conductor + composer plugin
       .claude-plugin/plugin.json
       skills/superconductor/{SKILL.md, operator-briefing.md, budget.sh}
       skills/supercomposer/SKILL.md
@@ -41,7 +42,7 @@ super/
 
 ```mermaid
 flowchart LR
-  subgraph super[plugin: super]
+  subgraph supersonic[plugin: supersonic]
     SC[superconductor] --- SCo[supercomposer]
   end
   subgraph jevp[plugin: superpowers-jev]
@@ -58,15 +59,15 @@ flowchart LR
 
 ### Migration from dotfiles
 
-- `home/dot_claude/skills/{superconductor,supercomposer}` → `plugins/super/skills/`
+- `home/dot_claude/skills/{superconductor,supercomposer}` → `plugins/supersonic/skills/`
   (`executable_budget.sh` → `budget.sh`, mode 0755). Imported **with history** via
   `git filter-repo` on a scratch clone of dotfiles (paths: the two skill dirs, the
   four related tests, superconductor specs/plans/analysis docs).
 - Dotfiles then deletes them from `home/dot_claude/skills/` and from `~/.claude/skills/`
-  (otherwise the user-level `superconductor` shadows `super:superconductor`). The
+  (otherwise the user-level `superconductor` shadows `supersonic:superconductor`). The
   statusline (`statusline-command.sh`, which writes `~/.claude/rate-limits.json`)
   stays in dotfiles; `budget.sh`'s contract with it is unchanged.
-- Skill names become `super:superconductor` / `super:supercomposer`; every
+- Skill names become `supersonic:superconductor` / `supersonic:supercomposer`; every
   cross-reference (descriptions, ledger paths, operator-briefing) updated.
 - The dotfiles README entry is replaced by a pointer to `mindlace/super`.
 - Install: `/plugin marketplace add mindlace/super` (local dev: directory source
@@ -131,7 +132,7 @@ Thresholds below are starting values; shadow-mode data sets the real ones.
 | `prompt-route` | using-superpowers SKILL.md:10-31 | UserPromptSubmit hook. choice over installed superpowers skills (name+description read from the installed plugin) + `none` | pick ≥0.7 and ≠ `none` → inject `additionalContext`: "Likely applicable skill: X". Hint only. |
 | `diag-confidence` | diagnosing-superpowers prompts/analyst-common.md:23-38 (+ stumbles :25-28, quality-evidence :24-26) | per analyst finding: score `low / medium / high` on whether the quoted evidence supports the finding | disagreement ≥1 level → report marks the finding "confidence contested". |
 
-### super (superconductor / supercomposer)
+### supersonic (superconductor / supercomposer)
 
 | Point | Anchor | Jev question(s) | `on` behaviour |
 |---|---|---|---|
@@ -147,7 +148,7 @@ Thresholds below are starting values; shadow-mode data sets the real ones.
 - **Path discovery**: `skills/jev/SKILL.md` states the helper is at
   `<this skill's base directory>/../../bin/jev`. Any agent (controller, operator,
   subagent) that loads `superpowers-jev:jev` knows the path; the harness prints the
-  base directory on load. `super` skills say: "If `superpowers-jev` is installed,
+  base directory on load. `supersonic` skills say: "If `superpowers-jev` is installed,
   load `superpowers-jev:jev` and run point X; otherwise skip."
 - **Overlay** (`jev-gates`): a SessionStart addition from `superpowers-jev`
   (≤3 lines, only when mode ≠ off) tells the main session that `jev-gates` exists
@@ -188,9 +189,9 @@ A malformed template is a test failure, not a runtime path.
 - Promoting any point to `on` — that's a later decision driven by `jev report`.
 - Windows support beyond fail-open no-op.
 
-## Open questions
+## Settled decisions
 
-- **OPEN**: Repo visibility — `mindlace/super` public or private? (Marketplace add
-  works with either for you; public is required for anyone else.)
-- **OPEN**: Keep superconductor's ledger path `.superpowers/superconductor/` (yes,
-  proposed — existing ledgers keep working).
+- `mindlace/super` is **public**.
+- Plugin is named `supersonic`; the repo stays `super`.
+- superconductor's ledger path stays `.superpowers/superconductor/` so existing
+  ledgers keep working.
