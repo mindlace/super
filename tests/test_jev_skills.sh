@@ -43,7 +43,7 @@ done
 python3 - "$p/hooks/hooks.json" <<'PY' || exit 1
 import json, sys
 h = json.load(open(sys.argv[1]))["hooks"]
-want = {"SessionStart": "session-start"}
+want = {"SessionStart": "session-start", "UserPromptSubmit": "prompt-route"}
 for event, name in want.items():
     cmds = [x["command"] for g in h.get(event, []) for x in g["hooks"]]
     if cmds != ['"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" jev-hook %s' % name]:
