@@ -140,6 +140,21 @@ class TranscriptTest(unittest.TestCase):
         self.assertEqual(transcript.load("/nonexistent"), [])
         self.assertEqual(transcript.load(None), [])
 
+    def test_load_reads_only_the_tail_of_a_large_transcript(self):
+        def line(i):
+            return json.dumps({"type": "assistant", "message": {"content": [
+                {"type": "text", "text": "entry %d " % i + "x" * 900}]}}) + "\n"
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "big.jsonl"
+            path.write_text("".join(line(i) for i in range(1000)), encoding="utf-8")   # ~0.95 MB
+            self.assertGreater(path.stat().st_size, 3 * transcript.TAIL_BYTES)
+            entries = transcript.load(path)
+        self.assertLess(len(entries), 400)
+        self.assertGreater(len(entries), 100)
+        texts = [e["message"]["content"][0]["text"] for e in entries]
+        self.assertTrue(texts[-1].startswith("entry 999 "))
+        self.assertTrue(all(t.endswith("x" * 900) for t in texts))   # no partial first line
+
     def test_skills_used_this_turn(self):
         self.assertEqual(transcript.skills_used_since_last_prompt(self.entries),
                          ["superpowers:systematic-debugging"])

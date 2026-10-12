@@ -13,13 +13,24 @@ EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 MAX_COMMANDS = 10
 OUTPUT_TAIL_CHARS = 1500
 LAST_MESSAGE_CHARS = 4000
+TAIL_BYTES = 256 * 1024   # a Stop hook only needs the current turn; never read a whole long session
+
+
+def _read_tail(path):
+    with open(path, "rb") as fh:
+        size = fh.seek(0, 2)
+        fh.seek(max(0, size - TAIL_BYTES))
+        data = fh.read()
+    if size > TAIL_BYTES:
+        data = data.split(b"\n", 1)[1] if b"\n" in data else b""   # drop the cut first line
+    return data.decode("utf-8", errors="replace")
 
 
 def load(path):
     if not path:
         return []
     try:
-        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        text = _read_tail(path)
     except OSError:
         return []
     out = []

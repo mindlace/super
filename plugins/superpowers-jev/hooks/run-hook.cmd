@@ -49,8 +49,8 @@ CMDBLOCK
 
 # Unix: run the named script directly
 # Splits $0 on its last / or \ (cmd passes Windows paths) instead of calling
-# dirname, and uses $BASH (bash's own absolute path, always set once bash is
-# running) instead of a PATH lookup for bash, so this keeps working when
+# dirname, and prefers $BASH (bash's own absolute path, always set once bash is
+# running) over a PATH lookup for bash, so this keeps working when
 # Claude Code spawns the SessionStart hook with a broken/empty PATH
 # (anthropics/claude-code#43127).
 case "$0" in
@@ -59,4 +59,9 @@ case "$0" in
 esac
 SCRIPT_NAME="$1"
 shift
-exec "${BASH:-bash}" "${SCRIPT_DIR}/${SCRIPT_NAME}" "$@"
+# Re-exec $BASH only when this really is bash itself: under sh (dash, or bash in sh mode)
+# $BASH is unset or names sh, and exec'ing that would not run the hook under bash.
+case "${BASH:-}" in
+  */bash) [ -n "${BASH_VERSION:-}" ] && exec "$BASH" "${SCRIPT_DIR}/${SCRIPT_NAME}" "$@" ;;
+esac
+exec bash "${SCRIPT_DIR}/${SCRIPT_NAME}" "$@"

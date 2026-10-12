@@ -59,11 +59,11 @@ def _clear_pending(path):
 
 
 def prompt_route(inp, env):
+    if resolve_mode(env, "prompt-route") == "off":
+        return None
     # A new prompt supersedes the previous one: drop its pending call id first, so every skip
     # path below leaves nothing for the Stop hook to record against a stale call.
     _clear_pending(_pending_path(inp, env))
-    if resolve_mode(env, "prompt-route") == "off":
-        return None
     prompt = (inp.get("prompt") or "").strip()
     if not prompt or prompt.startswith("/") or len(prompt.split()) < MIN_PROMPT_WORDS:
         return None
@@ -82,7 +82,7 @@ def prompt_route(inp, env):
         path.write_text(json.dumps({"prompt_route_call_id": res["call_id"]}), encoding="utf-8")
     skill = (res.get("verdict") or {}).get("skill")
     if res.get("mode") == "on" and skill:
-        p = res["detail"]["confidences"].get("skill", 0.0)
+        p = ((res.get("detail") or {}).get("confidences") or {}).get("skill", 0.0)
         return _context("UserPromptSubmit",
                         "Likely applicable skill: %s (Jev p=%.2f). Hint only; apply your own "
                         "judgment per superpowers:using-superpowers." % (skill, p))
@@ -125,6 +125,8 @@ HOOKS = {"session-start": session_start, "prompt-route": prompt_route, "stop-ver
 
 
 def run(name, stdin, env):
+    if (env.get("SUPERPOWERS_JEV_HOOKS") or "").strip().lower() == "off":
+        return ""   # hooks disabled; skill points (jev ask) are unaffected
     try:
         stdin_text = stdin.read() if hasattr(stdin, "read") else stdin
         inp = json.loads(stdin_text) if stdin_text.strip() else {}

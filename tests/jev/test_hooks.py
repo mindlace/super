@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import unittest
+from unittest import mock
 
 import support
 from jevlib import hooks, log
@@ -57,6 +58,32 @@ class SessionStartTest(unittest.TestCase):
         p = subprocess.run(["bash", str(HOOK), "jev-hook", "stop-verify"], input="{not json",
                            env=full, capture_output=True, text=True, timeout=30)
         self.assertEqual((p.returncode, p.stdout), (0, ""))
+
+    def test_hooks_off_is_silent_and_sends_nothing(self):
+        route = PromptRouteTest()
+        with support.StubServer(route.pick_debugging()) as srv:
+            env = route.env(srv, SUPERPOWERS_JEV_HOOKS="off", SUPERPOWERS_JEV="on")
+            for name, inp in (("session-start", {"hook_event_name": "SessionStart"}),
+                              ("prompt-route", route.inp("the checkout page crashes, fix it please")),
+                              ("stop-verify", StopVerifyTest().inp())):
+                self.assertEqual(run_hook(name, inp, env), (0, ""), name)
+        self.assertEqual(srv.requests, [])
+
+    def test_hooks_off_only_silences_hooks(self):
+        self.assertEqual(hooks.run("session-start", "{}", support.make_env(SUPERPOWERS_JEV_HOOKS="off")), "")
+        self.assertNotEqual(hooks.run("session-start", "{}", support.make_env()), "")
+
+    def test_launcher_direct_exec_exits_zero(self):
+        full = {"PATH": os.environ["PATH"]}
+        full.update(support.make_env())
+        # Claude Code runs the hook command through sh -c with the launcher exec'd by path
+        # (the file has no shebang, so sh interprets it): $BASH may be unset or be /bin/sh.
+        for shell in ("sh", "bash"):
+            p = subprocess.run([shell, "-c", '"%s" jev-hook session-start' % HOOK],
+                               input='{"hook_event_name":"SessionStart"}',
+                               env=full, capture_output=True, text=True, timeout=8)
+            self.assertEqual(p.returncode, 0, shell)
+            self.assertIn("superpowers-jev", p.stdout, shell)
 
     def test_unknown_hook_name_exits_zero(self):
         self.assertEqual(run_hook("nope", {}, support.make_env()), (0, ""))
@@ -112,6 +139,22 @@ class PromptRouteTest(unittest.TestCase):
             elapsed = time.monotonic() - t0
         self.assertEqual((code, out), (0, ""))
         self.assertLess(elapsed, 5.0)
+
+    def test_on_hint_survives_missing_detail(self):
+        res = {"enabled": True, "mode": "on", "call_id": "c1", "verdict": {"skill": "superpowers:x"}}
+        with support.StubServer(self.pick_debugging()) as srv:
+            env = self.env(srv, SUPERPOWERS_JEV_ON="prompt-route")
+            with mock.patch.object(hooks.ask_mod, "ask", return_value=res):
+                out = hooks.prompt_route(self.inp("the checkout page crashes, fix it please"), env)
+        self.assertIn("superpowers:x (Jev p=0.00)", out["hookSpecificOutput"]["additionalContext"])
+
+    def test_off_mode_leaves_pending_alone(self):
+        env = support.make_env(SUPERPOWERS_JEV="off")
+        pending = log.log_dir(env) / "sessions" / "sess-1.json"
+        pending.parent.mkdir(parents=True)
+        pending.write_text(json.dumps({"prompt_route_call_id": "pr-1"}))
+        self.assertIsNone(hooks.prompt_route(self.inp("fix the crash in checkout please"), env))
+        self.assertTrue(pending.exists())
 
     def test_no_superpowers_installed_is_silent(self):
         with support.StubServer(self.pick_debugging()) as srv:
