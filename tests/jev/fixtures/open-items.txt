@@ -1,0 +1,3 @@
+- `src/config.py:14` — parse_config swallows the JSONDecodeError and returns {},
+  so a corrupt config silently loads as empty.
+- `docs/notes.md` — the changelog entry is missing.
