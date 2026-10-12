@@ -49,6 +49,13 @@ for event, name in want.items():
     if cmds != ['"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" jev-hook %s' % name]:
         print("FAIL: %s hook wiring: %r" % (event, cmds)); sys.exit(1)
 PY
+# Per-item points save the builder state to a file and ask with --state <file>, so recorded
+# items follow the state's order; none of them pipes builder output straight into ask.
+for pt in severity re-review diag-confidence; do
+  grep -qF "jev ask $pt --state <state file>" "$gates" || fail "jev-gates: $pt must ask with --state <state file>"
+  grep -qF "jev ask $pt --state -" "$gates" && fail "jev-gates: $pt must not pipe builder state into ask"
+done
+grep -qF 'detail.labels' "$jev" || fail "jev skill must explain detail.labels"
 for f in "$p/hooks/run-hook.cmd" "$p/hooks/jev-hook" "$p/bin/jev"; do
   mode=$(git -C "$root" ls-files -s "${f#$root/}" | cut -c1-6)
   [ "$mode" = "100755" ] || fail "${f#$root/} must be committed 0755, got '$mode'"

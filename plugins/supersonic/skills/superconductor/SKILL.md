@@ -241,10 +241,13 @@ is not installed, skip this section: every rule above stands unchanged.
   - Record: `{"picks": {"route": "<route you took>"}}`.
 - **citation** (Supervision, "Adjudicate yourself"). Before ruling from an
   operator report's verified-at claims, run `jev cite <report> --root
-  <operator worktree> | jev ask citation --state -`.
+  <operator worktree> > <state file>`, then `jev ask citation --state
+  <state file>`.
   - On: ledger every claim in `detail.flagged` or `detail.also_flagged` as
     *unverified*, and re-check it before it enters a ruling.
-  - Record: `{"items": ["<supports | contradicts | says_nothing>", ...]}`.
+  - Record: `{"items": ["<supports | contradicts | says_nothing>", ...]}`,
+    in the order of the state file's `claims` (`detail.labels` repeats
+    each claim). `jev cite` moves unreadable claims out of `claims`.
 
 ## Context economics
 

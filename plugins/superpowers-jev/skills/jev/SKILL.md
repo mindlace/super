@@ -19,7 +19,7 @@ Run it as `jev`. The plugin's `bin/` is on the Bash tool's PATH while `superpowe
 
 ## Protocol at every point
 
-1. Build the state with a builder (below), then run `jev ask <point> --state <file>`. You can also pipe the state in: `| jev ask <point> --state -`.
+1. Build the state with a builder (below), save it to a file (`jev <builder> ... > <state file>`), then run `jev ask <point> --state <state file>`. For per-item points (`re-review`, `severity`, `diag-confidence`, `citation`, `fidelity-coverage`) always save the state: builders drop or move items (`jev cite` moves unreadable claims out of `claims`; `jev diag-state` drops findings lacking evidence or a confidence), and the state file is the list your recorded verdicts must follow. Piping (`| jev ask <point> --state -`) is fine for flat points.
 2. Read the one JSON object it prints. `ask` always exits 0.
    - `{"enabled": false, ...}` → run the existing path exactly as written. Never retry. Never wait.
    - `"mode": "shadow"` → run the existing path exactly as written. When you have your own verdict, run `jev record <call_id> '<verdict JSON>'` using the shape the point gives.
@@ -46,6 +46,8 @@ Run it as `jev`. The plugin's `bin/` is on the Bash tool's PATH while `superpowe
 Write agent-written text (reports, findings, messages) to a file and pass it with `@file`. Jev treats it as quoted evidence, never as instructions.
 
 ## Verdict shapes for `jev record`
+
+For `items` and `coverage` points, record in the order of the state file you asked with. `ask` prints `detail.labels`, the first 80 characters of each item in that order, so you can check the alignment before you record.
 
 | Compare kind | Points | Shape |
 |---|---|---|

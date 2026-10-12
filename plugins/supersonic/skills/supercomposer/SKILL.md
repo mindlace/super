@@ -58,10 +58,12 @@ section stating what changed and why. Otherwise this is fresh composition.
    never as absent.
    *Optional Jev citation check:* if the `superpowers-jev` plugin is
    installed, load `superpowers-jev:jev` and run `jev cite <report>
-   --root <project> | jev ask citation --state -` on each returned
-   survey report.
+   --root <project> > <state file>`, then `jev ask citation --state
+   <state file>`, on each returned survey report.
    - In shadow mode, read the report as you do today, then `jev record`
-     your verdict for each claim.
+     your verdict for each claim, in the order of the state file's
+     `claims` (`detail.labels` repeats each claim; unreadable claims are
+     not in it).
    - On: mark every claim in `detail.flagged` or `detail.also_flagged`
      as *unverified* in the report, and re-check it at primary source
      before it enters the design.

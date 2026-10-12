@@ -46,4 +46,7 @@ for s in 'superpowers-jev:jev' 'jev record' 'jev ask defect-class' 'jev ask boun
          'Budget state is not in its schema' '"enabled": false'; do
   grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md Jev section missing: $s"; exit 1; }
 done
+# The citation ask uses a saved state file, never a pipe: recorded claims follow its order.
+tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state file>' \
+  || { echo "FAIL: SKILL.md citation must ask with --state <state file>"; exit 1; }
 echo "PASS: SKILL.md structure"

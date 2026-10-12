@@ -26,4 +26,6 @@ grep -qF 'supersonic:superconductor' "$skill" \
 for s in 'superpowers-jev:jev' 'jev ask citation' 'jev coverage' 'still runs every leg' 'jev record' 'only when the result is `confident`'; do
   grep -qF -- "$s" "$skill" || { echo "FAIL: supercomposer SKILL.md Jev points missing: $s"; exit 1; }
 done
+tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state file>' \
+  || { echo "FAIL: supercomposer citation must ask with --state <state file>"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

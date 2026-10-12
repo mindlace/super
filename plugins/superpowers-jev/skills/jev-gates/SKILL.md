@@ -38,16 +38,16 @@ In **shadow** mode, every point below runs the superpowers path unchanged and th
 ### severity: "### 3. Review the task"; rubric "## Calibration" (task-reviewer-prompt.md:145-159, code-reviewer.md:95-120)
 
 - **When:** the task reviewer has returned, before "### 4. The fix loop" decides whether the loop triggers (SKILL.md:356-357).
-- **Ask:** `jev findings-state <review report file> | jev ask severity --state -`
+- **Ask:** `jev findings-state <review report file> > <state file>`, then `jev ask severity --state <state file>`.
 - **On:** if `verdict` is `contested`, adjudicate the severity of each finding in `detail.contested` inline before you decide the loop. This is a severity ruling at loop entry. It is not the round-5 breaker, and it never dismisses a finding.
-- **Record:** `{"items": ["<final severity>", ...]}`, in the reviewer's finding order.
+- **Record:** `{"items": ["<final severity>", ...]}`, in the order of the saved state's `findings`, which `detail.labels` repeats.
 
 ### re-review: "### 4. The fix loop", "The re-review is scoped" (SKILL.md:396-403); verdicts "### Finding Verdicts" (re-review-prompt.md:80-85)
 
 - **When:** the fix report carries its covering tests, command, and output, before you dispatch the scoped re-reviewer.
-- **Ask:** `jev rereview-state --findings <open-findings file> --base <FIX_BASE> --head HEAD | jev ask re-review --state -`
+- **Ask:** `jev rereview-state --findings <open-findings file> --base <FIX_BASE> --head HEAD > <state file>`, then `jev ask re-review --state <state file>`.
 - **On:** if `verdict` is `return_to_implementer`, send the findings in `detail.flagged` back to the implementer **without** dispatching the re-reviewer. The round still counts toward the 5-round cap. Ledger it as `re-review skipped: jev not_addressed p=<confidence>`. Otherwise, dispatch the re-review as today. Jev never approves alone: `addressed` never skips the re-reviewer, because the new-breakage check (re-review-prompt.md:87-90) needs it.
-- **Record:** the re-reviewer's verdicts as `{"items": ["addressed", "not_addressed", ...]}`.
+- **Record:** the re-reviewer's verdicts as `{"items": ["addressed", "not_addressed", ...]}`, in the order of the saved state's `findings` (`detail.labels`).
 
 ## verification-before-completion
 
@@ -60,9 +60,9 @@ This point runs automatically as a Stop hook. When the hook blocks with "Jev ver
 ### diag-confidence: analyst "Return format" (prompts/analyst-common.md:23-38; stumbles.md:25-28; quality-evidence.md:24-26)
 
 - **When:** each analyst has returned, before you compile the report.
-- **Ask:** `jev diag-state <analyst output file> | jev ask diag-confidence --state -`
+- **Ask:** `jev diag-state <analyst output file> > <state file>`, then `jev ask diag-confidence --state <state file>`.
 - **On:** mark every finding in `detail.contested` as "confidence contested" in the report.
-- **Record:** `{"items": ["<the confidence you kept>", ...]}`.
+- **Record:** `{"items": ["<the confidence you kept>", ...]}`, in the order of the saved state's `findings` (`detail.labels`). The builder drops analyst findings that lack evidence or a confidence, so index your own list by the state file, not by the analyst's output.
 
 ## using-superpowers
 
