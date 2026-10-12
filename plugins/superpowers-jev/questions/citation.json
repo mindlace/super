@@ -3,7 +3,7 @@
   "version": 1,
   "plugin": "supersonic",
   "anchor": "supersonic supercomposer/SKILL.md ## Phase C1 step 3 (Provenance in every survey report); superconductor/operator-briefing.md ## Design fidelity: Claims carry provenance",
-  "cookbook": "https://docs.typesafe.ai/cookbooks/citation_check.md: deterministic locate step first (unreadable claims never reach the model), then one `relation` Choice per claim over {claim, section} with the cookbook's criteria; AUTO_ACCEPT 0.8",
+  "cookbook": "https://docs.typesafe.ai/cookbooks/citation_check.md: deterministic locate step first (unreadable claims are present in state but no question judges them, and code forces downgrade), then one `relation` Choice per claim over {claim, section} with the cookbook's criteria; AUTO_ACCEPT 0.8",
   "model": "jev-latest",
   "state_schema": {
     "type": "object",
@@ -31,7 +31,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["claim", "file", "line", "why"],
-          "properties": {"claim": {"type": "string"}, "file": {"type": "string"}, "line": {"type": "integer"}, "why": {"type": "string"}}
+          "properties": {"claim": {"type": "string", "description": "the report line carrying the unlocatable claim (quoted evidence; no question judges it)"}, "file": {"type": "string"}, "line": {"type": "integer"}, "why": {"type": "string"}}
         }
       }
     }

@@ -23,6 +23,26 @@ AGENT_FIELDS = {
     "fidelity-coverage": ["spec_text"],
     "citation": ["claims[].claim"],
 }
+# Evidence fields present in state that no question references: code handles them (citation
+# forces a downgrade). They must stay out of every question's text.
+UNJUDGED_FIELDS = {"citation": ["unreadable[].claim"]}
+# Spec-derived (partner-approved design-package) text allowed to reach the model ONLY as a Choice
+# option description, via options_from_state.description. Never in instructions.
+OPTION_DESCRIPTION_FIELDS = {"bounce": ["operators[].summary"]}
+
+
+def option_description_violations(t, state, paths):
+    problems = []
+    dyn = [q["options_from_state"] for q in t["questions"].values() if q.get("options_from_state")]
+    allowed = {"%s[].%s" % (d["path"], d.get("description")) for d in dyn}
+    instr = "\n".join(s for q in t["questions"].values() for s in support.strings(q.get("instructions", "")))
+    for path in paths:
+        if path not in allowed:
+            problems.append("%s: not routed through options_from_state.description" % path)
+        for v in state_values(state, path):
+            if v in instr:
+                problems.append("%s: value appears in instructions" % path)
+    return problems
 MODEL_NAME_RE = re.compile(r"opus|sonnet|haiku|gpt|gemini", re.I)
 
 
@@ -48,10 +68,26 @@ class SupersonicTemplatesTest(unittest.TestCase):
         for p in POINTS:
             t, s = support.template(p), support.fixture_state(p)
             declared = AGENT_FIELDS[p]
-            self.assertTrue(set(evidence_paths(t["state_schema"])) <= set(declared), p)
             self.assertEqual(agent_text_violations(t, s, declared), [], p)
             for path in declared:
                 self.assertTrue(state_values(s, path), "%s: %s absent from fixture" % (p, path))
+            exempt = UNJUDGED_FIELDS.get(p, []) + OPTION_DESCRIPTION_FIELDS.get(p, [])
+            self.assertTrue(set(evidence_paths(t["state_schema"])) <= set(declared + exempt), p)
+            # Unjudged fields are never referenced by a question.
+            texts = json.dumps([q.get("instructions") for q in t["questions"].values()])
+            for path in UNJUDGED_FIELDS.get(p, []):
+                self.assertNotIn(path.split("[")[0], texts, p)
+            self.assertEqual(option_description_violations(t, s, OPTION_DESCRIPTION_FIELDS.get(p, [])), [], p)
+
+    def test_option_description_allowance_rejects_pasted_summary(self):
+        t, s = support.template("bounce"), support.fixture_state("bounce")
+        paths = OPTION_DESCRIPTION_FIELDS["bounce"]
+        bad = copy.deepcopy(t)
+        bad["questions"]["operator"]["instructions"]["question"] += " " + s["operators"][0]["summary"]
+        self.assertTrue(any("appears in instructions" in v for v in option_description_violations(bad, s, paths)))
+        bad = copy.deepcopy(t)
+        del bad["questions"]["operator"]["options_from_state"]["description"]
+        self.assertTrue(any("not routed" in v for v in option_description_violations(bad, s, paths)))
 
     def test_agent_text_check_rejects_bad_supersonic_templates(self):
         t, s = support.template("surface-route"), support.fixture_state("surface-route")
