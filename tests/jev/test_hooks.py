@@ -183,7 +183,36 @@ class StopVerifyTest(unittest.TestCase):
         with support.StubServer(support.ok(noul=0.9)) as srv:
             env = support.make_env(srv.url)
             self.assertIsNone(hooks.stop_verify(self.inp(), env))
-        self.assertEqual(log.read_entries(env)[-1]["verdict"], "block")
+        calls = [e for e in log.read_entries(env) if e["type"] == "call"]
+        self.assertEqual(calls[-1]["verdict"], "block")
+
+    def test_shadow_logs_state_entry(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            env = support.make_env(srv.url)
+            hooks.stop_verify(self.inp(), env)
+        entries = log.read_entries(env)
+        call = [e for e in entries if e["type"] == "call"][-1]
+        st = entries[-1]
+        self.assertEqual(st["type"], "state")
+        self.assertEqual(st["call_id"], call["call_id"])
+        self.assertEqual(st["session_id"], "sess-1")
+        self.assertEqual(st["transcript_path"], str(FX / "transcript.jsonl"))
+        self.assertEqual(st["source"], "hook")
+        self.assertTrue(st["state"]["last_message"].startswith("Fixed: corrupt configs"))
+
+    def test_no_state_entry_when_off(self):
+        env = support.make_env(None, SUPERPOWERS_JEV="off")
+        self.assertIsNone(hooks.stop_verify(self.inp(), env))
+        self.assertEqual(log.read_entries(env), [])
+
+    def test_state_entry_on_api_error(self):
+        with support.StubServer(lambda p: (500, {"detail": "boom"}, 0)) as srv:
+            env = support.make_env(srv.url)
+            self.assertIsNone(hooks.stop_verify(self.inp(), env))
+        entries = [e for e in log.read_entries(env) if e["type"] in ("call", "state")]
+        self.assertEqual([e["type"] for e in entries], ["call", "state"])
+        self.assertTrue(entries[0].get("error"))
+        self.assertEqual(entries[0]["call_id"], entries[1]["call_id"])
 
     def test_loop_guard(self):
         with support.StubServer(support.ok(noul=0.9)) as srv:

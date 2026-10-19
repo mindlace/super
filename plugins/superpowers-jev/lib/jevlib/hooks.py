@@ -116,6 +116,9 @@ def stop_verify(inp, env):
         return None
     state = transcript.stop_state(entries, last)
     res = ask_mod.ask("verify-stop", state, env, cwd=inp.get("cwd"))
+    if res.get("call_id"):   # keep the judged input so the call can be labeled later
+        log.safe_append(log.state_entry(res["call_id"], state, inp.get("session_id"),
+                                        inp.get("transcript_path"), "hook"), env, inp.get("cwd"))
     if res.get("enabled") and res.get("mode") == "on" and res.get("verdict") == "block":
         return {"decision": "block", "reason": VERIFY_BLOCK_REASON}
     return None

@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 
@@ -65,4 +66,20 @@ def read_entries(env, cwd=None):
             continue
         if isinstance(entry, dict):
             out.append(entry)
+    return out
+
+
+def state_entry(call_id, state, session_id, transcript_path, source):
+    """The input Jev judged for a call, kept so the call can be labeled later."""
+    return {"type": "state", "call_id": call_id, "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "state": state, "session_id": session_id, "transcript_path": transcript_path,
+            "source": source}
+
+
+def states_by_call(entries):
+    """Latest `state` entry per call_id."""
+    out = {}
+    for e in entries:
+        if e.get("type") == "state" and e.get("call_id"):
+            out[e["call_id"]] = e
     return out
