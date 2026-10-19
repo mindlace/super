@@ -47,5 +47,5 @@
   "compare": "verdict",
   "on_skips": null,
   "claude_verdict_example": {"verdict": "allow"},
-  "notes": "This runs from the Stop hook, which skips when stop_hook_active is set. There is no automatic Claude verdict: label calls by hand with `jev report --point verify-stop --unrecorded`, then `jev record <id> '{\"verdict\":\"block\"|\"allow\"}'`."
+  "notes": "This runs from the Stop hook, which skips when stop_hook_active is set. There is no automatic Claude verdict: the hook logs the judged state, so label calls blind with `jev label verify-stop` (one JSON object per call: call_id, ts, state). Decide block iff last_message claims completion, a fix, or passing AND no commands_since_last_edit output checks that claim; else allow. Write one JSONL line {\"call_id\":...,\"verdict\":...} per call and apply with `jev label verify-stop --apply <file>`. Older calls have no state: run `jev recover-states verify-stop` first."
 }
