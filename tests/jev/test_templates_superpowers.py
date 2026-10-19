@@ -63,6 +63,11 @@ class SuperpowersTemplatesTest(unittest.TestCase):
         instr = "\n".join(support.strings(t["questions"]["status"]["instructions"]))
         self.assertIn("`fix_diff`", instr)
 
+    def test_rereview_addressed_requires_code_shown(self):
+        c = support.template("re-review")["questions"]["status"]["criteria"]["addressed"]
+        self.assertIn("show the code the finding is about", c)
+        self.assertIn("choose unclear", c)
+
     def test_agent_text_check_rejects_bad_templates(self):
         t, s = support.template("re-review"), support.fixture_state("re-review")
         paths = AGENT_FIELDS["re-review"]

@@ -69,7 +69,10 @@ def fix_diff(repo, base, head):
     cut = text[:FIX_DIFF_MAX_CHARS]
     boundary = max(cut.rfind("\n@@"), cut.rfind("\ndiff --git"))
     if boundary > 0:
-        cut = cut[:boundary]
+        head_part = cut[:boundary]
+        # A boundary cut that leaves only headers (an oversized first hunk) is useless: hard-cut instead.
+        if any(l[:1] in "+-" and not l.startswith(("+++", "---")) for l in head_part.splitlines()):
+            cut = head_part
     return cut + FIX_DIFF_TRUNCATED_MARKER
 
 

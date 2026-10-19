@@ -93,6 +93,8 @@ class ReviewBuildersTest(unittest.TestCase):
         fd = s["fix_diff"]
         self.assertLessEqual(len(fd), review.FIX_DIFF_MAX_CHARS + len(review.FIX_DIFF_TRUNCATED_MARKER))
         self.assertTrue(fd.endswith(review.FIX_DIFF_TRUNCATED_MARKER))
+        # one oversized hunk: content lines must survive, not just headers
+        self.assertTrue([l for l in fd.splitlines() if l.startswith("+line ")])
 
     def test_parse_review_severities(self):
         f = review.parse_review((FX / "review.md").read_text())["findings"]

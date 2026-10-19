@@ -42,7 +42,7 @@
       "criteria": {
         "not_addressed": "The defect the finding describes is still present in the code shown",
         "unclear": "Neither the hunks nor `fix_diff` show the code the finding is about, or the code shown is not enough to tell",
-        "addressed": "The code shown no longer contains the specific defect the finding describes"
+        "addressed": "The hunks or `fix_diff` show the code the finding is about, and that code no longer contains the specific defect the finding describes; if the code the finding is about is not shown, choose unclear"
       },
       "conservative": "not_addressed",
       "no_match": "unclear"
