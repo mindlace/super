@@ -12,7 +12,7 @@ POINTS = ["re-review", "severity", "tier", "report-evidence", "verify-stop", "pr
 # `[]` marks array items. Every field whose state_schema description says
 # "quoted evidence" must be listed here, so a new evidence field cannot slip by.
 AGENT_FIELDS = {
-    "re-review": ["findings[].text", "findings[].hunks"],
+    "re-review": ["findings[].text", "findings[].hunks", "fix_diff"],
     "severity": ["findings[].text", "findings[].reviewer_severity"],
     "tier": ["brief"],
     "report-evidence": ["report"],
@@ -49,6 +49,19 @@ class SuperpowersTemplatesTest(unittest.TestCase):
             self.assertEqual(agent_text_violations(t, s, declared), [], p)
             for path in declared:
                 self.assertTrue(state_values(s, path), "%s: %s absent from fixture" % (p, path))
+
+    def test_rereview_schema_accepts_fix_diff(self):
+        t, s = support.template("re-review"), support.fixture_state("re-review")
+        with_diff = dict(s, fix_diff="diff --git a/x b/x\n+added")
+        self.assertEqual(schema.validate(t["state_schema"], with_diff), [])
+        without = {k: v for k, v in s.items() if k != "fix_diff"}
+        self.assertEqual(schema.validate(t["state_schema"], without), [])
+        self.assertNotEqual(schema.validate(t["state_schema"], dict(s, extra="x")), [])
+
+    def test_rereview_question_mentions_fix_diff(self):
+        t = support.template("re-review")
+        instr = "\n".join(support.strings(t["questions"]["status"]["instructions"]))
+        self.assertIn("`fix_diff`", instr)
 
     def test_agent_text_check_rejects_bad_templates(self):
         t, s = support.template("re-review"), support.fixture_state("re-review")

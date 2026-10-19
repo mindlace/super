@@ -12,6 +12,8 @@ HEADING_RE = re.compile(r"^#{1,6}\s")
 PATH_RE = re.compile(r"(?<![\w/.-])([\w.-]+(?:/[\w.-]+)*\.[A-Za-z0-9]+)(?::\d+(?:-\d+)?)?")
 MAX_HUNKS_PER_FINDING = 8
 MAX_HUNK_CHARS = 4000
+FIX_DIFF_MAX_CHARS = 60000
+FIX_DIFF_TRUNCATED_MARKER = "\n[... truncated ...]"
 RISK_PATTERNS = {
     "concurrency": r"\b(thread|threading|mutex|lock|semaphore|async|await|goroutine|atomic|race)\b",
     "persistence": r"\b(migration|migrate|schema|ALTER TABLE|CREATE TABLE|DROP TABLE|transaction)\b",
@@ -59,6 +61,18 @@ def diff_hunks(repo, base, head, path):
     return ["\n".join(h)[:MAX_HUNK_CHARS] for h in hunks]
 
 
+def fix_diff(repo, base, head):
+    """The whole fix diff, capped at FIX_DIFF_MAX_CHARS (cut at a hunk boundary when possible)."""
+    text = git(repo, "diff", "-U3", base, head)
+    if len(text) <= FIX_DIFF_MAX_CHARS:
+        return text
+    cut = text[:FIX_DIFF_MAX_CHARS]
+    boundary = max(cut.rfind("\n@@"), cut.rfind("\ndiff --git"))
+    if boundary > 0:
+        cut = cut[:boundary]
+    return cut + FIX_DIFF_TRUNCATED_MARKER
+
+
 def rereview_state(findings_text, repo, base, head):
     changed = [p for p in git(repo, "diff", "--name-only", base, head).splitlines() if p]
     findings = []
@@ -72,7 +86,12 @@ def rereview_state(findings_text, repo, base, head):
         for f in files:
             hunks.extend(diff_hunks(repo, base, head, f))
         findings.append({"text": text, "hunks": hunks[:MAX_HUNKS_PER_FINDING]})
-    return {"findings": findings}
+    state = {"findings": findings}
+    if any(not f["hunks"] for f in findings):
+        diff = fix_diff(repo, base, head)
+        if diff:
+            state["fix_diff"] = diff
+    return state
 
 
 def parse_review(text):
@@ -129,7 +148,7 @@ def diff_state(repo, base, head, scoped_rereview=False):
 
 
 def add_parser(sub):
-    p = sub.add_parser("rereview-state", help="re-review state: findings + their fix-diff hunks")
+    p = sub.add_parser("rereview-state", help="re-review state: findings + their fix-diff hunks (+ whole fix_diff when a finding has none)")
     p.add_argument("--findings", required=True, help="findings file (bullets or JSON list)")
     p.add_argument("--base", required=True, help="FIX_BASE: the head the previous review saw")
     p.add_argument("--head", default="HEAD")
