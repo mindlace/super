@@ -73,6 +73,15 @@ class LabelTest(unittest.TestCase):
         self.assertEqual(n, 0)
         self.assertEqual(len(errors), 1)
 
+    def test_apply_non_string_call_id_is_error_and_rest_applies(self):
+        seed(self.env, self.base())
+        lines = [json.dumps({"call_id": [1], "verdict": "block"}),
+                 json.dumps({"call_id": "A", "verdict": "block"})]
+        n, errors = label.apply(lines, log.read_entries(self.env), self.env)
+        self.assertEqual(n, 1)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("line 1", errors[0])
+
     def test_apply_twice_no_duplicate(self):
         seed(self.env, self.base())
         line = json.dumps({"call_id": "A", "verdict": "block"})

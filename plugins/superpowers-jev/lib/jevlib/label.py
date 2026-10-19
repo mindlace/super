@@ -52,7 +52,7 @@ def apply(lines, entries, env, cwd=None, point="verify-stop"):
             errors.append("line %d: expected a JSON object" % n)
             continue
         cid, verdict = obj.get("call_id"), obj.get("verdict")
-        if cid not in calls:
+        if not isinstance(cid, str) or cid not in calls:
             errors.append("line %d: unknown call_id %s" % (n, cid))
         elif calls[cid].get("point") != point:
             errors.append("line %d: call_id %s is not a %s call" % (n, cid, point))
