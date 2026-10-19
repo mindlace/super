@@ -150,6 +150,17 @@ class RecordCliTest(unittest.TestCase):
         self.assertIn("nope", err.getvalue())
         self.assertEqual(len([e for e in log.read_entries(env) if e["type"] == "record"]), 2)
 
+    def test_report_tolerates_retired_point(self):
+        env = support.make_env()
+        entries = [
+            call("old", "operator-tier", "picks", {"tier": "capable"},
+                 detail={"choices": {"tier": "standard"}}),
+            rec("old", {"picks": {"tier": "capable"}}),
+        ]
+        rows = report.build_report(entries)
+        self.assertIn("operator-tier", rows)
+        self.assertIsInstance(report.format_report(rows), str)
+
 
 if __name__ == "__main__":
     unittest.main()

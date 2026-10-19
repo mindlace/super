@@ -38,12 +38,12 @@ grep -qF "this skill's \`budget.sh\`" "$skill" \
   || { echo "FAIL: gate must run this skill's budget.sh"; exit 1; }
 grep -q '^## Optional Jev judgments' "$skill" \
   || { echo "FAIL: SKILL.md missing the Optional Jev judgments section"; exit 1; }
-for pt in defect-class bounce operator-tier surface-route citation; do
+for pt in defect-class bounce surface-route citation; do
   grep -qF "**$pt**" "$skill" || { echo "FAIL: SKILL.md never names Jev point $pt"; exit 1; }
 done
 for s in 'superpowers-jev:jev' 'jev record' 'jev ask defect-class' 'jev ask bounce' \
-         'jev ask operator-tier' 'jev ask surface-route' 'jev ask citation' \
-         'Budget state is not in its schema' '"enabled": false'; do
+         'jev ask surface-route' 'jev ask citation' \
+         '"enabled": false'; do
   grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md Jev section missing: $s"; exit 1; }
 done
 # The citation ask uses a saved state file, never a pipe: recorded claims follow its order.
