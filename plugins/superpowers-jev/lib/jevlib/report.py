@@ -56,7 +56,10 @@ def units(call, claude):
         out = []
         for i, v in enumerate(claude.get("items") or []):
             it = by_index.get(i) or {}
-            out.append((it.get("pick"), it.get("pick"), v, bool(it.get("confident"))))
+            pick = it.get("pick")
+            # "unclear" is Jev abstaining on this item, not a verdict an `on` run would act on.
+            acted = None if pick == "unclear" else pick
+            out.append((pick, acted, v, bool(it.get("confident"))))
         return out
     if kind == "coverage":
         n = detail.get("n_requirements", 0)

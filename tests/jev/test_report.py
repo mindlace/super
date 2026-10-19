@@ -49,6 +49,25 @@ class ReportMathTest(unittest.TestCase):
         self.assertEqual(rows["would_skip"], 1)
         self.assertEqual(rows["unrecorded"], ["b"])
 
+    def test_items_unclear_is_abstention(self):
+        items = [{"index": 0, "pick": "addressed", "confident": True},
+                 {"index": 1, "pick": "unclear", "confident": True}]
+        rows = report.build_report([
+            call("a", "re-review", "items", "dispatch_rereview", items=items),
+            rec("a", {"items": ["addressed", "addressed"]}),
+        ])["re-review"]
+        self.assertEqual((rows["acted_agree"], rows["acted_units"], rows["abstained"]), (1, 1, 1))
+        self.assertEqual((rows["confident_units"], rows["confident_wrong"]), (1, 0))
+        self.assertEqual(rows["agree"], 1)
+
+    def test_items_unclear_generic_for_severity(self):
+        items = [{"index": 0, "pick": "unclear", "confident": True}]
+        rows = report.build_report([
+            call("a", "severity", "items", "critical", items=items),
+            rec("a", {"items": ["minor"]}),
+        ])["severity"]
+        self.assertEqual(rows["abstained"], 1)
+
     def test_picks_compare_raw_choice(self):
         detail = {"choices": {"skill": "none"}, "confident_keys": {"skill": True}}
         rows = report.build_report([
