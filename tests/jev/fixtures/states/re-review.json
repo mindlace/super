@@ -10,5 +10,6 @@
       "text": "`tests/test_config.py:3` — the test asserts nothing.",
       "hunks": []
     }
-  ]
+  ],
+  "fix_diff": "diff --git a/src/config.py b/src/config.py\n--- a/src/config.py\n+++ b/src/config.py\n@@ -11,5 +11,5 @@ def parse_config(path):\n     try:\n         return json.load(open(path))\n-    except ValueError:\n-        return {}\n+    except ValueError as exc:\n+        raise ConfigError(path) from exc\n"
 }

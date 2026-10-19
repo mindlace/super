@@ -63,6 +63,39 @@ class ReviewBuildersTest(unittest.TestCase):
         self.assertIn("+        raise ConfigError(path) from exc", s["findings"][0]["hunks"][0])
         self.assertEqual(s["findings"][1]["hunks"], [])  # docs/notes.md not in the fix diff
 
+    def test_rereview_no_fix_diff_when_all_matched(self):
+        repo = make_repo()
+        s = review.rereview_state("- src/config.py:6 swallows the error", repo, "HEAD~1", "HEAD")
+        self.assertTrue(s["findings"][0]["hunks"])
+        self.assertNotIn("fix_diff", s)
+
+    def test_rereview_fix_diff_when_unmatched(self):
+        repo = make_repo()
+        s = review.rereview_state("- the error handling is too lenient", repo, "HEAD~1", "HEAD")
+        self.assertEqual(s["findings"][0]["hunks"], [])
+        self.assertIn("+        raise ConfigError(path) from exc", s["fix_diff"])
+
+    def test_rereview_mixed_findings(self):
+        repo = make_repo()
+        s = review.rereview_state(
+            "- src/config.py:6 swallows the error\n- the error handling is too lenient",
+            repo, "HEAD~1", "HEAD")
+        self.assertTrue(s["findings"][0]["hunks"])
+        self.assertEqual(s["findings"][1]["hunks"], [])
+        self.assertIn("raise ConfigError", s["fix_diff"])
+
+    def test_rereview_fix_diff_capped(self):
+        repo = make_repo()
+        (repo / "big.txt").write_text("".join("line %d\n" % i for i in range(20000)))
+        git(repo, "add", "-A")
+        git(repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "big")
+        s = review.rereview_state("- nothing named here", repo, "HEAD~1", "HEAD")
+        fd = s["fix_diff"]
+        self.assertLessEqual(len(fd), review.FIX_DIFF_MAX_CHARS + len(review.FIX_DIFF_TRUNCATED_MARKER))
+        self.assertTrue(fd.endswith(review.FIX_DIFF_TRUNCATED_MARKER))
+        # one oversized hunk: content lines must survive, not just headers
+        self.assertTrue([l for l in fd.splitlines() if l.startswith("+line ")])
+
     def test_parse_review_severities(self):
         f = review.parse_review((FX / "review.md").read_text())["findings"]
         self.assertEqual([x["reviewer_severity"] for x in f], ["important", "important", "minor"])

@@ -1,6 +1,6 @@
 {
   "name": "superpowers-jev",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Optional TypeSafe Jev judgments at superpowers decision points. Shadow mode logs Jev beside Claude; fails open when Jev is unavailable.",
   "author": { "name": "mindlace", "url": "https://github.com/mindlace" },
   "homepage": "https://github.com/mindlace/super",

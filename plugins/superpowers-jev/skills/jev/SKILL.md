@@ -66,6 +66,8 @@ For `items` and `coverage` points, record in the order of the state file you ask
 - raw-agreement: Jev's own choice before floors/gates;
 - how many Claude dispatches `on` mode would have skipped.
 
+An `unclear` item pick counts as an abstention, not a verdict.
+
 `jev report --unrecorded` lists the calls that have no Claude verdict yet. The log is `.superpowers/jev/log.jsonl` at the main checkout's root, and it is gitignored. Promote a point to `on` only after `jev report` supports it.
 
 To label `verify-stop` calls, run `jev label verify-stop [--since YYYY-MM-DD]`. It prints one blind JSON object per unrecorded call (`call_id`, `ts`, `state`), without Jev's verdict, and reports on stderr how many unrecorded calls lack state. Decide `block` only if `state.last_message` claims completion, a fix, or passing AND no `state.commands_since_last_edit` output checks that claim; otherwise `allow`. Write one JSONL line `{"call_id": ..., "verdict": "block"|"allow"}` per call, then run `jev label verify-stop --apply <file>`. It records the verdicts, and rejects unknown ids, other points' ids, bad labels, and ids already recorded.
