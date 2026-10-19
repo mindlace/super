@@ -10,10 +10,11 @@ Units of agreement by compare kind:
   items    - one unit per index in Claude {"items": [...]}: Jev's item pick
   coverage - one unit per requirement: ok | uncovered | multi, from {"uncovered", "multiply_covered"}
 
-Two agreement columns: `agreement` scores Jev's raw answer (for picks, detail.choices);
-`acted-agreement` scores the combined verdict an `on` run would act on (floors, gates, and
-overrides applied). A None acted verdict is Jev abstaining: it scores as agreement when
-Claude's value is "none", and otherwise counts under `abstain` and is not scored.
+Two agreement columns: `acted-agreement` scores the combined verdict an `on` run would act on
+(floors, gates, and overrides applied); `raw-agreement` (JSON key `agreement`) scores Jev's own
+answer (for picks, detail.choices). A None acted verdict is Jev abstaining: it scores as
+agreement when Claude's value is "none", and otherwise counts under `abstain` and is not scored.
+`conf-wrong` is the share of confident, non-abstaining units whose acted verdict differs from Claude.
 """
 import json
 import sys
@@ -98,16 +99,18 @@ def build_report(entries, since=None, point=None):
             agree = jev_v == claude_v
             r["units"] += 1
             r["agree"] += int(agree)
-            if confident:
-                r["confident_units"] += 1
-                r["confident_wrong"] += int(not agree)
             # Acted-on verdict: None means Jev took no action. That matches Claude's explicit
             # "none" (the gate was right); otherwise it is an abstention, not scored.
             if acted_v is None and claude_v != "none":
                 r["abstained"] += 1
-            else:
-                r["acted_units"] += 1
-                r["acted_agree"] += int(acted_v == claude_v or (acted_v is None and claude_v == "none"))
+                continue
+            acted_agree = acted_v == claude_v or (acted_v is None and claude_v == "none")
+            r["acted_units"] += 1
+            r["acted_agree"] += int(acted_agree)
+            # Confident-and-wrong is judged on what an `on` run would act on, not the raw choice.
+            if confident:
+                r["confident_units"] += 1
+                r["confident_wrong"] += int(not acted_agree)
     for r in rows.values():
         r["agreement"] = r["agree"] / r["units"] if r["units"] else None
         r["acted_agreement"] = r["acted_agree"] / r["acted_units"] if r["acted_units"] else None
@@ -121,17 +124,18 @@ def _frac(rate, num, den):
 
 
 def format_report(rows):
-    lines = ["%-18s %5s %4s %4s %-15s %-15s %-15s %-7s %s" % (
-        "point", "calls", "err", "rec", "agreement", "acted-agreement", "conf-wrong", "abstain",
-        "would-skip")]
+    lines = ["%-18s %5s %4s %4s %-15s %-15s %-7s %-15s %s" % (
+        "point", "calls", "err", "rec", "acted-agreement", "conf-wrong", "abstain",
+        "raw-agreement", "would-skip")]
     for name in sorted(rows):
         r = rows[name]
-        lines.append("%-18s %5d %4d %4d %-15s %-15s %-15s %-7d %d" % (
+        lines.append("%-18s %5d %4d %4d %-15s %-15s %-7d %-15s %d" % (
             name, r["calls"], r["errors"], r["recorded"],
-            _frac(r["agreement"], r["agree"], r["units"]),
             _frac(r["acted_agreement"], r["acted_agree"], r["acted_units"]),
             _frac(r["confident_wrong_rate"], r["confident_wrong"], r["confident_units"]),
-            r["abstained"], r["would_skip"]))
+            r["abstained"],
+            _frac(r["agreement"], r["agree"], r["units"]),
+            r["would_skip"]))
     return "\n".join(lines)
 
 

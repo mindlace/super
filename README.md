@@ -64,7 +64,7 @@ In shadow mode, Jev's verdict is logged next to Claude's in `.superpowers/jev/lo
 
 Locating the main checkout's root needs git 2.31 or newer (`rev-parse --path-format=absolute`). With older git, in a submodule, or in a bare repo, there is no main checkout to find, and the log falls back to `$HOME/.superpowers/jev/log.jsonl`.
 
-The `jev` command is on the Bash tool's PATH only while Claude Code runs. To run `jev report` from a terminal, call it by path from inside the repository whose log you want: `<plugin dir>/bin/jev report` (for a local checkout, `~/Projects/super/plugins/superpowers-jev/bin/jev report`; for an installed plugin, the `bin/jev` under its directory in `~/.claude/plugins/`). `jev report` shows agreement with Claude on Jev's raw answer and on the verdict an `on` run would act on, next to a count of abstentions.
+The `jev` command is on the Bash tool's PATH only while Claude Code runs. To run `jev report` from a terminal, call it by path from inside the repository whose log you want: `<plugin dir>/bin/jev report` (for a local checkout, `~/Projects/super/plugins/superpowers-jev/bin/jev report`; for an installed plugin, the `bin/jev` under its directory in `~/.claude/plugins/`). `jev report` shows acted-agreement (the verdict an `on` run would act on), the confident-and-wrong rate on that acted verdict, a count of abstentions, and raw-agreement (Jev's own answer before floors and gates).
 
 ## Tests
 

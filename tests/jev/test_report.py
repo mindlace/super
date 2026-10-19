@@ -118,6 +118,50 @@ class ReportMathTest(unittest.TestCase):
         self.assertEqual(report.build_report(entries, since="2026-10-05")["tier"]["calls"], 1)
         self.assertEqual(list(report.build_report(entries, point="severity")), ["severity"])
 
+    def test_conf_wrong_scores_acted_pick(self):
+        detail = {"choices": {"implementer": "standard"}, "confident_keys": {"implementer": True}}
+        r = report.build_report([
+            call("a", "tier", "picks", {"implementer": "capable"}, detail=detail),
+            rec("a", {"picks": {"implementer": "capable"}}),
+        ])["tier"]
+        self.assertEqual((r["confident_wrong"], r["confident_units"], r["agree"]), (0, 1, 0))
+
+    def test_conf_wrong_counts_acted_mismatch(self):
+        detail = {"choices": {"implementer": "cheap"}, "confident_keys": {"implementer": True}}
+        r = report.build_report([
+            call("a", "tier", "picks", {"implementer": "standard"}, detail=detail),
+            rec("a", {"picks": {"implementer": "capable"}}),
+        ])["tier"]
+        self.assertEqual((r["confident_wrong"], r["confident_units"]), (1, 1))
+
+    def test_gated_none_matches_claude_none(self):
+        detail = {"choices": {"skill": "superpowers:x"}, "confident_keys": {"skill": True}}
+        r = report.build_report([
+            call("a", "prompt-route", "picks", {"skill": None}, detail=detail),
+            rec("a", {"picks": {"skill": "none"}}),
+        ])["prompt-route"]
+        self.assertEqual((r["acted_agree"], r["confident_wrong"]), (1, 0))
+
+    def test_abstain_not_conf_wrong(self):
+        detail = {"choices": {"implementer": "cheap"}, "confident_keys": {"implementer": True}}
+        r = report.build_report([
+            call("a", "tier", "picks", {"implementer": None}, detail=detail),
+            rec("a", {"picks": {"implementer": "capable"}}),
+        ])["tier"]
+        self.assertEqual((r["abstained"], r["confident_units"]), (1, 0))
+
+    def test_verdict_points_unchanged(self):
+        r = report.build_report([
+            call("a", "verify-stop", "verdict", "block"), rec("a", {"verdict": "allow"}),
+        ])["verify-stop"]
+        self.assertEqual((r["agreement"], r["acted_agreement"], r["confident_wrong"]), (0, 0, 1))
+
+    def test_format_column_order(self):
+        header = report.format_report(report.build_report([call("a", "tier", "picks", {})]))
+        self.assertEqual(header.splitlines()[0].split()[:8],
+                         ["point", "calls", "err", "rec", "acted-agreement", "conf-wrong",
+                          "abstain", "raw-agreement"])
+
     def test_format_has_header_and_dash_for_no_data(self):
         text = report.format_report(report.build_report([call("a", "tier", "picks", {})]))
         self.assertIn("would-skip", text.splitlines()[0])
@@ -159,7 +203,8 @@ class RecordCliTest(unittest.TestCase):
         ]
         rows = report.build_report(entries)
         self.assertIn("operator-tier", rows)
-        self.assertIsInstance(report.format_report(rows), str)
+        self.assertEqual(rows["operator-tier"]["recorded"], 1)
+        self.assertIn("operator-tier", report.format_report(rows))
 
 
 if __name__ == "__main__":

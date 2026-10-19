@@ -60,8 +60,10 @@ For `items` and `coverage` points, record in the order of the state file you ask
 `jev report [--since YYYY-MM-DD] [--point P]` prints, for each point:
 - calls and errors;
 - recorded verdicts;
-- agreement with Claude;
-- how often Jev was confident and wrong;
+- acted-agreement: agreement of the verdict an `on` run would act on;
+- conf-wrong: how often Jev was confident and the acted verdict was wrong;
+- abstain: confident-or-not picks where Jev acted on nothing and Claude chose something;
+- raw-agreement: Jev's own choice before floors/gates;
 - how many Claude dispatches `on` mode would have skipped.
 
 `jev report --unrecorded` lists the calls that have no Claude verdict yet. The log is `.superpowers/jev/log.jsonl` at the main checkout's root, and it is gitignored. Promote a point to `on` only after `jev report` supports it.
