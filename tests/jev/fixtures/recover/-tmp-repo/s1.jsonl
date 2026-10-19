@@ -1,0 +1,13 @@
+{"type": "summary", "summary": "fixture session"}
+{"type": "user", "message": {"role": "user", "content": "Fix the parser bug."}, "timestamp": "2026-10-12T16:39:50.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t1", "name": "Edit", "input": {"file_path": "/tmp/repo/parser.py", "old_string": "a", "new_string": "b"}}]}, "timestamp": "2026-10-12T16:39:55.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "edited"}]}, "timestamp": "2026-10-12T16:39:55.500Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "python -m pytest -q"}}]}, "timestamp": "2026-10-12T16:40:00.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "12 passed in 0.4s"}]}, "timestamp": "2026-10-12T16:40:05.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Tests pass."}]}, "timestamp": "2026-10-12T16:40:13.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "system", "subtype": "stop_hook_summary", "hookCount": 1, "hookInfos": [{"command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" jev-hook stop-verify", "durationMs": 250}], "timestamp": "2026-10-12T16:40:14.200Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "user", "message": {"role": "user", "content": "Now update the docs."}, "timestamp": "2026-10-12T16:40:15.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "ls docs"}}]}, "timestamp": "2026-10-12T16:40:16.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t3", "content": "README.md"}]}, "timestamp": "2026-10-12T16:40:16.500Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Docs updated."}]}, "timestamp": "2026-10-12T16:40:19.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
+{"type": "system", "subtype": "stop_hook_summary", "hookCount": 1, "hookInfos": [{"command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd\" jev-hook stop-verify", "durationMs": 250}], "timestamp": "2026-10-12T16:40:20.000Z", "sessionId": "sess-1", "cwd": "/tmp/repo"}
