@@ -39,7 +39,6 @@ Run it as `jev`. The plugin's `bin/` is on the Bash tool's PATH while `superpowe
 | `jev cite <report> [--root DIR]` | `citation` |
 | `jev defect-state --ledger L --escalation F` | `defect-class` |
 | `jev bounce-state --ledger L --message F [--root DIR]` | `bounce` |
-| `jev spec-state <spec>` | `operator-tier` |
 | `jev coverage --design D --spec S [--spec S ...]` | `fidelity-coverage`. It runs the asks itself and prints the verdict JSON. |
 | `jev compat` | the installed superpowers version, and whether jev-gates' anchors apply to it |
 
@@ -52,7 +51,7 @@ For `items` and `coverage` points, record in the order of the state file you ask
 | Compare kind | Points | Shape |
 |---|---|---|
 | verdict | report-evidence, verify-stop | `{"verdict": "<value>"}` |
-| picks | tier, prompt-route, defect-class, bounce, operator-tier, surface-route | `{"picks": {"<question>": "<option>"}}` |
+| picks | tier, prompt-route, defect-class, bounce, surface-route | `{"picks": {"<question>": "<option>"}}` |
 | items | re-review, severity, diag-confidence, citation | `{"items": ["<option for item 0>", ...]}` |
 | coverage | fidelity-coverage | `{"uncovered": [i, ...], "multiply_covered": [i, ...]}` |
 
@@ -61,8 +60,10 @@ For `items` and `coverage` points, record in the order of the state file you ask
 `jev report [--since YYYY-MM-DD] [--point P]` prints, for each point:
 - calls and errors;
 - recorded verdicts;
-- agreement with Claude;
-- how often Jev was confident and wrong;
+- acted-agreement: agreement of the verdict an `on` run would act on;
+- conf-wrong: how often Jev was confident and the acted verdict was wrong;
+- abstain: confident-or-not picks where Jev acted on nothing and Claude chose something;
+- raw-agreement: Jev's own choice before floors/gates;
 - how many Claude dispatches `on` mode would have skipped.
 
 `jev report --unrecorded` lists the calls that have no Claude verdict yet. The log is `.superpowers/jev/log.jsonl` at the main checkout's root, and it is gitignored. Promote a point to `on` only after `jev report` supports it.

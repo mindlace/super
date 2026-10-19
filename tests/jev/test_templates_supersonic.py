@@ -9,16 +9,14 @@ from jevlib import schema, templates
 from jevlib.builders import spec
 from jevlib.lint import lint_template
 
-POINTS = ["defect-class", "bounce", "operator-tier", "surface-route", "fidelity-coverage", "citation"]
+POINTS = ["defect-class", "bounce", "surface-route", "fidelity-coverage", "citation"]
 ALL_POINTS = ["re-review", "severity", "tier", "report-evidence", "verify-stop", "prompt-route",
               "diag-confidence"] + POINTS
-BUDGET_RE = re.compile(r"budget|rate|limit|reserve|seven_day|five_hour|usage|headroom", re.I)
 # State fields carrying agent-written text, per point (see AGENT_FIELDS in test_templates_superpowers).
 # citation's unreadable[].claim is deliberately absent: no question references it.
 AGENT_FIELDS = {
     "defect-class": ["escalation"],
     "bounce": ["message"],
-    "operator-tier": ["spec_text"],
     "surface-route": ["event"],
     "fidelity-coverage": ["spec_text"],
     "citation": ["claims[].claim"],
@@ -110,34 +108,9 @@ class SupersonicTemplatesTest(unittest.TestCase):
         cit = templates.item_labels(support.template("citation"), support.fixture_state("citation"))
         self.assertTrue(cit[0].startswith("- parse_config returns {}"))
 
-    def test_operator_tier_state_schema_has_no_budget_field(self):
-        t = support.template("operator-tier")
-        props = t["state_schema"]["properties"]
-        self.assertEqual(sorted(props), ["interface_rows", "spec_text"])
-        self.assertFalse([k for k in props if BUDGET_RE.search(k)])
-        self.assertIs(t["state_schema"]["additionalProperties"], False)
-
-    def test_operator_tier_refuses_state_carrying_budget(self):
-        state = dict(support.fixture_state("operator-tier"), seven_day_used=91)
-        out, reqs = support.ask_point("operator-tier", state, support.ok())
-        self.assertFalse(out["enabled"])
-        self.assertIn("unexpected property 'seven_day_used'", out["reason"])
-        self.assertEqual(reqs, [])
-
     def test_tier_templates_never_name_a_model(self):
-        for p in ("tier", "operator-tier"):
+        for p in ("tier",):
             self.assertIsNone(MODEL_NAME_RE.search(json.dumps(support.template(p))), p)
-
-    def test_operator_tier_floor_keeps_capable_unless_mechanical(self):
-        out, _ = support.ask_point("operator-tier", support.fixture_state("operator-tier"),
-                                   support.ok(pick="cheap", noul=0.05))
-        self.assertEqual(out["verdict"], {"tier": "cheap"})
-        out, _ = support.ask_point("operator-tier", support.fixture_state("operator-tier"),
-                                   support.ok(pick="cheap", noul=0.5))
-        self.assertEqual(out["verdict"], {"tier": "capable"})
-        state = dict(support.fixture_state("operator-tier"), interface_rows=7)
-        out, _ = support.ask_point("operator-tier", state, support.ok(pick="cheap", noul=0.05))
-        self.assertEqual(out["verdict"], {"tier": "capable"})
 
     def test_defect_class_options(self):
         out, reqs = support.ask_point("defect-class", support.fixture_state("defect-class"),

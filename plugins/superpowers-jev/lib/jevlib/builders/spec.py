@@ -1,4 +1,4 @@
-"""Spec builders: spec-state (operator-tier) and coverage (fidelity-coverage).
+"""Spec builder: coverage (fidelity-coverage).
 
 `jev coverage` asks fidelity-coverage once per spec (each spec is its own state),
 then counts carriers per traceability requirement in code (count_exactly_one) and
@@ -11,7 +11,6 @@ from .. import ask as ask_mod
 from .. import combine, log
 from ..cli import emit
 from ..mode import resolve_mode
-from . import _run
 
 SEP_RE = re.compile(r"^\|?\s*:?-{3,}")
 
@@ -40,20 +39,11 @@ def cells(row):
     return [c.strip() for c in row.strip().strip("|").split("|")]
 
 
-def interface_rows(text):
-    return sum(len(body_rows(t)) for t in tables_under(text, lambda h: "interface" in h.lower()))
-
-
 def traceability_requirements(text):
     tables = tables_under(text, lambda h: "traceability" in h.lower())
     if not tables:
         return []
     return [cells(r)[0] for r in body_rows(tables[0]) if cells(r)[0]]
-
-
-def spec_state(path):
-    text = Path(path).read_text(encoding="utf-8")
-    return {"spec_text": text, "interface_rows": interface_rows(text)}
 
 
 def coverage(design_path, spec_paths, env, call_id=None, cwd=None, ask_fn=None):
@@ -100,9 +90,6 @@ def cmd_coverage(args, env):
 
 
 def add_parser(sub):
-    p = sub.add_parser("spec-state", help="operator-tier state: spec text + interface-row count")
-    p.add_argument("spec")
-    p.set_defaults(func=lambda a, env: _run(lambda: spec_state(a.spec)))
     p = sub.add_parser("coverage", help="fidelity-coverage across specs; always exits 0")
     p.add_argument("--design", required=True)
     p.add_argument("--spec", required=True, action="append")

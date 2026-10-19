@@ -3,7 +3,7 @@ import subprocess
 import unittest
 
 import support
-from jevlib import log
+from jevlib import cli, log
 from jevlib.builders import cite, ledger, spec
 
 FX = support.FIXTURES
@@ -43,14 +43,10 @@ class LedgerTest(unittest.TestCase):
 
 
 class SpecTest(unittest.TestCase):
-    def test_interface_rows(self):
-        self.assertEqual(spec.interface_rows((FX / "spec-a.md").read_text()), 2)
-        self.assertEqual(spec.interface_rows((FX / "spec-b.md").read_text()), 1)
-
-    def test_spec_state(self):
-        s = spec.spec_state(FX / "spec-a.md")
-        self.assertEqual(s["interface_rows"], 2)
-        self.assertTrue(s["spec_text"].startswith("# Auth spec"))
+    def test_spec_state_command_removed(self):
+        with self.assertRaises(SystemExit) as cm:
+            cli.main(["spec-state", "x"])
+        self.assertEqual(cm.exception.code, 2)
 
     def test_traceability_requirements(self):
         self.assertEqual(spec.traceability_requirements((FX / "design.md").read_text()),
@@ -95,7 +91,6 @@ class BuilderCliTest(unittest.TestCase):
             self.assertEqual(p.returncode, 0, p.stderr)
             return json.loads(p.stdout)
         self.assertEqual(len(run("cite", str(FX / "survey-report.md"), "--root", str(FX))["claims"]), 2)
-        self.assertEqual(run("spec-state", str(FX / "spec-a.md"))["interface_rows"], 2)
         self.assertEqual(len(run("defect-state", "--ledger", str(FX / "ledger.md"),
                                  "--escalation", str(FX / "spec-a.md"))["classes"]), 3)
 

@@ -226,13 +226,6 @@ is not installed, skip this section: every rule above stands unchanged.
     that operator's recorded agentId. Otherwise, ledger the message and
     take no action.
   - Record: `{"picks": {"operator": "<slug or unattributable>"}}`.
-- **operator-tier** (Operator tier). At dispatch, run `jev spec-state
-  <spec> | jev ask operator-tier --state -`. Its state holds the spec text
-  and the interface-row count only. Budget state is not in its schema, so
-  the invariant above holds.
-  - On: use a confident tier, and ledger it as `rationale: tier from jev
-    p=<confidence>`.
-  - Record: `{"picks": {"tier": "<tier you dispatched at>"}}`.
 - **surface-route** (Supervision, "Surface to your partner only"). For each
   escalation or event, run `jev state event=@<file>
   consecutive_deaths:=<n> | jev ask surface-route --state -`.
