@@ -53,7 +53,7 @@ In **shadow** mode, every point below runs the superpowers path unchanged and th
 
 ### verify-stop: "## The Iron Law", "## The Gate Function", "## Common Failures" (SKILL.md:14-48)
 
-This point runs automatically as a Stop hook. When the hook blocks with "Jev verify-stop", follow "## The Gate Function": run the command that proves the claim and show its output, or state the actual status. Label calls by hand: run `jev report --point verify-stop --unrecorded`, then `jev record <id> '{"verdict": "block"}'` or `'{"verdict": "allow"}'`.
+This point runs automatically as a Stop hook. When the hook blocks with "Jev verify-stop", follow "## The Gate Function": run the command that proves the claim and show its output, or state the actual status. The hook logs the judged state (your last message and the commands since your last edit). Label calls blind: `jev label verify-stop` prints one JSON object per unrecorded call (`call_id`, `ts`, `state`). Give `block` only if `last_message` claims completion, a fix, or passing AND no `commands_since_last_edit` output checks that claim; otherwise `allow`. Write one JSONL line `{"call_id": ..., "verdict": ...}` per call, then run `jev label verify-stop --apply <file>`. Calls from before state was logged need `jev recover-states verify-stop` first.
 
 ## diagnosing-superpowers
 

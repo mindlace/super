@@ -16,21 +16,24 @@ LAST_MESSAGE_CHARS = 4000
 TAIL_BYTES = 256 * 1024   # a Stop hook only needs the current turn; never read a whole long session
 
 
-def _read_tail(path):
+def _read_tail(path, tail_bytes=TAIL_BYTES):
     with open(path, "rb") as fh:
+        if tail_bytes is None:
+            return fh.read().decode("utf-8", errors="replace")
         size = fh.seek(0, 2)
-        fh.seek(max(0, size - TAIL_BYTES))
+        fh.seek(max(0, size - tail_bytes))
         data = fh.read()
-    if size > TAIL_BYTES:
+    if size > tail_bytes:
         data = data.split(b"\n", 1)[1] if b"\n" in data else b""   # drop the cut first line
     return data.decode("utf-8", errors="replace")
 
 
-def load(path):
+def load(path, tail_bytes=TAIL_BYTES):
+    """Entries from the last `tail_bytes` of the transcript; None reads the whole file."""
     if not path:
         return []
     try:
-        text = _read_tail(path)
+        text = _read_tail(path, tail_bytes)
     except OSError:
         return []
     out = []

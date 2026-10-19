@@ -58,6 +58,8 @@ The `session-start` hook sends nothing. Every request and answer is also written
 
 To keep skill points and stop the hooks, set `SUPERPOWERS_JEV_HOOKS=off`. To keep the hooks off and still send nothing from skills, remove the key (unset `TYPESAFE_API_KEY` and delete the key file) or set `SUPERPOWERS_JEV=off`, which turns every path off: hooks, skill points, and `jev ask`. Disabling or uninstalling the plugin also stops everything.
 
+After each `verify-stop` call the hook also logs a `state` entry locally: the judged last message, the commands since the last edit with their output tails, plus the session id, transcript path, and source. It is stored only in the gitignored log and is not sent anywhere else. `jev label verify-stop` reads it so you can label calls blind, and `jev recover-states verify-stop` rebuilds it for older calls from the transcripts in `~/.claude/projects/`.
+
 In shadow mode, Jev's verdict is logged next to Claude's in `.superpowers/jev/log.jsonl`, at the main checkout's root, and nothing acts on it. `jev report` prints per-point agreement, the confident-and-wrong rate, and the Claude dispatches that `on` mode would have skipped.
 
 Locating the main checkout's root needs git 2.31 or newer (`rev-parse --path-format=absolute`). With older git, in a submodule, or in a bare repo, there is no main checkout to find, and the log falls back to `$HOME/.superpowers/jev/log.jsonl`.

@@ -22,7 +22,7 @@ check_frontmatter "$gates" jev-gates
 grep -qF '../../bin/jev' "$jev" || fail "jev skill must give the path <base>/../../bin/jev"
 for c in 'jev ask' 'jev record' 'jev report' 'jev mode' 'jev compat' 'jev state' 'jev rereview-state' \
          'jev findings-state' 'jev diff-state' 'jev diag-state' 'jev cite' 'jev defect-state' \
-         'jev bounce-state' 'jev spec-state' 'jev coverage' 'SUPERPOWERS_JEV_ON' '"enabled": false'; do
+         'jev bounce-state' 'jev spec-state' 'jev coverage' 'jev label' 'jev recover-states' 'SUPERPOWERS_JEV_ON' '"enabled": false'; do
   grep -qF -- "$c" "$jev" || fail "jev skill never mentions: $c"
 done
 
