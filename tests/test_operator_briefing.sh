@@ -42,6 +42,7 @@ require 'The kept commits stand and are not redone'
 require 'existing code'
 require 'covering only what remains after the kept'
 
+forbid 'with a pointer to'
 forbid 'message `main`'
 forbid 'to `main`'
 

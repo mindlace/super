@@ -111,7 +111,8 @@ row. You may not decide these yourself, however obvious the default looks.
 ## Rulings
 
 A ruling reaches you from `<conductor name>` as the current state of the spec: "the spec
-now says X, re-read section Y", with a pointer to `<ledger dir>/rulings/<id>.md`.
+now says X, re-read section Y", naming the ruling id for traceability. Do not open the ruling
+file or anything under `rulings/`: the spec states the answer.
 
 1. Re-read the named sections in `<package worktree>`. That text is the authority, not the
    message and not the ruling file.
