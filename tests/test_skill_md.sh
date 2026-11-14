@@ -77,6 +77,12 @@ skill_list=$(sed -n 's/.*claude --bg -n <design-slug>-<unit-slug> .*--allowedToo
 drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
 [ -n "$skill_list" ] && [ "$skill_list" = "$drill_list" ] \
   || { echo "FAIL: drill op_tools does not mirror the skill's launch list"; printf '%s\n%s\n' "$skill_list" "$drill_list"; exit 1; }
+# The live drill checks what beat.sh and the skill assume about real sessions.
+for s in 'fork drill-limit env -C' 'fork drill-normal env -C' 'claude logs "$opid"' 'claude logs "$op2id"' \
+         'run_in_background true' 'TaskStop' 'beat.sh changed' 'drill-$pid-nobody' 'sleep-woke.txt' 'msg-read.txt' \
+         'grep -qw busy' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
+  grep -qF -- "$s" "$drill" || { echo "FAIL: live drill lacks: $s"; exit 1; }
+done
 for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
          'rate-limits.json' 'defer-only' 'specs completed'; do
   forbid "$s"

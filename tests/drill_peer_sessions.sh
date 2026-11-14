@@ -1,11 +1,27 @@
 #!/bin/sh
 # Live drill of the peer-session mechanisms. Gated on SUPERSONIC_LIVE=1.
-# Prints PASS:/FAIL: <step>; exits non-zero on any FAIL.
+# Prints PASS:/FAIL:/OBSERVED: <step>; exits non-zero on any FAIL. The whole run is appended,
+# dated, to tests/peer-session-drill-result.txt.
+# Cost and time: four `claude --bg` sessions and five `claude -p` runs, all on haiku with
+# trivial prompts (plus two haiku subagents inside one session). Every wait has its own
+# deadline; a run takes about 10 minutes and never more than 25 (DRILL_DEADLINE). Every
+# session, worktree and process group it starts is stopped or removed on exit.
 if [ "${SUPERSONIC_LIVE:-}" != "1" ]; then
   echo "SKIP: set SUPERSONIC_LIVE=1 to run the live peer-session drill"
   exit 0
 fi
+if [ -z "${DRILL_TEED:-}" ]; then
+  here=$(cd "$(dirname "$0")" && pwd -P)
+  out=$(mktemp)
+  DRILL_TEED=1 sh "$here/$(basename "$0")" "$@" 2>&1 | tee "$out"
+  rc=$(sed -n 's/^DRILL-EXIT: //p' "$out" | tail -n 1)
+  { printf '\nDrill run %s\n' "$(date '+%Y-%m-%d %H:%M')"; grep -v '^DRILL-EXIT: ' "$out"; } >> "$here/peer-session-drill-result.txt"
+  rm -f "$out"
+  exit "${rc:-1}"
+fi
 set -u
+DRILL_DEADLINE=$(( $(date +%s) + 1500 ))
+observed() { echo "OBSERVED: $1"; }
 fails=0
 pass() { echo "PASS: $1"; }
 fail() { echo "FAIL: $1"; fails=$((fails + 1)); }
@@ -30,6 +46,7 @@ for a in json.load(sys.stdin):
 }
 cleanup() {
   for id in $(drill_ids); do claude stop "$id" >/dev/null 2>&1; done
+  for f in "$scratch"/ledger/prompts/*.pid; do [ -f "$f" ] && pkill -KILL -g "$(cat "$f")" 2>/dev/null; done
   cd "$main" 2>/dev/null || cd /
   git -C "$main" worktree remove --force "$wt" >/dev/null 2>&1
   git -C "$main" branch -D "$branch" >/dev/null 2>&1
@@ -184,10 +201,114 @@ for a in json.load(sys.stdin): keys|=set(a)
 print("INFO agents --json keys:", sorted(keys))
 print("INFO agents --json usage field:", any("usage" in k or "token" in k for k in keys))'
 
+# --- stall detection: the facts beat.sh and the skill rely on ---
+# Copies of beat.sh with short fork limits bound every claude command below.
+fast="$scratch/beat-20.sh"; kill3="$scratch/beat-3.sh"; long="$scratch/beat-300.sh"
+sed 's/^FORK_LIMIT=2700$/FORK_LIMIT=20/' "$skill/beat.sh" > "$fast"
+sed 's/^FORK_LIMIT=2700$/FORK_LIMIT=3/' "$skill/beat.sh" > "$kill3"
+sed 's/^FORK_LIMIT=2700$/FORK_LIMIT=300/' "$skill/beat.sh" > "$long"
+mkdir -p "$ledger/prompts"
+agent_field() { # agent_field <name> <field>
+  claude agents --json 2>/dev/null | python3 -c '
+import json,sys
+for a in json.load(sys.stdin):
+    if a.get("name")==sys.argv[1]: print(a.get(sys.argv[2])); break' "$1" "$2"
+}
+until_file() { # until_file <path> <seconds>: wait for a file, bounded by the drill deadline
+  end=$(( $(date +%s) + $2 )); [ "$end" -gt "$DRILL_DEADLINE" ] && end=$DRILL_DEADLINE
+  while [ ! -s "$1" ] && [ "$(date +%s)" -lt "$end" ]; do sleep 2; done
+  [ -s "$1" ]
+}
+mt() { perl -e 'print((stat shift)[9] // "")' "$1"; }
+
+# 2a. claude logs on a running --bg session (the rung-2 investigation reads it).
+opid=$(agent_field "$op" id)
+sh "$fast" "$ledger" fork logs-running claude logs "$opid" >"$scratch/logs-running.out" 2>&1; rc=$?
+observed "claude logs <running short id>: exit $rc (124 = still streaming at 20 s), $(wc -l < "$scratch/logs-running.out" | tr -d ' ') lines, first: $(head -c 100 "$scratch/logs-running.out" | tr '\n' ' ')"
+if [ -s "$scratch/logs-running.out" ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; }; then pass "logs of a running session"; else fail "logs of a running session (exit $rc)"; fi
+
+# 3. claude -p under beat.sh fork: the limit stops it and its whole group; a normal exit leaves nothing.
+t0=$(date +%s)
+sh "$kill3" "$ledger" fork drill-limit env -C "$wtp" claude -p --model haiku --allowedTools="Read" \
+  "Write a numbered list of 300 short lines about rivers." </dev/null >"$scratch/limit.out" 2>&1; rc=$?
+el=$(( $(date +%s) - t0 )); sleep 2
+lim_left=$(pgrep -g "$(cat "$ledger/prompts/drill-limit.pid")" 2>/dev/null | wc -l | tr -d ' ')
+observed "claude -p under a 3 s limit: exit $rc after ${el}s; processes left in its group: $lim_left"
+if [ "$rc" -eq 124 ] && [ "$lim_left" -eq 0 ]; then pass "fork limit stops claude -p and its group"; else fail "fork limit (exit $rc, $lim_left left)"; fi
+sh "$long" "$ledger" fork drill-normal env -C "$wtp" claude -p --model haiku --allowedTools="Read" \
+  "Reply with the single word OK." </dev/null >"$scratch/normal.out" 2>&1; rc=$?
+sleep 2
+norm_left=$(pgrep -g "$(cat "$ledger/prompts/drill-normal.pid")" 2>/dev/null | wc -l | tr -d ' ')
+observed "claude -p normal exit under the watchdog: exit $rc, output '$(head -c 40 "$scratch/normal.out" | tr '\n' ' ')', processes left in its group: $norm_left"
+if [ "$rc" -eq 0 ] && [ "$norm_left" -eq 0 ]; then pass "normal fork exit leaves no process"; else fail "normal fork exit (exit $rc, $norm_left left)"; fi
+
+# 4. A --bg operator launched with the skill's exact launch form: background Agent, TaskStop,
+#    beat.sh changed timing, SendMessage to a missing name, a background sleep's wake, and a
+#    message read while that sleep runs. Its session list status is sampled all along (1).
+op2="drill-$pid-op2"; cond2="drill-$pid-cond2"; o="$wtp/op2"; mkdir -p "$o"
+cat > "$scratch/op2.txt" <<PROMPT
+You are the session named $op2. You are already in worktree $wtp; that satisfies the worktree rule; do not create another. Do these steps in order, writing every file with the Write tool, each containing only what it says.
+1. Dispatch a subagent with the Agent tool, model haiku, run_in_background true, prompt: "Reply with the single word LEAF. Your final message is your report; do not use SendMessage." Write $o/agent-dispatched.txt containing the agentId the dispatch returned. Whenever its completion notification arrives, write $o/agent-result.txt containing its result.
+2. Dispatch a second subagent with the Agent tool, model haiku, run_in_background true, prompt: "Run the Bash command sleep 200, then reply DONE. Your final message is your report; do not use SendMessage." Then stop it with the TaskStop tool. Write $o/taskstop.txt containing the text TaskStop returned.
+3. Write $o/before-changed.txt containing X. Run the Bash command: sh $skill/beat.sh changed $ledger/op2.stretch
+   Then write $o/after-changed.txt containing the word RAN and any error text the command returned.
+4. Call SendMessage to the name drill-$pid-nobody with the text "ping; reply if you exist". Write $o/sendfail.txt containing exactly the result or error text SendMessage returned.
+5. Write $o/sleeping.txt containing X. Run the Bash command sleep 45 with run_in_background true. Then end your turn.
+6. When a message from $cond2 arrives, write $o/msg-read.txt containing its text, then end your turn.
+7. When the background sleep's exit wakes you, write $o/sleep-woke.txt containing WOKE, then end your turn.
+PROMPT
+env -C "$wtp" claude --bg -n "$op2" --model haiku --permission-mode acceptEdits --allowedTools="$op_tools" --add-dir="$ledger" "$(cat "$scratch/op2.txt")" >"$scratch/launch-$op2.log" 2>&1 </dev/null
+( end=$(( $(date +%s) + 420 )); while [ "$(date +%s)" -lt "$end" ] && [ ! -s "$o/sleep-woke.txt" ]; do
+    agent_field "$op2" status; agent_field "$op2" state; sleep 2; done ) | sort | uniq -c > "$scratch/op2-states.txt" &
+sampler=$!
+until_file "$o/sleeping.txt" 300 || fail "op2 never reached its background sleep (files: $(ls "$o" | tr '\n' ' '))"
+if [ -s "$o/sleeping.txt" ]; then
+  cat > "$scratch/cond2.txt" <<PROMPT
+You are the session named $cond2. Call SendMessage to $op2 (by name), text exactly: "Write the word HEARD into msg-read.txt as your instructions say." Then end your turn.
+PROMPT
+  env -C "$wtp" claude --bg -n "$cond2" --model haiku --permission-mode acceptEdits --allowedTools="SendMessage" "$(cat "$scratch/cond2.txt")" >"$scratch/launch-$cond2.log" 2>&1 </dev/null
+fi
+until_file "$o/sleep-woke.txt" 180
+until_file "$o/agent-result.txt" 30
+wait "$sampler" 2>/dev/null
+idle=$(agent_field "$op2" status)/$(agent_field "$op2" state)
+op2id=$(agent_field "$op2" id)
+observed "op2 session list status/state counts while working (2 s samples): $(tr '\n' ';' < "$scratch/op2-states.txt" | tr -s ' ')"
+observed "op2 status/state once idle: $idle"
+if grep -qw busy "$scratch/op2-states.txt"; then pass "the session list says busy while working (beat.sh looks for the word busy)"; else fail "the word busy never appeared in status/state while op2 worked; beat.sh's busy rule needs the word observed above"; fi
+if [ -s "$o/agent-dispatched.txt" ] && grep -q LEAF "$o/agent-result.txt" 2>/dev/null; then pass "background Agent dispatch returned its id and then its result"
+else fail "background Agent (dispatched: $(cat "$o/agent-dispatched.txt" 2>/dev/null); result: $(cat "$o/agent-result.txt" 2>/dev/null))"; fi
+observed "TaskStop result: $(head -c 160 "$o/taskstop.txt" 2>/dev/null | tr '\n' ' ')"
+[ -s "$o/taskstop.txt" ] && ! grep -qi -e 'error' -e 'not found' -e 'denied' "$o/taskstop.txt" && pass "TaskStop stopped a background child" || fail "TaskStop (see OBSERVED)"
+if [ -s "$o/before-changed.txt" ] && [ -s "$o/after-changed.txt" ]; then
+  dt=$(( $(mt "$o/after-changed.txt") - $(mt "$o/before-changed.txt") ))
+  observed "beat.sh changed: ${dt}s between the files around it; said: $(head -c 120 "$o/after-changed.txt" | tr '\n' ' ')"
+  [ "$dt" -lt 60 ] && pass "beat.sh changed ran without a permission stall (${dt}s)" || fail "beat.sh changed took ${dt}s (a stall is ~120 s)"
+else fail "beat.sh changed step not reached"; fi
+observed "SendMessage to a missing name returned: $(head -c 200 "$o/sendfail.txt" 2>/dev/null | tr '\n' ' ')"
+[ -s "$o/sendfail.txt" ] && pass "SendMessage to a missing name reported something (see OBSERVED)" || fail "SendMessage to a missing name: nothing recorded"
+if [ -s "$o/sleep-woke.txt" ]; then pass "a background sleep's exit woke the operator"; else fail "background sleep exit did not wake the operator"; fi
+if [ -s "$o/msg-read.txt" ] && [ -s "$o/sleep-woke.txt" ] && [ "$(mt "$o/msg-read.txt")" -le "$(mt "$o/sleep-woke.txt")" ]; then
+  pass "a message was read while the background sleep ran ($(( $(mt "$o/msg-read.txt") - $(mt "$o/sleeping.txt") ))s after the stretch began)"
+else fail "message during the stretch (msg-read: $(cat "$o/msg-read.txt" 2>/dev/null); woke: $(cat "$o/sleep-woke.txt" 2>/dev/null))"; fi
+
 # --- stop ---
 claude stop "$op" >"$scratch/stop-op.log" 2>&1; echo "INFO stop by name ($op): exit $? $(head -c 120 "$scratch/stop-op.log")"
 for id in $(drill_ids); do claude stop "$id" >/dev/null 2>&1; done
 sleep 2
 if [ -z "$(drill_ids)" ]; then pass stop; else fail "stop (still listed: $(drill_ids))"; fi
+# 1b. Is a stopped session still listed, and with what status? (beat.sh reads "absent" as dead.)
+observed "stopped sessions still listed: $(claude agents --json 2>/dev/null | python3 -c '
+import json,sys
+p=sys.argv[1]; m=[(a.get("name"),a.get("status"),a.get("state")) for a in json.load(sys.stdin) if (a.get("name") or "").startswith(p)]
+print(m if m else "none")' "drill-$pid-")"
+# 2b. claude logs on a stopped --bg session (the rung-2 investigation reads it).
+if [ -n "${op2id:-}" ]; then
+  sh "$fast" "$ledger" fork logs-stopped claude logs "$op2id" >"$scratch/logs-stopped.out" 2>&1; rc=$?
+  observed "claude logs <stopped short id>: exit $rc, $(wc -l < "$scratch/logs-stopped.out" | tr -d ' ') lines, first: $(head -c 100 "$scratch/logs-stopped.out" | tr '\n' ' ')"
+  if [ -s "$scratch/logs-stopped.out" ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; }; then pass "logs of a stopped session"
+  else fail "logs of a stopped session (exit $rc; the investigation then falls back to the worktree)"; fi
+fi
 
+echo "DRILL-EXIT: $([ "$fails" -eq 0 ] && echo 0 || echo 1)"
 [ "$fails" -eq 0 ]
