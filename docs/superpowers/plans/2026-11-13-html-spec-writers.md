@@ -267,7 +267,7 @@ git commit -m "feat(supersonic): compose design docs and specs in the HTML spec 
 **Files:**
 - Create: `plugins/superpowers-html/.claude-plugin/plugin.json` (name `superpowers-html`, version `0.1.0`, author/homepage/repository/license as in `plugins/superpowers-jev/.claude-plugin/plugin.json`)
 - Create: `plugins/superpowers-html/hooks/hooks.json` (SessionStart only, matcher `startup|clear|compact`, command `"${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd" html-hook session-start`, timeout `10`; as `plugins/superpowers-jev/hooks/hooks.json:3-14`)
-- Create: `plugins/superpowers-html/hooks/run-hook.cmd` (byte copy of `plugins/superpowers-jev/hooks/run-hook.cmd`; builder's call: the no-duplicates rule covers only the format reference, and a cross-plugin symlink would make the hook depend on superpowers-jev being installed)
+- Create: `plugins/superpowers-html/hooks/run-hook.cmd` (a relative symlink to `../../superpowers-jev/hooks/run-hook.cmd`, not a copy: no duplicates are maintained, and a symlink is copied into the installed plugin when the marketplace is cloned, so superpowers-html does not need superpowers-jev installed. `tests/test_format_links.sh` also asserts this link resolves to that file)
 - Create: `plugins/superpowers-html/hooks/html-hook` (as `plugins/superpowers-jev/hooks/jev-hook:1-16`, running `python3 "$PLUGIN_ROOT/bin/superpowers-html" hook "${1:-}" 2>/dev/null || true; exit 0`)
 - Create: `plugins/superpowers-html/bin/superpowers-html` (as `plugins/superpowers-jev/bin/jev:1-16`; import failure → message on stderr, exit 1)
 - Create: `plugins/superpowers-html/lib/sphtml/__init__.py`, `cli.py`, `upstream.py`, `hook.py`
