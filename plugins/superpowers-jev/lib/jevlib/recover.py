@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import ctx, log
+from . import ctx, log, state as state_mod
 from .builders import transcript
 
 HOOK_MARK = "stop-verify"
@@ -53,22 +53,27 @@ def _in_root(cwd, root):
     return isinstance(cwd, str) and (cwd == root or cwd.startswith(root + "/"))
 
 
-def stop_summaries(projects_dir, root):
+def stop_summaries(projects_dir, root, extra_paths=()):
     """[{at, session_id, transcript_path, index}] for every verify-stop Stop hook run
-    under `root` (worktrees included), from top-level session transcripts only."""
+    under `root` (worktrees included), from top-level session transcripts only.
+    `extra_paths` are scanned too, without the cwd filter, deduped by path."""
     root = str(root).rstrip("/") or "/"
-    out = []
-    for d in _project_dirs(projects_dir, root):
-        for path in sorted(d.glob("*.jsonl")):
-            for i, entry in enumerate(transcript.load(str(path), tail_bytes=None)):
-                if not _is_stop_verify(entry) or not _in_root(entry.get("cwd"), root):
-                    continue
-                try:
-                    at = parse_ts(entry.get("timestamp"))
-                except (TypeError, ValueError):
-                    continue
-                out.append({"at": at, "session_id": entry.get("sessionId") or path.stem,
-                            "transcript_path": str(path), "index": i})
+    out, seen = [], set()
+    scan = [(p, True) for d in _project_dirs(projects_dir, root) for p in sorted(d.glob("*.jsonl"))]
+    scan += [(Path(p), False) for p in extra_paths]
+    for path, filtered in scan:
+        if str(path) in seen:
+            continue
+        seen.add(str(path))
+        for i, entry in enumerate(transcript.load(str(path), tail_bytes=None)):
+            if not _is_stop_verify(entry) or (filtered and not _in_root(entry.get("cwd"), root)):
+                continue
+            try:
+                at = parse_ts(entry.get("timestamp"))
+            except (TypeError, ValueError):
+                continue
+            out.append({"at": at, "session_id": entry.get("sessionId") or path.stem,
+                        "transcript_path": str(path), "index": i})
     out.sort(key=lambda s: s["at"])
     return out
 
@@ -118,10 +123,18 @@ def recover(env, root, projects_dir, point="verify-stop"):
     for e in entries:
         if e.get("type") == "call" and e.get("point") == point and not e.get("error"):
             calls[e.get("call_id")] = e
-    pending = [cid for cid in calls if cid not in states]
+    pending = [cid for cid in calls if cid not in states and not calls[cid].get("state_sha")]
     if not pending:
         return {"recovered": 0, "unmatched": [], "ambiguous": []}
-    summaries = stop_summaries(Path(projects_dir), root)
+    extra = []
+    for cid in pending:
+        c = (calls[cid].get("ctx") or {})
+        sid = c.get("session_id")
+        if sid:
+            found = transcript.locate(sid, c.get("transcript_path"), projects_dir)
+            if found and found not in extra:
+                extra.append(found)
+    summaries = stop_summaries(Path(projects_dir), root, extra)
     matched, unmatched, ambiguous = _match(list(calls.values()), summaries, (-1, 15))
     cache, recovered = {}, 0
     for cid in pending:
@@ -133,7 +146,12 @@ def recover(env, root, projects_dir, point="verify-stop"):
             cache[path] = transcript.load(path, tail_bytes=None)
         before = cache[path][:s["index"]]
         state = transcript.stop_state(before, transcript.last_assistant_text(before))
-        log.append(log.state_entry(cid, state, s["session_id"], path, "recovered"), env, root)
+        sha = state_mod.safe_write(state, env, root)
+        if sha:
+            entry = log.state_ref_entry(cid, sha, s["session_id"], path, "recovered")
+        else:
+            entry = log.state_entry(cid, state, s["session_id"], path, "recovered")
+        log.append(entry, env, root)
         recovered += 1
     keep = set(pending)
     return {"recovered": recovered,
@@ -146,8 +164,7 @@ def cmd_recover_states(args, env):
     if not root:
         sys.stderr.write("jev recover-states: not in a git repo; pass --root\n")
         return 2
-    projects = args.projects_dir or (
-        Path(env.get("HOME") or os.path.expanduser("~")) / ".claude" / "projects")
+    projects = args.projects_dir or transcript.projects_dir(env)
     res = recover(env, str(root), Path(projects), args.point)
     sys.stdout.write(json.dumps(res, ensure_ascii=False) + "\n")
     return 0

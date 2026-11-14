@@ -6,31 +6,53 @@ Applying a JSONL file of {"call_id", "verdict"} lines writes ordinary `record` e
 import json
 import sys
 
-from . import log, report
+from . import log, report, state as state_mod
+from .builders import transcript
 
 VERDICTS = ("block", "allow")
 
 
-def unlabeled(entries, point="verify-stop", since=None):
-    """([{call_id, ts, state}] unrecorded non-error calls of `point` with state, sorted by ts;
-    count of unrecorded calls lacking state)."""
-    recorded = {e.get("call_id") for e in entries if e.get("type") == "record"}
-    states = log.states_by_call(entries)
+def _ctx(call, st, projects_dir):
+    """The call's ctx (legacy: session/transcript from its latest state entry), with the
+    transcript path resolved through transcript.locate."""
+    if isinstance(call.get("ctx"), dict):
+        ctx = dict(call["ctx"])
+    elif st:
+        ctx = {"session_id": st.get("session_id"), "transcript_path": st.get("transcript_path")}
+    else:
+        ctx = {}
+    sid = ctx.get("session_id")
+    if sid:
+        found = transcript.locate(sid, ctx.get("transcript_path"), projects_dir)
+        if found:
+            ctx["transcript_path"] = found
+    return ctx
+
+
+def unlabeled(entries, point="verify-stop", since=None, log_dir=None, projects_dir=None):
+    """([{call_id, ts, state, ctx}] non-error calls of `point` with state and no blind_label
+    record, sorted by ts; count of such calls lacking state). In-session and auto-hook
+    records do not exclude a call: blind labels are collected for them too."""
     calls = {}
     for e in entries:
         if e.get("type") == "call":
             calls[e.get("call_id")] = e
+    labeled = {e.get("call_id") for e in entries
+               if e.get("type") == "record" and report.record_source(e, calls) == "blind_label"}
+    states = log.states_by_call(entries)
+    get = state_mod.loader(entries, log_dir)
     rows, missing = [], 0
     for cid, c in calls.items():
-        if c.get("point") != point or c.get("error") or cid in recorded:
+        if c.get("point") != point or c.get("error") or cid in labeled:
             continue
         if since and (c.get("ts") or "")[:10] < since:
             continue
-        st = states.get(cid)
+        st = get(cid)
         if st is None:
             missing += 1
             continue
-        rows.append({"call_id": cid, "ts": c.get("ts"), "state": st.get("state")})
+        rows.append({"call_id": cid, "ts": c.get("ts"), "state": st,
+                     "ctx": _ctx(c, states.get(cid), projects_dir)})
     rows.sort(key=lambda r: r["ts"] or "")
     return rows, missing
 
@@ -89,7 +111,8 @@ def cmd_label(args, env):
         for msg in errors:
             sys.stderr.write(msg + "\n")
         return 1 if errors else 0
-    rows, missing = unlabeled(entries, args.point, args.since)
+    rows, missing = unlabeled(entries, args.point, args.since, log.log_dir(env, args.root),
+                           transcript.projects_dir(env))
     for r in rows:
         sys.stdout.write(json.dumps(r, ensure_ascii=False) + "\n")
     if missing:
