@@ -5,7 +5,7 @@ Ledger format: supersonic skills/superconductor/SKILL.md "## Ledger format".
 import re
 from pathlib import Path
 
-from . import _run
+from . import _run, htmldoc
 
 SPEC_LINE_RE = re.compile(r"^-\s+(?P<slug>[a-z0-9][a-z0-9-]*):\s+(?P<spec>\S+)\s+[—–-]+\s+status:\s*(?P<status>[a-z]+)")
 TALLY_RE = re.compile(r"^-\s+(?P<slug>[a-z0-9][a-z0-9-]*):\s*\d+")
@@ -36,11 +36,22 @@ def defect_classes(ledger_text):
     return seen
 
 
+def _html_summary(path, html):
+    title = htmldoc.title(html)
+    if title is None:
+        return ("%s (no h1)" % path)[:SUMMARY_CHARS]
+    goal = next((" ".join(s["text"].split()) for s in htmldoc.sections(html)
+                 if s["heading"].lower() == "goal"), "")
+    return ("%s: %s" % (title, goal) if goal else title)[:SUMMARY_CHARS]
+
+
 def spec_summary(path):
     try:
         text = Path(path).read_text(encoding="utf-8")
     except OSError:
         return str(path)
+    if Path(path).suffix == ".html":
+        return _html_summary(path, text)
     title = next((l[2:].strip() for l in text.splitlines() if l.startswith("# ")), str(path))
     goal = " ".join(l.strip() for l in section(text, "Goal") if l.strip())
     return ("%s: %s" % (title, goal) if goal else title)[:SUMMARY_CHARS]

@@ -11,6 +11,7 @@ from .. import ask as ask_mod
 from .. import combine, ctx, log, state as state_mod
 from ..cli import emit
 from ..mode import resolve_mode
+from . import htmldoc
 
 SEP_RE = re.compile(r"^\|?\s*:?-{3,}")
 
@@ -46,20 +47,102 @@ def traceability_requirements(text):
     return [cells(r)[0] for r in body_rows(tables[0]) if cells(r)[0]]
 
 
+HEADING_RE = re.compile(r"^(#{1,4})\s+(.*\S)\s*$")
+
+
+def md_sections(text):
+    """Markdown as the shared section shape: split on ATX headings (# to ####).
+
+    Lines inside a ``` fence are text (kept verbatim), never headings or tables. Pipe tables
+    become tables (first row is the header, separator rows dropped, id None, caption "").
+    Text before the first heading is an entry with heading "" and path [], only when non-empty.
+    """
+    out = [{"id": None, "heading": "", "path": [], "lines": [], "tables": []}]
+    stack, fenced, table = [], False, None
+    for line in text.splitlines():
+        cur = out[-1]
+        if line.lstrip().startswith("```"):
+            fenced, table = not fenced, None
+            cur["lines"].append(line)
+        elif fenced:
+            cur["lines"].append(line)
+        elif m := HEADING_RE.match(line):
+            level, heading = len(m.group(1)), m.group(2)
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            stack.append((level, heading))
+            out.append({"id": None, "heading": heading, "path": [h for _, h in stack],
+                        "lines": [], "tables": []})
+            table = None
+        elif line.lstrip().startswith("|"):
+            if table is None:
+                table = {"id": None, "caption": "", "header": None, "rows": []}
+                cur["tables"].append(table)
+            if SEP_RE.match(line.strip()):
+                continue
+            row = cells(line)
+            if table["header"] is None:
+                table["header"] = row
+            else:
+                table["rows"].append(row)
+        else:
+            table = None
+            collapsed = " ".join(line.split())
+            if collapsed:
+                cur["lines"].append(collapsed)
+    result = []
+    for k, e in enumerate(out):
+        item = {"id": None, "heading": e["heading"], "path": e["path"], "text": "\n".join(e["lines"])}
+        if e["tables"]:
+            item["tables"] = e["tables"]
+        if k or item["text"] or e["tables"]:
+            result.append(item)
+    return result
+
+
+def spec_sections(path):
+    """Sections of a spec file: `.html` through htmldoc, anything else as markdown."""
+    text = Path(path).read_text(encoding="utf-8")
+    return htmldoc.sections(text) if Path(path).suffix == ".html" else md_sections(text)
+
+
+def html_traceability_requirements(html):
+    """First cell of each body row of the first table (in sections() order) whose caption or
+    owning section heading contains "traceability"; None when there is no such table."""
+    for sec in htmldoc.sections(html):
+        for table in sec.get("tables", []):
+            if "traceability" in (table["caption"] + "\n" + sec["heading"]).lower():
+                return [r[0] for r in table["rows"] if r and r[0]]
+    return None
+
+
+def requirements(path):
+    text = Path(path).read_text(encoding="utf-8")
+    if Path(path).suffix != ".html":
+        return traceability_requirements(text)
+    reqs = html_traceability_requirements(text)
+    if reqs is None:
+        raise ValueError("no traceability table in %s (looked for a table whose caption or "
+                         "section heading contains 'traceability')" % path)
+    return reqs
+
+
 def coverage(design_path, spec_paths, env, call_id=None, cwd=None, ask_fn=None):
     ask_fn = ask_fn or ask_mod.ask
     mode = resolve_mode(env, "fidelity-coverage")
     if mode == "off":
         return ask_mod.disabled("mode off")
-    reqs = traceability_requirements(Path(design_path).read_text(encoding="utf-8"))
+    try:
+        reqs = requirements(design_path)
+    except ValueError as exc:
+        return ask_mod.disabled(str(exc))
     if not reqs:
         return ask_mod.disabled("no traceability table rows in %s" % design_path)
     call_id = call_id or ask_mod.new_call_id()
     carriers, raws, confident, version = {}, {}, True, None
-    specs = {str(s): Path(s).read_text(encoding="utf-8") for s in spec_paths}
-    blobs = {}   # one blob per spec text: a combined blob would truncate past the size cap
+    blobs = {}   # one blob per spec: a combined blob would truncate past the size cap
     for k, spec in enumerate(spec_paths):
-        state = {"requirements": reqs, "spec_text": specs[str(spec)]}
+        state = {"requirements": reqs, "spec_sections": spec_sections(spec)}
         blobs[str(spec)] = state_mod.safe_write(state, env, cwd)
         res = ask_fn("fidelity-coverage", state, env, call_id="%s.s%d" % (call_id, k),
                      cwd=cwd, write_log=False)

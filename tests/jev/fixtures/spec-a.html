@@ -1,0 +1,18 @@
+<article>
+  <header><h1>Auth spec</h1></header>
+  <section id="sec-goal"><h2>Goal</h2><p>Validate session tokens in middleware for every route.</p></section>
+  <section id="sec-interfaces"><h2>Interface rows</h2>
+    <table id="tbl-interfaces"><caption>Interface rows</caption>
+      <thead><tr><th scope="col">Producer</th><th scope="col">Consumer</th><th scope="col">Signature</th></tr></thead>
+      <tbody><tr><td>auth</td><td>billing</td><td>verify(token) -&gt; User</td></tr>
+        <tr><td>auth</td><td>search</td><td>current_user() -&gt; User</td></tr></tbody>
+    </table>
+  </section>
+  <section id="sec-flow"><h2>Flow</h2>
+    <figure id="fig-flow"><svg class="diagram" viewBox="0 0 300 60" role="img"><title>Token flow</title>
+      <g class="node" id="n-client"><rect x="0" y="0" width="80" height="40"/><text x="40" y="20">client</text></g>
+      <g class="node" id="n-mw"><rect x="200" y="0" width="80" height="40"/><text x="240" y="20">middleware</text></g>
+      <g class="edge" data-from="n-client" data-to="n-mw"><path d="M80 20H198"/><text x="140" y="14">token</text></g>
+    </svg><figcaption>Figure 1. Tokens pass through middleware.</figcaption></figure>
+  </section>
+</article>
