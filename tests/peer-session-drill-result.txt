@@ -2,7 +2,7 @@ Peer-session mechanism drill — 2026-11-13
 claude --version: 2.1.325 (Claude Code)
 Script: SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh
 Result: PASS spawn, PASS message (op-done after 5s; no idle notice recorded), PASS checkpoint, PASS fork, PASS stop
-Step 5 (interactive claude -n drill-cond-i receives a --bg SendMessage by name): not run — controller to fill
+Step 5 (interactive session receives a --bg SendMessage by name): PASS — controller-run 2026-11-13: `claude --bg -n namecheck-73 --model haiku --permission-mode acceptEdits --allowedTools="SendMessage" "<prompt>"` delivered its message to the interactive session named projects-73 by name, with no approval step. notify_when_idle from the interactive session to a --bg session also delivered one idle notice.
 Info: ttl-report ephemeral_5m_input_tokens=0 ephemeral_1h_input_tokens=58626 (fork 1 transcript)
 Info: claude agents --json keys: cwd id kind name pid sessionId startedAt state status — no usage/token field
 Info: claude stop takes the short "id" from agents --json (e.g. 70e94778), NOT the name and NOT the full sessionId
@@ -22,3 +22,5 @@ Writes outside cwd (2026-11-13, haiku, cwd = repo worktree, target = fresh mktem
   claude -p --model haiku --permission-mode acceptEdits --allowedTools="Write" --add-dir="<tmp>" "<write one line to <tmp>/out.txt>"   -> written, exit 0, 5 s
   Both forms work; forks still pass --add-dir="<ledger dir>" (equals form: the flag is variadic) so the outside write is declared, not incidental.
 Launch directory: env -C "<dir>" claude -p ...   # verified in the design spike and by the controller: the launch directory decides the session's cwd (and so which sessions --resume finds); a cd in a separate harness call persists only inside the session's working directories
+
+subagentPromptCacheTtl (controller-run 2026-11-13): cache_creation summed over subagent transcripts in one session. Before the setting: 5m=40316/65443/36913, 1h=0 (three task reviewers). After `"subagentPromptCacheTtl": "1h"` in ~/.claude/settings.json: 5m=0, 1h=134380 and 53550 (two task reviewers). It took effect for subagents started after the edit without restarting the session. `-p --fork-session` forks wrote 1h cache before the setting, so the drill's ttl-report cannot show the change.
