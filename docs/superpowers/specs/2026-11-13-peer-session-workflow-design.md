@@ -1,7 +1,9 @@
 # Peer-session workflow for supercomposer / superconductor
 
-Status: draft for discussion. Items marked **(call)** are choices made while drafting, not
-decisions the partner made. Items marked **(open)** are unresolved.
+Status: approved by the partner 2026-11-13. Items marked **(call)** were choices made while
+drafting that the partner approved with the document. One item is still **(open)**: starting
+the next task during the previous task's review. It is outside the first plan until the
+ledger measurement is in.
 
 ## Intent
 
