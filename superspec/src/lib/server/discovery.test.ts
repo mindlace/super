@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanSpecs, parseFilenameDateMs, extractTitle, listSuperpowersLocations } from './discovery';
+import { scanSpecs, parseFilenameDateMs, extractTitle, extractHtmlTitle, listSuperpowersLocations } from './discovery';
 import { makeTree } from './testtree';
 import type { GitRunner } from './gitdirty';
 
@@ -81,6 +81,21 @@ describe('extractTitle', () => {
   });
   it('returns null for empty/whitespace content', () => {
     expect(extractTitle('   \n\n')).toBeNull();
+  });
+});
+
+describe('extractHtmlTitle', () => {
+  it('reads the first h1', () => {
+    expect(
+      extractHtmlTitle('<article><header><h1>Worktree→main path fallback, with main as read-only</h1>')
+    ).toBe('Worktree→main path fallback, with main as read-only');
+  });
+  it('strips tags, decodes entities and collapses whitespace', () => {
+    expect(extractHtmlTitle('<h1 id="t">\n  A <code>b</code> &amp; c\n</h1>')).toBe('A b & c');
+  });
+  it('returns null with no h1 or an empty one', () => {
+    expect(extractHtmlTitle('<article><p>no heading</p></article>')).toBeNull();
+    expect(extractHtmlTitle('<h1>  </h1>')).toBeNull();
   });
 });
 
@@ -277,5 +292,15 @@ describe('scanSpecs html specs', () => {
       [`p/${WT}/${SP}/specs/assets/x/mock.html`]: '<p>x</p>'
     });
     expect(await scanSpecs(r)).toEqual([]);
+  });
+
+  it('titles an .html spec from its h1 and falls back to the filename', async () => {
+    const r = await makeTree({
+      [`p/${WT}/${SP}/specs/2026-06-20-t-design.html`]: '<h1>Html Title</h1>',
+      [`p/${WT}/${SP}/specs/2026-06-21-u-design.html`]: '<article></article>'
+    });
+    const list = await scanSpecs(r);
+    expect(byName(list, '2026-06-20-t-design.html')?.title).toBe('Html Title');
+    expect(byName(list, '2026-06-21-u-design.html')?.title).toBe('2026-06-21-u-design.html');
   });
 });

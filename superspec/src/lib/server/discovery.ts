@@ -4,7 +4,7 @@ import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
 import { exists, isWorktreeRoot, listDirs, listSpecFiles, MAX_WORKTREE_DEPTH } from './fswalk';
-import { stripSpecExt } from '../specfile';
+import { specKind, stripSpecExt } from '../specfile';
 import { listDirtyDocs, type GitRunner } from './gitdirty';
 
 /**
@@ -46,6 +46,27 @@ export function extractTitle(content: string): string | null {
   return null;
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&nbsp;': ' '
+};
+
+/** Text of the first <h1>, tags stripped and entities decoded. No DOM: runs on the server. */
+export function extractHtmlTitle(content: string): string | null {
+  const m = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(content);
+  if (!m) return null;
+  const text = m[1]
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, (e) => HTML_ENTITIES[e])
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text || null;
+}
+
 function typeLabel(subdir: string): string {
   if (subdir === 'specs') return 'spec';
   if (subdir === 'plans') return 'plan';
@@ -80,7 +101,7 @@ export async function makeEntry(
   return {
     path,
     filename,
-    title: extractTitle(raw) ?? filename,
+    title: (specKind(filename) === 'html' ? extractHtmlTitle(raw) : extractTitle(raw)) ?? filename,
     project,
     worktree,
     type: typeLabel(subdir),
