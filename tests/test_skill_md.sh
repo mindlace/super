@@ -286,4 +286,13 @@ for s in 'superpowers-jev:jev' 'jev record' 'jev ask defect-class' \
   grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md Jev section missing: $s"; exit 1; }
 done
 need 'Surface to your partner'
+# HTML packages: either format is accepted; html-docs reaches operators with its scripts allowed.
+for s in 'superpowers-html:html-docs' 'among your available skills' '.html'; do
+  grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md missing HTML-format text: $s"; exit 1; }
+done
+need 'HTML scripts: <absolute path>'
+need 'Bash(bash <html scripts dir>/task-brief:*)'
+need 'bash <html scripts dir>/task-brief, python3 <html scripts dir>/superpowers-html'
+need 'Bash(python3 <html scripts dir>/superpowers-html:*)'
+forbid 'bash <html scripts dir>/superpowers-html'
 echo "PASS: SKILL.md structure"

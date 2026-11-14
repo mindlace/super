@@ -6,6 +6,7 @@ import { normalizedSlug } from '../pairing';
 import { exists, isWorktreeRoot, listDirs, listSpecFiles, MAX_WORKTREE_DEPTH } from './fswalk';
 import { specKind, stripSpecExt } from '../specfile';
 import { listDirtyDocs, type GitRunner } from './gitdirty';
+import { listDocTimes, type GitFileTimes } from './gittimes';
 
 /**
  * Worktree directories under `wtRoot`, as paths relative to it ("foo",
@@ -73,17 +74,51 @@ function typeLabel(subdir: string): string {
   return subdir;
 }
 
+/** What git said about one checkout; a null half means git had no answer. */
+export interface GitView {
+  dirty: Set<string> | null;
+  times: Map<string, GitFileTimes> | null;
+}
+
+export const NO_GIT: GitView = { dirty: null, times: null };
+
+/** `git status` and `git log` for one checkout, run concurrently. */
+export async function readGitView(
+  repoRoot: string,
+  pathspec: string = SUPERPOWERS_SEGMENT,
+  run?: GitRunner
+): Promise<GitView> {
+  const [dirty, times] = await Promise.all([
+    listDirtyDocs(repoRoot, run, pathspec),
+    listDocTimes(repoRoot, pathspec, run)
+  ]);
+  return { dirty, times };
+}
+
 /**
- * How recent a file looks. mtime is only trustworthy for a file git reports as
- * edited: a checkout stamps every file it writes with the checkout time, so an
- * untouched file's mtime says when its worktree was created, not when anyone
- * last worked on it. For those we use the date in the filename, falling back to
- * mtime only when the name carries no date to read.
+ * When a doc first appeared and last changed. A checkout stamps every file it
+ * writes with the checkout time, so mtime only means "edited" for a file git
+ * reports as dirty; otherwise git's commit times are the truth. Any unusable
+ * (<= 0) result falls back to mtime, then to the date in the filename.
  */
-export function entryRecency(filename: string, mtime: number, dirty: boolean): number {
-  const named = parseFilenameDateMs(filename);
-  if (dirty || !named) return Math.max(mtime, named);
-  return named;
+export function entryTimes(i: {
+  filename: string;
+  mtime: number;
+  birthtime: number;
+  dirty: boolean | null;
+  git: GitFileTimes | undefined;
+}): { created: number; updated: number } {
+  const named = parseFilenameDateMs(i.filename);
+  const usable = (...candidates: (number | undefined)[]) =>
+    candidates.find((t): t is number => t !== undefined && t > 0) ?? named;
+  if (i.dirty === null) {
+    const t = usable(i.mtime);
+    return { created: t, updated: t };
+  }
+  if (i.dirty) {
+    return { created: usable(i.git?.created, i.birthtime, i.mtime), updated: usable(i.mtime) };
+  }
+  return { created: usable(i.git?.created, i.mtime), updated: usable(i.git?.updated, i.mtime) };
 }
 
 export async function makeEntry(
@@ -92,12 +127,19 @@ export async function makeEntry(
   project: string,
   worktree: string | null,
   subdir: string,
-  dirty = true
+  git: GitView = NO_GIT
 ): Promise<SpecEntry> {
   const path = join(dir, filename);
   const raw = await readFile(path, 'utf8').catch(() => '');
   const st = await stat(path);
   const mtime = st.mtimeMs;
+  const { created, updated } = entryTimes({
+    filename,
+    mtime,
+    birthtime: st.birthtimeMs,
+    dirty: git.dirty && git.times ? git.dirty.has(path) : null,
+    git: git.times?.get(path)
+  });
   return {
     path,
     filename,
@@ -106,7 +148,8 @@ export async function makeEntry(
     worktree,
     type: typeLabel(subdir),
     mtime,
-    recency: entryRecency(filename, mtime, dirty)
+    created,
+    updated
   };
 }
 
@@ -159,19 +202,16 @@ export async function scanSpecs(
     byProject.set(loc.project, arr);
   }
 
-  // One `git status` per checkout, up front, so each file's recency can tell a
-  // real edit from a checkout timestamp. A null set means git had no answer, in
-  // which case every file in that checkout is treated as edited.
-  const dirtyByDir = new Map<string, Set<string> | null>();
+  // One status + log per checkout, up front, so each file's times come from
+  // git rather than the checkout's timestamps. A null half means git had no
+  // answer, in which case that checkout's files fall back to mtime.
+  const gitByDir = new Map<string, GitView>();
   await Promise.all(
     [...byProject.values()].flat().map(async (loc) => {
-      dirtyByDir.set(loc.dir, await listDirtyDocs(loc.checkout, run));
+      gitByDir.set(loc.dir, await readGitView(loc.checkout, SUPERPOWERS_SEGMENT, run));
     })
   );
-  const isDirty = (loc: SuperpowersLocation, path: string) => {
-    const set = dirtyByDir.get(loc.dir);
-    return set ? set.has(path) : true;
-  };
+  const gitFor = (loc: SuperpowersLocation) => gitByDir.get(loc.dir) ?? NO_GIT;
 
   for (const [project, locs] of byProject) {
     const mainLoc = locs.find((l) => l.worktree === null);
@@ -195,14 +235,7 @@ export async function scanSpecs(
         const dir = join(loc.dir, sub);
         for (const name of await listSpecFiles(dir)) {
           if (mainSet.has(`${sub}/${stripSpecExt(name)}`)) continue;
-          const entry = await makeEntry(
-            dir,
-            name,
-            project,
-            loc.worktree,
-            sub,
-            isDirty(loc, join(dir, name))
-          );
+          const entry = await makeEntry(dir, name, project, loc.worktree, sub, gitFor(loc));
           out.push(entry);
           if (entry.type === 'plan') planSlugs.add(normalizedSlug(name));
         }
@@ -215,21 +248,13 @@ export async function scanSpecs(
       const mainSpecsDir = join(mainLoc.dir, 'specs');
       for (const name of await listSpecFiles(mainSpecsDir)) {
         if (!planSlugs.has(normalizedSlug(name))) continue;
-        const entry = await makeEntry(
-          mainSpecsDir,
-          name,
-          project,
-          null,
-          'specs',
-          isDirty(mainLoc, join(mainSpecsDir, name))
-        );
+        const entry = await makeEntry(mainSpecsDir, name, project, null, 'specs', gitFor(mainLoc));
         entry.onMain = true;
         out.push(entry);
       }
     }
   }
 
-  // secondary sort by type is a stable display tiebreaker for equal-recency entries
-  out.sort((a, b) => b.recency - a.recency || b.type.localeCompare(a.type));
+  out.sort((a, b) => b.created - a.created || a.path.localeCompare(b.path));
   return out;
 }

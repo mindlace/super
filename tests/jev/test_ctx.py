@@ -81,8 +81,8 @@ class CollectTest(unittest.TestCase):
         self.assertEqual(c["plugin_version"], support.load_json(
             support.PLUGIN / ".claude-plugin" / "plugin.json")["version"])
 
-    def test_plugin_version_is_0_7_0(self):
-        self.assertEqual(ctx.plugin_version(), "0.7.0")
+    def test_plugin_version_is_0_8_0(self):
+        self.assertEqual(ctx.plugin_version(), "0.8.0")
 
     def test_safe_collect_never_raises(self):
         with mock.patch.object(ctx, "git_info", side_effect=RuntimeError("boom")):

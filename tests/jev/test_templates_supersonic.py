@@ -17,7 +17,8 @@ ALL_POINTS = ["re-review", "severity", "tier", "report-evidence", "verify-stop",
 AGENT_FIELDS = {
     "defect-class": ["escalation"],
     "surface-route": ["event"],
-    "fidelity-coverage": ["spec_text"],
+    "fidelity-coverage": ["spec_sections[].heading", "spec_sections[].text",
+                          "spec_sections[].tables[].caption", "spec_sections[].tables[].rows"],
     "citation": ["claims[].claim"],
 }
 # Evidence fields present in state that no question references: code handles them (citation
@@ -129,7 +130,7 @@ class SupersonicTemplatesTest(unittest.TestCase):
 
     def test_fidelity_coverage_end_to_end_through_coverage(self):
         def responder(payload):
-            carried = [0] if payload["state"]["spec_text"].startswith("# Auth") else [0, 1]
+            carried = [0] if payload["state"]["spec_sections"][0]["heading"] == "Auth spec" else [0, 1]
             return (200, support.answer_all(payload, noul=lambda qid: 0.95 if int(qid.split(".")[1]) in carried else 0.05), 0)
         with support.StubServer(responder) as srv:
             env = support.make_env(srv.url)
@@ -138,6 +139,10 @@ class SupersonicTemplatesTest(unittest.TestCase):
         self.assertEqual(len(srv.requests), 2)
         self.assertEqual(out["verdict"], {"uncovered": [2], "multiply_covered": [0]})
         self.assertTrue(out["confident"])
+
+    def test_fidelity_coverage_fixture_state_matches_builder(self):
+        self.assertEqual(support.fixture_state("fidelity-coverage")["spec_sections"],
+                         spec.md_sections((support.FIXTURES / "spec-b.md").read_text()))
 
 
 if __name__ == "__main__":

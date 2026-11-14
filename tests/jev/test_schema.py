@@ -33,6 +33,12 @@ class SchemaTest(unittest.TestCase):
         self.assertEqual(validate(SCHEMA, {"a": "x", "n": True, "xs": [{"t": "y"}]}),
                          ["$.n: expected integer"])
 
+    def test_type_list_and_null(self):
+        t = {"type": ["string", "null"]}
+        self.assertEqual(validate(t, None), [])
+        self.assertEqual(validate(t, "x"), [])
+        self.assertEqual(validate(t, 3), ["$: expected string or null"])
+
     def test_enum_and_nested_items_and_min_items(self):
         self.assertTrue(validate(SCHEMA, {"a": "x", "level": "mid", "xs": [{"t": "y"}]}))
         self.assertEqual(validate(SCHEMA, {"a": "x", "xs": [{"t": 1}]}), ["$.xs[0].t: expected string"])

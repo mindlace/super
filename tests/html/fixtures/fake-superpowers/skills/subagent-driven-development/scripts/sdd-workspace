@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+d="$PWD/.superpowers/sdd/$(basename "$1")"; mkdir -p "$d"; echo "$d"

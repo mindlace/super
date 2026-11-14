@@ -1,14 +1,22 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import TabStrip from '$lib/components/TabStrip.svelte';
+  import { onMount, untrack } from 'svelte';
+  import Sidebar from '$lib/components/Sidebar.svelte';
   import DocPane from '$lib/components/DocPane.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import type { SpecEntry } from '$lib/types';
-  import { DAY_MS } from '$lib/recency';
   import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
   import { findSelectedGroup, groupToPromote } from '$lib/openTabs';
-  import { isMainPath } from '$lib/mainpath';
   import { retryDelay } from '$lib/backoff';
+  import { buildEntries, listGroups } from '$lib/sidebar';
+  import {
+    loadSeenState,
+    markClosed,
+    markOpened,
+    pruneSeenState,
+    recordFirstSight,
+    saveSeenState,
+    type SeenState
+  } from '$lib/seen';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
@@ -16,37 +24,62 @@
   let specsLoaded = $state(false);
   let content = $state('');
   let knownMtime = $state(0);
-  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  let readOnly = $state(false);
 
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let toast = $state<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const visibleGroups = $derived(
-    pairAndGroup(specs).filter((g) => g.recency >= Date.now() - DAY_MS)
-  );
+  function storageOrNull(): Storage | null {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  }
+
+  const pageLoadedAt = Date.now();
+  let seenState = $state<SeenState>(pruneSeenState(loadSeenState(storageOrNull()), Date.now()));
+
+  // Only assign (and persist) when a seen.ts function actually changed something; they return
+  // the same object otherwise, so effects that call this cannot loop.
+  function persistSeen(next: SeenState) {
+    if (next === seenState) return;
+    seenState = next;
+    saveSeenState(storageOrNull(), next);
+  }
 
   let openedGroups = $state<DisplayGroup[]>([]);
 
   const OPENED_KEY = 'sr:openedPaths';
 
-  const visiblePaths = $derived(new Set(visibleGroups.map((g) => g.parent.path)));
-  // Drop opened groups already shown by discovery (dedupe); keep the rest.
-  const openedRendered = $derived(
-    openedGroups.filter((g) => !visiblePaths.has(g.parent.path))
-  );
-  const tabGroups = $derived([...visibleGroups, ...openedRendered]);
-  const openedPaths = $derived(new Set(openedRendered.map((g) => g.parent.path)));
+  const discovered = $derived(pairAndGroup(specs));
+  const groups = $derived(listGroups(discovered, openedGroups, seenState, Date.now()));
+  const entries = $derived(buildEntries(groups, selectedPath, seenState));
+
+  /** The group parent path that seen/closed state is keyed on for a selected doc. */
+  function groupPathFor(path: string): string {
+    return findSelectedGroup([...discovered, ...openedGroups], path)?.parent.path ?? path;
+  }
+
+  // Every specs refresh: give newly discovered groups a first-sight time, and treat the open
+  // doc's group as seen now (its changes are on screen, so they must not highlight later).
+  $effect(() => {
+    if (!specsLoaded) return;
+    const current = discovered;
+    untrack(() => {
+      let next = recordFirstSight(current, seenState, pageLoadedAt, Date.now());
+      if (selectedPath) next = markOpened(next, groupPathFor(selectedPath), Date.now());
+      persistSeen(next);
+    });
+  });
 
   $effect(() => {
     if (!specsLoaded || !selectedPath) return;
-    const live = findSelectedGroup(tabGroups, selectedPath);
+    const live = findSelectedGroup(groups, selectedPath);
     if (live) {
       lastSelectedGroup = live; // capture while visible (idempotent: same ref)
       return;
     }
-    const promote = groupToPromote(selectedPath, tabGroups, lastSelectedGroup, openedGroups);
+    const promote = groupToPromote(selectedPath, groups, lastSelectedGroup, openedGroups);
     if (promote) {
       openedGroups = [...openedGroups, promote];
       persistOpened();
@@ -71,8 +104,8 @@
   }
 
   // Never give up: until this succeeds once, specsLoaded stays false, which
-  // disables the tab-retention effect below — so a single transient failure
-  // (dev server restarting at mount) would otherwise leave the strip empty
+  // disables the retention effect above — so a single transient failure
+  // (dev server restarting at mount) would otherwise leave the sidebar empty
   // for the life of the page while the open doc keeps rendering.
   async function loadSpecs() {
     if (specsRetryTimer) {
@@ -90,7 +123,7 @@
     const res = await fetch(`/api/resolve?q=${encodeURIComponent(newPath)}`);
     const group: DisplayGroup | null = res.ok ? await res.json() : null;
     // On a transient resolve failure the tab keeps its old path; it self-heals
-    // on the next click (selectSpec re-runs adoptPath) and writes are 403'd anyway.
+    // on the next click (selectSpec re-runs adoptPath).
     if (!group) return;
     openedGroups = openedGroups.map((g) => (g.parent.path === oldPath ? group : g));
     if (lastSelectedGroup?.parent.path === oldPath) lastSelectedGroup = group;
@@ -98,10 +131,6 @@
   }
 
   async function selectSpec(path: string): Promise<boolean> {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
     const res = await fetch(`/api/spec?path=${encodeURIComponent(path)}`);
     if (!res.ok) return false;
     const data = await res.json();
@@ -109,17 +138,27 @@
     knownMtime = data.mtime;
     const effective: string = data.path ?? path;
     selectedPath = effective;
-    readOnly = isMainPath(effective);
     // Worktree gone → server served the main copy; rewrite the opened tab so the
-    // selection, caption, autosave, and persistence all target the real file.
+    // selection, caption, and persistence all target the real file.
     if (effective !== path) await adoptPath(path, effective);
-    saveStatus = 'idle';
-    localStorage.setItem(SELECTED_KEY, effective);
+    persistSeen(markOpened(seenState, groupPathFor(effective), Date.now()));
+    store(() => localStorage.setItem(SELECTED_KEY, effective));
     return true;
   }
 
+  /** Run a localStorage access; corrupt or unavailable storage must never throw. */
+  function store<T>(fn: () => T): T | null {
+    try {
+      return fn();
+    } catch {
+      return null;
+    }
+  }
+
   function persistOpened() {
-    localStorage.setItem(OPENED_KEY, JSON.stringify(openedGroups.map((g) => g.parent.path)));
+    store(() =>
+      localStorage.setItem(OPENED_KEY, JSON.stringify(openedGroups.map((g) => g.parent.path)))
+    );
   }
 
   async function pickDoc(query: string): Promise<boolean> {
@@ -127,7 +166,7 @@
     if (!res.ok) return false;
     const group: DisplayGroup = await res.json();
     const path = group.parent.path;
-    const known = tabGroups.some((g) => g.parent.path === path);
+    const known = groups.some((g) => g.parent.path === path);
     if (!known) {
       openedGroups = [...openedGroups, group];
       persistOpened();
@@ -135,50 +174,22 @@
     return selectSpec(path);
   }
 
-  function closeOpened(path: string) {
-    const removed = openedGroups.find((g) => g.parent.path === path);
-    openedGroups = openedGroups.filter((g) => g.parent.path !== path);
-    persistOpened();
-    const hitChild = removed?.children.some((c) => c.path === selectedPath);
+  function closeEntry(path: string) {
+    const group = groups.find((g) => g.parent.path === path);
+    if (openedGroups.some((g) => g.parent.path === path)) {
+      openedGroups = openedGroups.filter((g) => g.parent.path !== path);
+      persistOpened();
+    }
+    if (discovered.some((g) => g.parent.path === path)) {
+      persistSeen(markClosed(seenState, path, Date.now()));
+    }
+    const hitChild = group?.children.some((c) => c.path === selectedPath);
     if (selectedPath === path || hitChild) {
       selectedPath = null;
       content = '';
-      saveStatus = 'idle';
-      readOnly = false;
       lastSelectedGroup = null;
-      localStorage.removeItem(SELECTED_KEY);
+      store(() => localStorage.removeItem(SELECTED_KEY));
     }
-  }
-
-  async function save() {
-    if (!selectedPath || readOnly) return;
-    const savedPath = selectedPath;
-    saveStatus = 'saving';
-    try {
-      const res = await fetch(`/api/spec?path=${encodeURIComponent(savedPath)}`, {
-        method: 'PUT',
-        body: content
-      });
-      if (selectedPath !== savedPath) return;
-      if (!res.ok) {
-        saveStatus = 'error';
-        return;
-      }
-      const data = await res.json();
-      knownMtime = data.mtime;
-      saveStatus = 'saved';
-    } catch {
-      if (selectedPath !== savedPath) return;
-      saveStatus = 'error';
-    }
-  }
-
-  function handleInput(value: string) {
-    if (readOnly) return;
-    content = value;
-    saveStatus = 'saving';
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(save, 1000);
   }
 
   function showToast(message: string) {
@@ -188,7 +199,7 @@
   }
 
   async function pollExternalChange() {
-    if (!selectedPath || saveStatus === 'saving') return;
+    if (!selectedPath) return;
     const polledPath = selectedPath;
     const res = await fetch(`/api/spec?path=${encodeURIComponent(polledPath)}`);
     if (!res.ok) return;
@@ -197,7 +208,7 @@
     if (data.mtime > knownMtime) {
       content = data.content;
       knownMtime = data.mtime;
-      saveStatus = 'idle';
+      persistSeen(markOpened(seenState, groupPathFor(polledPath), Date.now()));
       showToast('Reloaded — file changed on disk');
     }
   }
@@ -205,7 +216,13 @@
   onMount(() => {
     loadSpecs();
 
-    const savedOpened: string[] = JSON.parse(localStorage.getItem(OPENED_KEY) ?? '[]');
+    let savedOpened: string[] = [];
+    try {
+      const raw = JSON.parse(localStorage.getItem(OPENED_KEY) ?? '[]');
+      if (Array.isArray(raw)) savedOpened = raw.filter((p): p is string => typeof p === 'string');
+    } catch {
+      // corrupt or unavailable storage: start with no opened docs
+    }
     Promise.all(
       savedOpened.map((p) =>
         fetch(`/api/resolve?q=${encodeURIComponent(p)}`)
@@ -218,10 +235,10 @@
     });
 
     const fromQuery = new URLSearchParams(window.location.search).get('path');
-    const toOpen = fromQuery ?? localStorage.getItem(SELECTED_KEY);
+    const toOpen = fromQuery ?? store(() => localStorage.getItem(SELECTED_KEY));
     if (toOpen) {
       selectSpec(toOpen).then((ok) => {
-        if (!ok && !fromQuery) localStorage.removeItem(SELECTED_KEY);
+        if (!ok && !fromQuery) store(() => localStorage.removeItem(SELECTED_KEY));
       });
       // Seed the retention cache so an out-of-window deep-link still gets a tab.
       fetch(`/api/resolve?q=${encodeURIComponent(toOpen)}`)
@@ -252,31 +269,19 @@
   });
 </script>
 
-<div class="flex h-screen flex-col bg-neutral-900 text-neutral-200">
-  <TabStrip
-    groups={tabGroups}
-    {selectedPath}
-    onSelect={selectSpec}
-    onPick={pickDoc}
-    onClose={closeOpened}
-    {openedPaths}
-  />
-  <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
+<div class="flex h-screen bg-neutral-900 text-neutral-200">
+  <Sidebar {entries} onSelect={selectSpec} onPick={pickDoc} onClose={closeEntry} />
+  <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
     {#if selectedPath}
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
         <span class="truncate text-neutral-500" title={selectedPath}>{selectedPath}</span>
-        <span class="ml-2 shrink-0 text-neutral-500">
-          {#if saveStatus === 'saving'}saving…{:else if saveStatus === 'saved'}saved{:else if saveStatus === 'error'}<span
-              class="text-red-400">save failed</span
-            >{/if}
-        </span>
       </header>
       <div class="min-h-0 flex-1">
-        <DocPane path={selectedPath} {content} {readOnly} onInput={handleInput} />
+        <DocPane path={selectedPath} {content} />
       </div>
     {:else}
       <p class="p-6 text-neutral-500">
-        {visibleGroups.length === 0 ? 'No specs in the last 24 hours.' : 'Select a spec.'}
+        {groups.length === 0 ? 'No specs in the last 24 hours.' : 'Select a spec.'}
       </p>
     {/if}
   </main>

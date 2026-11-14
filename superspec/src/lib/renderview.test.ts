@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderViewFor } from './renderview';
+import { noticeSummary, renderViewFor } from './renderview';
 
 describe('renderViewFor', () => {
   it('is pending before any render has landed', () => {
@@ -30,5 +30,18 @@ describe('renderViewFor', () => {
     expect(renderViewFor({ path: '/a.html', error: 'boom' }, '/b.html')).toEqual({
       status: 'pending'
     });
+  });
+});
+
+describe('noticeSummary', () => {
+  it('joins the parts with a comma and a space', () => {
+    expect(noticeSummary(['<span>', '<font>'], [])).toBe('Removed <span>, <font>');
+    expect(noticeSummary(['<span>'], ['p1', 'p2'])).toBe('Removed <span>, 2 problems');
+    expect(noticeSummary([], ['p1'])).toBe('1 problem');
+  });
+
+  it('counts removed markup when naming it would be long', () => {
+    expect(noticeSummary(['<span>', '<font>', '<blink>', '<marquee>'], [])).toBe('4 removed');
+    expect(noticeSummary(['<custom-element-with-long-name>'], [])).toBe('1 removed');
   });
 });

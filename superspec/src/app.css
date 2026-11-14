@@ -3,7 +3,7 @@
 :root { color-scheme: dark; }
 html, body { background-color: #171717; }
 
-/* Rejection shake for the TabStrip "choose a doc" input. Lives here rather than
+/* Rejection shake for the Sidebar "choose a doc" input. Lives here rather than
    in a component <style> block on purpose: a per-component <style> makes Svelte
    emit a `?type=style&lang.css` module, which on a cold dev start can race
    @tailwindcss/vite ahead of Svelte's split and feed the script into the CSS

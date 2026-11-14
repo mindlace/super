@@ -33,25 +33,6 @@ export const INLINE_TAGS: readonly string[] = [
   'br'
 ];
 
-/** Elements whose text the reader lets an author edit in place. */
-export const EDITABLE_TAGS: readonly string[] = [
-  'p',
-  'li',
-  'h1',
-  'h2',
-  'h3',
-  'h4',
-  'dt',
-  'dd',
-  'td',
-  'th',
-  'caption',
-  'figcaption',
-  'summary',
-  'aside',
-  'blockquote'
-];
-
 export const ALLOWED_TAGS: readonly string[] = [
   // Structure
   'article',

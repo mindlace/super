@@ -17,3 +17,23 @@ export function renderViewFor<T>(last: RenderOutcome<T> | null, path: string): R
   if ('error' in last) return { status: 'error', message: last.error };
   return { status: 'ready', result: last.result };
 }
+
+/** Longest list of removed markup the collapsed notice names rather than counts. */
+const NAMED_REMOVED_MAX = 24;
+
+/** The collapsed notice line: what was removed, and how many problems. */
+export function noticeSummary(removed: readonly string[], problems: readonly string[]): string {
+  const parts: string[] = [];
+  if (removed.length) {
+    const named = removed.join(', ');
+    parts.push(
+      removed.length <= 3 && named.length <= NAMED_REMOVED_MAX
+        ? `Removed ${named}`
+        : `${removed.length} removed`
+    );
+  }
+  if (problems.length) {
+    parts.push(`${problems.length} ${problems.length === 1 ? 'problem' : 'problems'}`);
+  }
+  return parts.join(', ');
+}

@@ -59,6 +59,16 @@ describe('listDirtyDocs', () => {
     expect(seen.at(-1)).toBe(join('docs', 'superpowers'));
   });
 
+  it('passes a custom pathspec last', async () => {
+    let seen: string[] = [];
+    const run: GitRunner = async (_root, args) => {
+      seen = args;
+      return '';
+    };
+    await listDirtyDocs(root, run, 'docs/notes/x.md');
+    expect(seen.at(-1)).toBe('docs/notes/x.md');
+  });
+
   it('returns null when git cannot answer, so callers can fall back', async () => {
     const run: GitRunner = async () => null;
     expect(await listDirtyDocs(root, run)).toBeNull();
