@@ -167,10 +167,35 @@ need 'the untested merge at the branch'"'"'s head that Phase 0 takes out'
 need 'If that line gives no reset time you can read, start no wait'
 # Resume finishes a replacement the last conductor left unfinished, from ledgered steps.
 need 'Ledger every member `replaced (ruling <id>)` in one append, then stop'
-need 'with no later start line is a replacement the last conductor did not finish'
-need 'Finish it from the first step its ledger does not show done'
-need 'Replacing steps 5-6, which start the fresh operator'
 need '- cut <member> to <cut-to sha> for ruling <id>'
+# Routing is write-ahead: a begun line before step 1, a done line after step 5, and every
+# step skips what the ledger shows done, so resume routes an unfinished ruling from the top.
+for s in '- routing <id>: rulings/<id>.md, commit <sha|none>' '- relayed <id> to <session name>' \
+         '- build graph for <id> @ <sha>' '- routed <id>' '[| ruling <id>]'; do
+  printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
+    || { echo "FAIL: ledger format missing: $s"; exit 1; }
+done
+need 'Before step 1, append `- routing <id>: rulings/<id>.md, commit <sha|none>`'
+need 'append `- routed <id>` under `## Questions`'
+need 'routing begun'
+need 'routing done'
+need 'A ruling with a `routing <id>` line and no `routed <id>` line is routed again from the top'
+need 'whose `rulings/<id>.md` exists but which has no `routing <id>` line'
+need 'Routing a ruling again after a death is still routing it'
+need 'unless a `relayed <id> to <session name>` line records it'
+need 'unless a `build graph for <id>` line is in the ledger'
+need 'unless a `## Checkpoints` line names `ruling <id>`'
+need 'Skip a member that has a `- cut <member>'
+need 'that has no `- reverted` line for ruling <id>'
+need 'revert-<member>-<ruling id>'
+need 'If its name is listed in `claude agents --json`, it is already launched'
+# One package writer at a time: resume finishes all routing before any other package writer.
+need 'Phase 0 finishes all routing, the build-graph forks it runs included, before it starts or restarts any other fork that writes the package worktree, and before it merges anything'
+need "start the next once the running one's ruling is routed"
+forbid 'start the next when the running one exits'
+forbid 'no later start line'
+forbid '**Replacements.**'
+forbid 'Finish it from the first step its ledger does not show done'
 # The superseded plan's SDD workspace is removed at the cut, so no plan can resume it.
 need 'remove the superseded plan'"'"'s SDD workspace'
 need "grep -lxF -- '<plan path>' <unit worktree>/.superpowers/sdd/*/plan-path"
@@ -192,7 +217,7 @@ need "brought a class's frame-defect tally to three"
 forbid 'the frame-defect tally reached three of one class'
 # Resume reconciles forks, rulings, the package worktree and merge reviews.
 need 'Uncommitted edits there are a dead fork'
-need 'if `rulings/<id>.md` exists, route it now'
+need 'is a ruling whose fork exited while no conductor ran: route it'
 need 'start its merge-review fork'
 # The high band wakes for the reset with real work, not as a keep-warm ping.
 need 'Waiting for the reset'
