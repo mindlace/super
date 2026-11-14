@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 /** Runs git in `repoRoot`; returns stdout, or null if git could not answer. */
 export type GitRunner = (repoRoot: string, args: string[]) => Promise<string | null>;
 
-const runGit: GitRunner = async (repoRoot, args) => {
+export const runGit: GitRunner = async (repoRoot, args) => {
   try {
     const { stdout } = await execFileAsync('git', ['-C', repoRoot, ...args], {
       maxBuffer: 32 * 1024 * 1024
@@ -51,7 +51,8 @@ export function parsePorcelainZ(raw: string): string[] {
  */
 export async function listDirtyDocs(
   repoRoot: string,
-  run: GitRunner = runGit
+  run: GitRunner = runGit,
+  pathspec: string = SUPERPOWERS_SEGMENT
 ): Promise<Set<string> | null> {
   const raw = await run(repoRoot, [
     'status',
@@ -59,7 +60,7 @@ export async function listDirtyDocs(
     '-z',
     '--untracked-files=all',
     '--',
-    SUPERPOWERS_SEGMENT
+    pathspec
   ]);
   if (raw === null) return null;
   return new Set(parsePorcelainZ(raw).map((rel) => join(repoRoot, rel)));
