@@ -6,6 +6,7 @@ import { renderSpecHtml } from './render';
 import { addListItemAfter, locateEditables, spliceRange } from './inplace';
 import {
   blocksInput,
+  boundaryInsert,
   canArm,
   caretAtEnd,
   caretToEnd,
@@ -14,7 +15,9 @@ import {
   editingAligned,
   editingOffReason,
   isEmptyItem,
+  insertAtBoundary,
   isImeEnter,
+  noticeSummary,
   pastedText,
   toggleInline
 } from './inplaceDom';
@@ -336,5 +339,112 @@ describe('canArm', () => {
     expect(canArm({ ...ok, readOnly: true })).toBe(false);
     expect(canArm({ ...ok, renderPending: true })).toBe(false);
     expect(canArm({ ...ok, domCurrent: false })).toBe(false);
+  });
+});
+
+describe('boundaryInsert', () => {
+  const first = (html: string) => container(html).firstElementChild as HTMLElement;
+  const li = () =>
+    first('<li id="t1-s3"><input type="checkbox"> Commit with <code>git</code></li>');
+
+  it('puts text typed at the end of a trailing inline element after it', () => {
+    const el = li();
+    const code = el.querySelector('code')!;
+    expect(boundaryInsert(el, code.firstChild!, 3)).toEqual({ node: code, side: 'after' });
+  });
+
+  it('uses the outermost inline element that ends the editable', () => {
+    const el = first('<p>see <strong><a href="#x">the <em>map</em></a></strong></p>');
+    const em = el.querySelector('em')!;
+    expect(boundaryInsert(el, em.firstChild!, 3)).toEqual({
+      node: el.querySelector('strong'),
+      side: 'after'
+    });
+  });
+
+  it('treats trailing whitespace after the element as the end', () => {
+    const el = first('<p>run <code>git</code>\n  </p>');
+    const code = el.querySelector('code')!;
+    expect(boundaryInsert(el, code.firstChild!, 3)).toEqual({ node: code, side: 'after' });
+  });
+
+  it('handles a caret on the editable itself, just after a trailing element', () => {
+    const el = first('<p>run <code>git</code></p>');
+    expect(boundaryInsert(el, el, 2)).toEqual({ node: el.querySelector('code'), side: 'after' });
+  });
+
+  it('leaves typing inside an element that more text follows', () => {
+    const el = first('<p>run <code>git</code> now</p>');
+    expect(boundaryInsert(el, el.querySelector('code')!.firstChild!, 3)).toBeNull();
+  });
+
+  it('leaves typing in the middle of a trailing element', () => {
+    const el = li();
+    expect(boundaryInsert(el, el.querySelector('code')!.firstChild!, 1)).toBeNull();
+  });
+
+  it('leaves plain text at the end alone', () => {
+    const el = first('<p>plain text</p>');
+    expect(boundaryInsert(el, el.firstChild!, 10)).toBeNull();
+  });
+
+  it('puts text typed at the start of a leading inline element before it', () => {
+    const el = first('<p><code>git</code> commits</p>');
+    const code = el.querySelector('code')!;
+    expect(boundaryInsert(el, code.firstChild!, 0)).toEqual({ node: code, side: 'before' });
+  });
+
+  it('counts a checklist checkbox as nothing before the text', () => {
+    const el = first('<li><input type="checkbox"> <code>git</code> now</li>');
+    const code = el.querySelector('code')!;
+    expect(boundaryInsert(el, code.firstChild!, 0)).toEqual({ node: code, side: 'before' });
+  });
+
+  it('ignores an empty editable and a caret outside it', () => {
+    const el = first('<li><input type="checkbox"> </li>');
+    expect(boundaryInsert(el, el, 2)).toBeNull();
+    expect(boundaryInsert(li(), document.body, 0)).toBeNull();
+  });
+});
+
+describe('insertAtBoundary', () => {
+  it('puts text after a trailing element, caret after it, read back as plain text', () => {
+    const el = container('<li><input type="checkbox"> Commit with <code>git</code></li>')
+      .firstElementChild as HTMLElement;
+    document.body.append(el);
+    const sel = document.getSelection()!;
+    const code = el.querySelector('code')!;
+    insertAtBoundary({ node: code, side: 'after' }, ' ', sel);
+    expect(editedInner(el)).toBe(' Commit with <code>git</code> ');
+    expect(boundaryInsert(el, sel.focusNode!, sel.focusOffset)).toBeNull();
+    el.remove();
+  });
+
+  it('puts text before a leading element', () => {
+    const el = container('<p><code>git</code> commits</p>').firstElementChild as HTMLElement;
+    document.body.append(el);
+    const sel = document.getSelection()!;
+    insertAtBoundary({ node: el.querySelector('code')!, side: 'before' }, 'run ', sel);
+    expect(editedInner(el)).toBe('run <code>git</code> commits');
+    expect(sel.focusNode?.parentNode).toBe(el);
+    el.remove();
+  });
+});
+
+describe('noticeSummary', () => {
+  it('joins the parts with a comma and a space', () => {
+    expect(noticeSummary(['<span>', '<font>'], [], 'removed')).toBe(
+      'Removed <span>, <font>; in-place editing off'
+    );
+    expect(noticeSummary(['<span>'], ['p1', 'p2'], null)).toBe('Removed <span>, 2 problems');
+    expect(noticeSummary([], ['p1'], 'misaligned')).toBe('1 problem; in-place editing off');
+    expect(noticeSummary([], [], 'misaligned')).toBe('In-place editing off');
+  });
+
+  it('counts removed markup when naming it would be long', () => {
+    expect(noticeSummary(['<span>', '<font>', '<blink>', '<marquee>'], [], null)).toBe(
+      '4 removed'
+    );
+    expect(noticeSummary(['<custom-element-with-long-name>'], [], null)).toBe('1 removed');
   });
 });

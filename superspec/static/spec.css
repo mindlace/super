@@ -46,6 +46,12 @@
 .spec-doc li > input[type='checkbox']:first-child { margin: 0 .5em 0 0; vertical-align: baseline; accent-color: var(--ok); }
 .spec-doc ol:has(> li > input[type='checkbox']),
 .spec-doc ul:has(> li > input[type='checkbox']) { list-style: none; padding-left: .25rem; }
+
+/* in-place editing: a quiet focus mark in the theme's own colours, not the browser ring */
+.spec-doc [contenteditable='true']:focus {
+  outline: 1px solid var(--rule); outline-offset: 2px; border-radius: 2px;
+  background: color-mix(in srgb, var(--panel) 60%, transparent);
+}
 .spec-doc blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--rule); color: var(--muted); }
 .spec-doc hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
 .spec-doc img, .spec-doc video { display: inline-block; vertical-align: baseline; max-width: 100%; height: auto; }

@@ -14,14 +14,17 @@
   } from '$lib/inplace';
   import {
     blocksInput,
+    boundaryInsert,
     canArm,
     caretAtEnd,
     caretToEnd,
     collectRenderedEditables,
     editedInner,
     editingOffReason,
+    insertAtBoundary,
     isEmptyItem,
     isImeEnter,
+    noticeSummary,
     pastedText,
     toggleInline,
     type EditingOff
@@ -325,9 +328,28 @@
   // editable element. A new paragraph at the end of a list item adds an item.
   function onEditBeforeInput(e: InputEvent) {
     const i = editableAt(e.target);
-    if (i < 0 || !blocksInput(e.inputType)) return;
+    if (i < 0) return;
+    if (e.inputType === 'insertText' && e.data && !e.isComposing && insertOutside(i, e.data)) {
+      e.preventDefault();
+      return;
+    }
+    if (!blocksInput(e.inputType)) return;
     e.preventDefault();
     if (e.inputType === 'insertParagraph') addItemAt(i);
+  }
+
+  // Text typed or pasted at the very end of an editable that ends in an inline
+  // element (code, a link, bold) goes after that element, not inside it; the
+  // same at the very start. True when the text was inserted here.
+  function insertOutside(i: number, text: string): boolean {
+    const el = editables[i];
+    const sel = window.getSelection();
+    if (!el || !sel?.isCollapsed || !sel.focusNode) return false;
+    const at = boundaryInsert(el, sel.focusNode, sel.focusOffset);
+    if (!at) return false;
+    insertAtBoundary(at, text, sel);
+    commitEdit(i);
+    return true;
   }
 
   function onEditDrop(e: DragEvent) {
@@ -335,11 +357,12 @@
   }
 
   function onEditPaste(e: ClipboardEvent) {
-    if (editableAt(e.target) < 0) return;
+    const i = editableAt(e.target);
+    if (i < 0) return;
     e.preventDefault();
     const text = pastedText(e.clipboardData?.getData('text/plain') ?? '');
     // Plain text on one line; execCommand keeps the browser's undo stack.
-    if (text) document.execCommand('insertText', false, text);
+    if (text && !insertOutside(i, text)) document.execCommand('insertText', false, text);
   }
 
   async function setView(next: View) {
@@ -391,12 +414,9 @@
     </div>
     {#if rendered?.kind === 'html' && noticeCount > 0}
       <details class="min-w-0 text-amber-300">
-        <summary class="cursor-pointer select-none">
-          {#if rendered.removed.length}{rendered.removed.length} removed{/if}{#if rendered.removed.length && rendered.problems.length},
-          {/if}{#if rendered.problems.length}{rendered.problems.length}
-            {rendered.problems.length === 1 ? 'problem' : 'problems'}{/if}{#if editingOff}{#if rendered.removed.length || rendered.problems.length},
-          {/if}editing off{/if}
-        </summary>
+        <summary class="cursor-pointer select-none"
+          >{noticeSummary(rendered.removed, rendered.problems, editingOff)}</summary
+        >
         <ul class="mt-1 list-disc pl-5 text-neutral-300">
           {#each rendered.removed as item, i (i)}
             <li>Removed: <code>{item}</code></li>
