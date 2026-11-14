@@ -321,9 +321,10 @@ typed within.
   as today. *(My call.)*
 - Files on main, which are read-only.
 
-**Checkboxes.** Clicking a checkbox toggles it. The save adds or removes the
-`checked` attribute on that one `input` tag in the source, by the same
-splice, and touches nothing else. On a read-only file the boxes are disabled.
+**Checkboxes are display only.** The reader shows a checklist's boxes in the
+state the file gives them and never changes it: every box is rendered
+disabled, on every file. Ticking a step is the implementing agent's job,
+done by editing the file.
 
 **Keys.** Enter does not create a new block. Paste inserts plain text.
 Undo is the browser's own, within the element being edited.
@@ -416,8 +417,8 @@ Pure unit tests, colocated, in the existing style:
   element's inner range, cleaning edited content to the inline subset, and
   the splice, including the confined-diff case above.
 - Checkboxes: the sanitiser keeps `input type="checkbox"` and removes every
-  other `input`; toggling one changes only the `checked` attribute of that
-  tag in the source, in both directions.
+  other `input`; a rendered checkbox is always disabled and reflects the
+  file's `checked` state.
 
 ## Left to the builder
 
