@@ -49,7 +49,7 @@ Every read/write path goes through `assertSpecPath()`, which rejects anything ou
 - `open` GET → validates `?path=` then 302-redirects to `/?path=…` (the agent deep-link entry point)
 
 **Client — `src/routes/+page.svelte`:**
-Owns all state (Svelte 5 runes). Autosave debounces 1s after input; tracks `knownMtime` to reconcile against on-disk changes; persists selected path and sidebar width to `localStorage`. `Editor.svelte` is a CodeMirror 6 markdown editor; `render.ts` renders markdown via `marked` + `DOMPurify`.
+Owns all state (Svelte 5 runes). Autosave debounces 1s after input; tracks `knownMtime` to reconcile against on-disk changes; persists selected path and sidebar width to `localStorage`. A single `DocPane` shows the open file with a Rendered/Source toggle (no side-by-side preview). `Editor.svelte` is a source-only CodeMirror 6 editor in markdown or HTML mode, used by the Source view. `render.ts` renders `.md` via `marked` + `DOMPurify` and `.html` specs (a semantic-HTML subset, see `../docs/spec-format.md`) via `renderSpecHtml`. `.html` specs in a worktree are also editable in place in the rendered view; `.md` files are rendered and source-edited only.
 
 ## Conventions
 

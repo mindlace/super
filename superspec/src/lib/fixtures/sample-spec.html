@@ -1,0 +1,75 @@
+<article>
+  <header>
+    <h1>Worktree→main path fallback, with main as read-only</h1>
+    <p>spec_reader · worktree <code>worktree-main-fallback-readonly</code> · 2026-06-23</p>
+  </header>
+
+  <section id="problem">
+    <h2>Problem</h2>
+    <p>When a worktree is merged to main and its directory is removed, any tab still pointing at the old
+    worktree path becomes a dead link. Clicking the tab hits <code>/api/spec</code> with a path that no longer
+    exists, the read fails, and the tab can't be switched to.</p>
+    <aside data-kind="note"><strong>Note</strong> <code>assertSpecPath()</code> is not the blocker. It validates the
+    worktree path fine; the file is simply gone from disk.</aside>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions</h2>
+    <dl>
+      <dt>Adopt the main path</dt>
+      <dd>The server reports the path it actually read; the client updates its selection, the opened tab and
+      <code>localStorage</code> to that path.</dd>
+      <dt>Main is read-only</dt>
+      <dd>If the file lives in a project's main checkout, the editor is read-only and writes are refused.</dd>
+      <dt>The tab says where it lives</dt>
+      <dd>The caption gains a <code>main</code> label, and that label is the read-only signal.</dd>
+    </dl>
+  </section>
+
+  <section id="data-flow">
+    <h2>Data flow</h2>
+    <figure id="fig-fallback">
+      <svg class="diagram" viewBox="0 0 770 180" role="img" aria-labelledby="fig-fallback-t">
+        <title id="fig-fallback-t">Read falls back from the deleted worktree file to the main file</title>
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0 0 10 5 0 10z"/></marker></defs>
+        <g class="node" id="n-tab"><rect x="10" y="20" width="130" height="44"/><text x="75" y="42">Tab click</text></g>
+        <g class="node" id="n-api"><rect x="200" y="20" width="150" height="44"/><text x="275" y="42">GET /api/spec</text></g>
+        <g class="node missing" id="n-wt"><rect x="430" y="20" width="150" height="44"/><text x="505" y="42">worktree file</text></g>
+        <g class="node" id="n-main"><rect x="430" y="116" width="150" height="44"/><text x="505" y="138">main file</text></g>
+        <g class="node result" id="n-client"><rect x="630" y="116" width="130" height="44"/><text x="695" y="138">tab: read-only</text></g>
+        <g class="edge" data-from="n-tab" data-to="n-api"><path d="M140 42H198"/></g>
+        <g class="edge" data-from="n-api" data-to="n-wt"><path d="M350 42H428"/><text x="389" y="34">read</text></g>
+        <g class="edge" data-from="n-api" data-to="n-main"><path d="M275 64V138H428"/><text x="345" y="130">ENOENT → fall back</text></g>
+        <g class="edge" data-from="n-main" data-to="n-client"><path d="M580 138H628"/><text x="605" y="130">path</text></g>
+      </svg>
+      <figcaption>Figure 1. The reported scenario. The dashed node is the file that no longer exists.</figcaption>
+      <details><summary>What an agent reads for this figure</summary>
+<pre><code>&lt;g class="node missing" id="n-wt"&gt;…&lt;text&gt;worktree file&lt;/text&gt;&lt;/g&gt;
+&lt;g class="node" id="n-main"&gt;…&lt;text&gt;main file&lt;/text&gt;&lt;/g&gt;
+&lt;g class="edge" data-from="n-api" data-to="n-main"&gt;…&lt;text&gt;ENOENT → fall back&lt;/text&gt;&lt;/g&gt;</code></pre></details>
+    </figure>
+  </section>
+
+  <section id="changes">
+    <h2>What changes where</h2>
+    <figure id="fig-changes">
+      <table id="tbl-changes">
+        <caption>Table 1. Files touched and the behaviour each gains</caption>
+        <thead><tr><th scope="col">File</th><th scope="col">Change</th><th scope="col">Tested by</th></tr></thead>
+        <tbody>
+          <tr><th scope="row"><code>mainpath.ts</code></th><td>New pure helpers: <code>isWorktreePath</code>, <code>isMainPath</code>, <code>mainEquivalent</code></td><td><code>mainpath.test.ts</code></td></tr>
+          <tr><th scope="row"><code>api/spec</code></th><td>GET falls back to the main file and returns the effective path; PUT to main returns 403</td><td>via the helpers</td></tr>
+          <tr><th scope="row"><code>resolve.ts</code></th><td>Retries the match with the main equivalent when a worktree query finds nothing</td><td><code>resolve.test.ts</code></td></tr>
+          <tr><th scope="row"><code>caption.ts</code></th><td>Adds <code>main</code> as the final location fallback</td><td><code>caption.test.ts</code></td></tr>
+          <tr><th scope="row"><code>Editor.svelte</code></th><td>New <code>readOnly</code> prop driving a CodeMirror compartment</td><td>manual</td></tr>
+        </tbody>
+      </table>
+    </figure>
+    <h3 id="path-rule">The path rule</h3>
+    <pre><code>~/Projects/p/.claude/worktrees/wt/docs/superpowers/specs/x.md
+  → ~/Projects/p/docs/superpowers/specs/x.md</code></pre>
+    <aside data-kind="decision"><strong>Decision</strong> Read-only is not a separate field in the response.
+    The client derives it from the effective path, the same check that drives the tab caption.</aside>
+  </section>
+</article>

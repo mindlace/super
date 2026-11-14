@@ -6,6 +6,10 @@ describe('isRelevantChange', () => {
     expect(isRelevantChange('planafoot/docs/superpowers/specs/2026-06-22-x.md')).toBe(true);
     expect(isRelevantChange('proj/docs/superpowers/plans/2026-06-22-y.md')).toBe(true);
   });
+  it('matches .html specs but not files under assets', () => {
+    expect(isRelevantChange('p/docs/superpowers/specs/x.html')).toBe(true);
+    expect(isRelevantChange('p/docs/superpowers/specs/assets/x/a.png')).toBe(false);
+  });
   it('treats a null filename as relevant (conservative)', () => {
     expect(isRelevantChange(null)).toBe(true);
   });

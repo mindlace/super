@@ -1,4 +1,5 @@
 import type { SpecEntry } from '$lib/types';
+import { stripSpecExt } from './specfile';
 
 export interface DisplayGroup {
   parent: SpecEntry;
@@ -9,9 +10,8 @@ export interface DisplayGroup {
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}(?:-\d{4})?-/;
 
 export function normalizedSlug(filename: string): string {
-  return filename
+  return stripSpecExt(filename)
     .replace(DATE_PREFIX, '')
-    .replace(/\.md$/, '')
     .replace(/-design$/, '')
     .toLowerCase();
 }

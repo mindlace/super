@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import type { SpecEntry } from '$lib/types';
 import { normalizedSlug } from '../pairing';
-import { exists, isWorktreeRoot, listDirs, listMarkdown, MAX_WORKTREE_DEPTH } from './fswalk';
+import { exists, isWorktreeRoot, listDirs, listSpecFiles, MAX_WORKTREE_DEPTH } from './fswalk';
+import { specKind, stripSpecExt } from '../specfile';
 import { listDirtyDocs, type GitRunner } from './gitdirty';
 
 /**
@@ -45,6 +46,27 @@ export function extractTitle(content: string): string | null {
   return null;
 }
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&nbsp;': ' '
+};
+
+/** Text of the first <h1>, tags stripped and entities decoded. No DOM: runs on the server. */
+export function extractHtmlTitle(content: string): string | null {
+  const m = /<h1\b[^>]*>([\s\S]*?)<\/h1>/i.exec(content);
+  if (!m) return null;
+  const text = m[1]
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(?:amp|lt|gt|quot|#39|nbsp);/g, (e) => HTML_ENTITIES[e])
+    .replace(/\s+/g, ' ')
+    .trim();
+  return text || null;
+}
+
 function typeLabel(subdir: string): string {
   if (subdir === 'specs') return 'spec';
   if (subdir === 'plans') return 'plan';
@@ -79,7 +101,7 @@ export async function makeEntry(
   return {
     path,
     filename,
-    title: extractTitle(raw) ?? filename,
+    title: (specKind(filename) === 'html' ? extractHtmlTitle(raw) : extractTitle(raw)) ?? filename,
     project,
     worktree,
     type: typeLabel(subdir),
@@ -160,8 +182,8 @@ export async function scanSpecs(
     const mainSet = new Set<string>();
     if (mainLoc) {
       for (const sub of await listDirs(mainLoc.dir)) {
-        for (const name of await listMarkdown(join(mainLoc.dir, sub))) {
-          mainSet.add(`${sub}/${name}`);
+        for (const name of await listSpecFiles(join(mainLoc.dir, sub))) {
+          mainSet.add(`${sub}/${stripSpecExt(name)}`);
         }
       }
     }
@@ -171,8 +193,8 @@ export async function scanSpecs(
       if (loc.worktree === null) continue;
       for (const sub of await listDirs(loc.dir)) {
         const dir = join(loc.dir, sub);
-        for (const name of await listMarkdown(dir)) {
-          if (mainSet.has(`${sub}/${name}`)) continue;
+        for (const name of await listSpecFiles(dir)) {
+          if (mainSet.has(`${sub}/${stripSpecExt(name)}`)) continue;
           const entry = await makeEntry(
             dir,
             name,
@@ -191,7 +213,7 @@ export async function scanSpecs(
     // it (same project, same slug), so the plan keeps its nested parent.
     if (mainLoc) {
       const mainSpecsDir = join(mainLoc.dir, 'specs');
-      for (const name of await listMarkdown(mainSpecsDir)) {
+      for (const name of await listSpecFiles(mainSpecsDir)) {
         if (!planSlugs.has(normalizedSlug(name))) continue;
         const entry = await makeEntry(
           mainSpecsDir,

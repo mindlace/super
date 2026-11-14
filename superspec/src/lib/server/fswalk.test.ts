@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { listDirs, listMarkdown, isWorktreeRoot } from './fswalk';
+import { listDirs, listSpecFiles, isWorktreeRoot } from './fswalk';
 import { makeTree } from './testtree';
 import { SUPERPOWERS_SEGMENT } from './config';
 
@@ -14,6 +14,9 @@ beforeAll(async () => {
   await mkdir(join(root, 'sub-b'), { recursive: true });
   await writeFile(join(root, 'keep.md'), '# keep');
   await writeFile(join(root, 'skip.txt'), 'nope');
+  await writeFile(join(root, 'b.html'), '<h1>b</h1>');
+  await writeFile(join(root, 'c.png'), 'png');
+  await mkdir(join(root, 'assets'), { recursive: true });
 });
 
 afterAll(async () => {
@@ -22,19 +25,19 @@ afterAll(async () => {
 
 describe('listDirs', () => {
   it('returns only subdirectory names', async () => {
-    expect((await listDirs(root)).sort()).toEqual(['sub-a', 'sub-b']);
+    expect((await listDirs(root)).sort()).toEqual(['assets', 'sub-a', 'sub-b']);
   });
   it('returns [] for a missing path', async () => {
     expect(await listDirs(join(root, 'nope'))).toEqual([]);
   });
 });
 
-describe('listMarkdown', () => {
-  it('returns only .md filenames', async () => {
-    expect(await listMarkdown(root)).toEqual(['keep.md']);
+describe('listSpecFiles', () => {
+  it('listSpecFiles returns .md and .html filenames only', async () => {
+    expect((await listSpecFiles(root)).sort()).toEqual(['b.html', 'keep.md']);
   });
   it('returns [] for a missing dir', async () => {
-    expect(await listMarkdown(join(root, 'nope'))).toEqual([]);
+    expect(await listSpecFiles(join(root, 'nope'))).toEqual([]);
   });
 });
 

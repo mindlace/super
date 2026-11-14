@@ -15,6 +15,11 @@ describe('highlightToHtml', () => {
     expect(html).toContain('just some text');
   });
 
+  it('emits both light and dark colours', async () => {
+    const html = await highlightToHtml('const x = 1;', 'ts');
+    expect(html).toContain('--shiki-dark');
+  });
+
   it('handles an empty language label', async () => {
     const html = await highlightToHtml('plain line', '');
     expect(html).toContain('plain line');

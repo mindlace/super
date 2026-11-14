@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanSpecs, parseFilenameDateMs, extractTitle, listSuperpowersLocations } from './discovery';
+import { scanSpecs, parseFilenameDateMs, extractTitle, extractHtmlTitle, listSuperpowersLocations } from './discovery';
 import { makeTree } from './testtree';
 import type { GitRunner } from './gitdirty';
 
@@ -81,6 +81,21 @@ describe('extractTitle', () => {
   });
   it('returns null for empty/whitespace content', () => {
     expect(extractTitle('   \n\n')).toBeNull();
+  });
+});
+
+describe('extractHtmlTitle', () => {
+  it('reads the first h1', () => {
+    expect(
+      extractHtmlTitle('<article><header><h1>Worktree→main path fallback, with main as read-only</h1>')
+    ).toBe('Worktree→main path fallback, with main as read-only');
+  });
+  it('strips tags, decodes entities and collapses whitespace', () => {
+    expect(extractHtmlTitle('<h1 id="t">\n  A <code>b</code> &amp; c\n</h1>')).toBe('A b & c');
+  });
+  it('returns null with no h1 or an empty one', () => {
+    expect(extractHtmlTitle('<article><p>no heading</p></article>')).toBeNull();
+    expect(extractHtmlTitle('<h1>  </h1>')).toBeNull();
   });
 });
 
@@ -232,5 +247,60 @@ describe('scanSpecs recency vs. checkout mtime', () => {
 
     const e = byName(await scanSpecs(treeRoot, noGit), DATED)!;
     expect(e.recency).toBe(e.mtime);
+  });
+});
+
+describe('scanSpecs html specs', () => {
+  const SP = 'docs/superpowers';
+  const WT = '.claude/worktrees/wt';
+
+  it('lists an .html worktree spec', async () => {
+    const r = await makeTree({ [`p/${WT}/${SP}/specs/2026-06-20-a-design.html`]: '<h1>A</h1>' });
+    const list = await scanSpecs(r);
+    expect(list.map((e) => e.filename)).toEqual(['2026-06-20-a-design.html']);
+  });
+
+  it('suppresses a worktree .html spec when main has the same name as .md', async () => {
+    const r = await makeTree({
+      [`p/${SP}/specs/2026-06-20-land-design.md`]: '# Land',
+      [`p/${WT}/${SP}/specs/2026-06-20-land-design.html`]: '<h1>Land</h1>'
+    });
+    expect(await scanSpecs(r)).toEqual([]);
+  });
+
+  it('lists both forms when foo.md and foo.html sit in one worktree', async () => {
+    const r = await makeTree({
+      [`p/${WT}/${SP}/specs/2026-06-20-foo-design.md`]: '# Foo',
+      [`p/${WT}/${SP}/specs/2026-06-20-foo-design.html`]: '<h1>Foo</h1>'
+    });
+    const names = (await scanSpecs(r)).map((e) => e.filename).sort();
+    expect(names).toEqual(['2026-06-20-foo-design.html', '2026-06-20-foo-design.md']);
+  });
+
+  it('re-surfaces a landed .html main spec for a live worktree plan', async () => {
+    const r = await makeTree({
+      [`p/${SP}/specs/2026-06-19-q-design.html`]: '<h1>Q</h1>',
+      [`p/${WT}/${SP}/plans/2026-06-23-q.md`]: '# Q Plan'
+    });
+    const spec = (await scanSpecs(r)).find((e) => e.filename === '2026-06-19-q-design.html');
+    expect(spec?.onMain).toBe(true);
+  });
+
+  it('does not list files under specs/assets', async () => {
+    const r = await makeTree({
+      [`p/${WT}/${SP}/specs/assets/x/shot.png`]: 'png',
+      [`p/${WT}/${SP}/specs/assets/x/mock.html`]: '<p>x</p>'
+    });
+    expect(await scanSpecs(r)).toEqual([]);
+  });
+
+  it('titles an .html spec from its h1 and falls back to the filename', async () => {
+    const r = await makeTree({
+      [`p/${WT}/${SP}/specs/2026-06-20-t-design.html`]: '<h1>Html Title</h1>',
+      [`p/${WT}/${SP}/specs/2026-06-21-u-design.html`]: '<article></article>'
+    });
+    const list = await scanSpecs(r);
+    expect(byName(list, '2026-06-20-t-design.html')?.title).toBe('Html Title');
+    expect(byName(list, '2026-06-21-u-design.html')?.title).toBe('2026-06-21-u-design.html');
   });
 });

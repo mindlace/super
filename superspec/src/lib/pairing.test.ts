@@ -32,7 +32,21 @@ describe('normalizedSlug', () => {
   });
 });
 
+describe('normalizedSlug html', () => {
+  it('strips .html like .md', () => {
+    expect(normalizedSlug('2026-11-13-foo-design.html')).toBe('foo');
+  });
+});
+
 describe('pairAndGroup', () => {
+  it('pairs an .html spec with an .md plan', () => {
+    const spec = entry({ filename: '2026-11-13-foo-design.html', type: 'spec', recency: 100 });
+    const plan = entry({ filename: '2026-11-13-foo.md', type: 'plan', recency: 200 });
+    expect(ids(pairAndGroup([spec, plan]))).toEqual([
+      { parent: '2026-11-13-foo-design.html', children: ['2026-11-13-foo.md'] }
+    ]);
+  });
+
   it('pairs a spec with its plan in the same project (plan indented)', () => {
     const spec = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', recency: 100 });
     const plan = entry({ filename: '2026-06-21-foo.md', type: 'plan', recency: 200 });

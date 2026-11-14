@@ -1,11 +1,12 @@
 import { watch } from 'node:fs';
 import { PROJECTS_ROOT } from './config';
 import { listWatchTargets } from './watchtargets';
+import { isSpecFile } from '../specfile';
 
 export function isRelevantChange(relPath: string | null): boolean {
   if (relPath === null) return true;
   const p = relPath.replace(/\\/g, '/');
-  return p.includes('docs/superpowers/') && p.endsWith('.md');
+  return p.includes('docs/superpowers/') && isSpecFile(p) && !p.includes('/assets/');
 }
 
 export interface WatcherHub {

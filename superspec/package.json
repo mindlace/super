@@ -16,7 +16,6 @@
     "@sveltejs/adapter-node": "^5.2.12",
     "@sveltejs/kit": "^2.20.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
-    "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.0",
     "@types/node": "^26.0.0",
     "jsdom": "^29.1.1",
@@ -29,6 +28,7 @@
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
+    "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",
     "@codemirror/language-data": "^6.5.2",
@@ -37,6 +37,7 @@
     "@lezer/highlight": "^1.2.3",
     "dompurify": "^3.2.0",
     "marked": "^15.0.0",
+    "parse5": "^8.1.1",
     "shiki": "^4.2.0"
   }
 }

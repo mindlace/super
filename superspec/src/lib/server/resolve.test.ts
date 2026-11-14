@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveDoc } from './resolve';
+import { makeTree } from './testtree';
 
 let root: string;
 
@@ -116,5 +117,36 @@ describe('resolveDoc', () => {
       'projE/.claude/worktrees/wtgone/docs/superpowers/specs/nope-design.md'
     );
     expect(await resolveDoc(gone, root)).toBeNull();
+  });
+});
+
+describe('resolveDoc html', () => {
+  const SP = 'docs/superpowers/specs';
+  const html = '2026-06-25-h-design.html';
+
+  it('matches a bare name against an .html spec', async () => {
+    const r = await makeTree({ [`p/.claude/worktrees/w/${SP}/${html}`]: '<h1>H</h1>' });
+    const g = await resolveDoc('2026-06-25-h-design', r);
+    expect(g?.parent.filename).toBe(html);
+  });
+
+  it('matches an explicit .html name', async () => {
+    const r = await makeTree({ [`p/.claude/worktrees/w/${SP}/${html}`]: '<h1>H</h1>' });
+    const g = await resolveDoc(html, r);
+    expect(g?.parent.filename).toBe(html);
+  });
+
+  it('with both forms present, an extension-less query returns the newer', async () => {
+    const dir = `p/.claude/worktrees/w/${SP}`;
+    const r = await makeTree({
+      [`${dir}/2026-06-25-b-design.md`]: '# B',
+      [`${dir}/2026-06-25-b-design.html`]: '<h1>B</h1>'
+    });
+    const old = new Date(2020, 0, 1).getTime() / 1000;
+    const newer = new Date(2030, 0, 1).getTime() / 1000;
+    await utimes(join(r, dir, '2026-06-25-b-design.md'), old, old);
+    await utimes(join(r, dir, '2026-06-25-b-design.html'), newer, newer);
+    const g = await resolveDoc('2026-06-25-b-design', r);
+    expect(g?.parent.filename).toBe('2026-06-25-b-design.html');
   });
 });
