@@ -6,39 +6,65 @@ Applying a JSONL file of {"call_id", "verdict"} lines writes ordinary `record` e
 import json
 import sys
 
-from . import log, report
+from . import log, report, state as state_mod
+from .builders import transcript
 
 VERDICTS = ("block", "allow")
 
 
-def unlabeled(entries, point="verify-stop", since=None):
-    """([{call_id, ts, state}] unrecorded non-error calls of `point` with state, sorted by ts;
-    count of unrecorded calls lacking state)."""
-    recorded = {e.get("call_id") for e in entries if e.get("type") == "record"}
-    states = log.states_by_call(entries)
+def _ctx(call, st, projects_dir):
+    """The call's ctx (legacy: session/transcript from its latest state entry), with the
+    transcript path resolved through transcript.locate."""
+    if isinstance(call.get("ctx"), dict):
+        ctx = dict(call["ctx"])
+    elif st:
+        ctx = {"session_id": st.get("session_id"), "transcript_path": st.get("transcript_path")}
+    else:
+        ctx = {}
+    sid = ctx.get("session_id")
+    if sid:
+        found = transcript.locate(sid, ctx.get("transcript_path"), projects_dir)
+        if found:
+            ctx["transcript_path"] = found
+    return ctx
+
+
+def unlabeled(entries, point="verify-stop", since=None, log_dir=None, projects_dir=None):
+    """([{call_id, ts, state, ctx}] non-error calls of `point` with state and no blind_label
+    record, sorted by ts; count of such calls lacking state). In-session and auto-hook
+    records do not exclude a call: blind labels are collected for them too."""
     calls = {}
     for e in entries:
         if e.get("type") == "call":
             calls[e.get("call_id")] = e
+    labeled = {e.get("call_id") for e in entries
+               if e.get("type") == "record" and report.record_source(e, calls) == "blind_label"}
+    states = log.states_by_call(entries)
+    get = state_mod.loader(entries, log_dir)
     rows, missing = [], 0
     for cid, c in calls.items():
-        if c.get("point") != point or c.get("error") or cid in recorded:
+        if c.get("point") != point or c.get("error") or cid in labeled:
             continue
         if since and (c.get("ts") or "")[:10] < since:
             continue
-        st = states.get(cid)
+        st = get(cid)
         if st is None:
             missing += 1
             continue
-        rows.append({"call_id": cid, "ts": c.get("ts"), "state": st.get("state")})
+        rows.append({"call_id": cid, "ts": c.get("ts"), "state": st,
+                     "ctx": _ctx(c, states.get(cid), projects_dir)})
     rows.sort(key=lambda r: r["ts"] or "")
     return rows, missing
 
 
-def apply(lines, entries, env, cwd=None, point="verify-stop"):
-    """Record verdicts from JSONL `lines`. Returns (records written, error messages)."""
+def apply(lines, entries, env, cwd=None, point="verify-stop", rule_version="none", labeler=None):
+    """Record blind_label verdicts from JSONL `lines`. Returns (records written, error messages).
+
+    A line is a duplicate only if the call already has a blind_label record under the same
+    rule_version."""
     calls = {e.get("call_id"): e for e in entries if e.get("type") == "call"}
-    recorded = {e.get("call_id") for e in entries if e.get("type") == "record"}
+    recorded = {(e.get("call_id"), e.get("rule_version")) for e in entries
+                if e.get("type") == "record" and e.get("source") == "blind_label"}
     written, errors = 0, []
     for n, line in enumerate(lines, 1):
         if not line.strip():
@@ -59,11 +85,13 @@ def apply(lines, entries, env, cwd=None, point="verify-stop"):
         elif verdict not in VERDICTS:
             errors.append("line %d: call_id %s: verdict must be one of %s, got %r"
                           % (n, cid, "|".join(VERDICTS), verdict))
-        elif cid in recorded:
-            errors.append("line %d: call_id %s is already recorded" % (n, cid))
+        elif (cid, rule_version) in recorded:
+            errors.append("line %d: call_id %s is already labeled under rule_version %s"
+                          % (n, cid, rule_version))
         else:
-            report.record(cid, {"verdict": verdict}, env, cwd)
-            recorded.add(cid)
+            report.record(cid, {"verdict": verdict}, env, cwd, source="blind_label",
+                          rule_version=rule_version, labeler=labeler)
+            recorded.add((cid, rule_version))
             written += 1
     return written, errors
 
@@ -77,12 +105,14 @@ def cmd_label(args, env):
         except OSError as exc:
             sys.stderr.write("jev label: %s\n" % exc)
             return 2
-        written, errors = apply(lines, entries, env, args.root, args.point)
+        written, errors = apply(lines, entries, env, args.root, args.point,
+                               args.rule_version, args.labeler)
         sys.stderr.write("recorded %d\n" % written)
         for msg in errors:
             sys.stderr.write(msg + "\n")
         return 1 if errors else 0
-    rows, missing = unlabeled(entries, args.point, args.since)
+    rows, missing = unlabeled(entries, args.point, args.since, log.log_dir(env, args.root),
+                           transcript.projects_dir(env))
     for r in rows:
         sys.stdout.write(json.dumps(r, ensure_ascii=False) + "\n")
     if missing:
@@ -95,5 +125,7 @@ def add_parser(sub):
     p.add_argument("point", choices=["verify-stop"])
     p.add_argument("--since", help="YYYY-MM-DD")
     p.add_argument("--apply", metavar="FILE", help="JSONL of {call_id, verdict}; records them")
+    p.add_argument("--rule-version", default="none", help="labeling rule version (with --apply)")
+    p.add_argument("--labeler", help="who labeled, e.g. subagent:x (with --apply)")
     p.add_argument("--root", help="repo root to resolve the log from")
     p.set_defaults(func=cmd_label)

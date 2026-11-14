@@ -7,6 +7,8 @@ prompt) or a list of blocks: text, tool_use {id, name, input}, tool_result
 {tool_use_id, content}. Meta entries carry isMeta; subagent entries isSidechain.
 """
 import json
+import os
+import re
 from pathlib import Path
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -14,6 +16,33 @@ MAX_COMMANDS = 10
 OUTPUT_TAIL_CHARS = 1500
 LAST_MESSAGE_CHARS = 4000
 TAIL_BYTES = 256 * 1024   # a Stop hook only needs the current turn; never read a whole long session
+
+
+def projects_dir(env):
+    return Path((env.get("HOME") if env else None) or os.path.expanduser("~")) / ".claude" / "projects"
+
+
+def locate(session_id, hint=None, projects_dir=None):
+    """The transcript for a session: `hint` if it is a file, else the newest
+    projects_dir/*/<session_id>.jsonl. Session ids are matched strictly (no glob chars)."""
+    if hint and os.path.isfile(hint):
+        return hint
+    if not isinstance(session_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", session_id):
+        return None
+    if projects_dir is None:
+        return None
+    best = None
+    try:
+        for p in Path(projects_dir).glob("*/%s.jsonl" % session_id):
+            try:
+                m = p.stat().st_mtime
+            except OSError:
+                continue
+            if p.is_file() and (best is None or m > best[0]):
+                best = (m, p)
+    except OSError:
+        return None
+    return str(best[1]) if best else None
 
 
 def _read_tail(path, tail_bytes=TAIL_BYTES):

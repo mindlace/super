@@ -4,9 +4,11 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 import support
 from jevlib import cli, label, log, report
+from jevlib import state as state_mod
 
 
 def call(cid, point="verify-stop", ts="2026-10-11T10:00:00", **kw):
@@ -38,14 +40,49 @@ class LabelTest(unittest.TestCase):
             call("T", point="tier"), state("T"),
         ]
 
-    def test_lists_unrecorded_with_state_only(self):
+    def test_lists_calls_without_blind_label_with_state_only(self):
         listed, missing = label.unlabeled(self.base())
-        self.assertEqual([r["call_id"] for r in listed], ["A"])
+        self.assertEqual([r["call_id"] for r in listed], ["A", "B"])
         self.assertEqual(missing, 1)
+
+    def test_in_session_listed_blind_label_not(self):
+        entries = [call("I"), state("I"),
+                   {"type": "record", "call_id": "I", "claude_verdict": {"verdict": "allow"},
+                    "source": "in_session"},
+                   call("L"), state("L"),
+                   {"type": "record", "call_id": "L", "claude_verdict": {"verdict": "allow"},
+                    "source": "blind_label"}]
+        listed, _ = label.unlabeled(entries)
+        self.assertEqual([r["call_id"] for r in listed], ["I"])
 
     def test_output_is_blind(self):
         listed, _ = label.unlabeled(self.base())
-        self.assertEqual(set(listed[0]), {"call_id", "ts", "state"})
+        self.assertEqual(set(listed[0]), {"call_id", "ts", "state", "ctx"})
+        for k in ("verdict", "confident", "raw"):
+            self.assertNotIn(k, listed[0]["ctx"])
+
+    def test_lists_calls_with_blob_state(self):
+        d = log.log_dir(self.env)
+        sha = state_mod.write_blob({"last_message": "done"}, d)
+        rows, missing = label.unlabeled([call("Z", state_sha=sha)], log_dir=d)
+        self.assertEqual(rows[0]["state"], {"last_message": "done"})
+        self.assertEqual(missing, 0)
+
+    def test_listing_resolves_stale_transcript_path(self):
+        d = log.log_dir(self.env)
+        sha = state_mod.write_blob({"last_message": "done"}, d)
+        projects = Path(tempfile.mkdtemp())
+        real = projects / "-main" / "sid1.jsonl"
+        real.parent.mkdir()
+        real.write_text("")
+        c = call("Z", state_sha=sha,
+                 ctx={"session_id": "sid1", "transcript_path": "/gone/sid1.jsonl"})
+        rows, _ = label.unlabeled([c], log_dir=d, projects_dir=projects)
+        self.assertEqual(rows[0]["ctx"]["transcript_path"], str(real))
+
+    def test_legacy_state_entry_supplies_ctx(self):
+        rows, _ = label.unlabeled([call("A"), state("A")])
+        self.assertEqual(rows[0]["ctx"]["session_id"], "sess")
 
     def test_since_filters(self):
         entries = [call("old", ts="2026-10-10T09:00:00"), state("old"),
@@ -82,6 +119,39 @@ class LabelTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("line 1", errors[0])
 
+    def test_apply_writes_blind_label_with_rule_and_labeler(self):
+        seed(self.env, self.base())
+        line = json.dumps({"call_id": "A", "verdict": "block"})
+        n, _ = label.apply([line], log.read_entries(self.env), self.env,
+                           rule_version="verify-stop.v1", labeler="subagent:x")
+        self.assertEqual(n, 1)
+        r = [e for e in log.read_entries(self.env) if e.get("type") == "record"
+             and e["call_id"] == "A"][0]
+        self.assertEqual((r["source"], r["rule_version"], r["labeler"]),
+                         ("blind_label", "verify-stop.v1", "subagent:x"))
+
+    def test_apply_default_rule_version_is_none_string(self):
+        seed(self.env, self.base())
+        label.apply([json.dumps({"call_id": "A", "verdict": "block"})],
+                    log.read_entries(self.env), self.env)
+        r = [e for e in log.read_entries(self.env) if e.get("type") == "record"
+             and e["call_id"] == "A"][0]
+        self.assertEqual(r["rule_version"], "none")
+
+    def test_apply_over_in_session_record_allowed(self):
+        seed(self.env, self.base())
+        n, errors = label.apply([json.dumps({"call_id": "B", "verdict": "block"})],
+                                log.read_entries(self.env), self.env)
+        self.assertEqual((n, errors), (1, []))
+
+    def test_relabel_under_new_rule_allowed(self):
+        seed(self.env, self.base())
+        line = json.dumps({"call_id": "A", "verdict": "block"})
+        self.assertEqual(label.apply([line], log.read_entries(self.env), self.env,
+                                     rule_version="v1")[0], 1)
+        self.assertEqual(label.apply([line], log.read_entries(self.env), self.env,
+                                     rule_version="v2")[0], 1)
+
     def test_apply_twice_no_duplicate(self):
         seed(self.env, self.base())
         line = json.dumps({"call_id": "A", "verdict": "block"})
@@ -100,7 +170,7 @@ class LabelTest(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             self.assertEqual(cli.main(["label", "verify-stop"], self.env), 0)
         rows = [json.loads(l) for l in out.getvalue().splitlines()]
-        self.assertEqual([r["call_id"] for r in rows], ["A"])
+        self.assertEqual([r["call_id"] for r in rows], ["A", "B"])
         self.assertIn("1 unrecorded verify-stop calls have no state", err.getvalue())
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "labels.jsonl")
@@ -108,10 +178,15 @@ class LabelTest(unittest.TestCase):
                 f.write(json.dumps({"call_id": "A", "verdict": "block"}) + "\n")
             err = io.StringIO()
             with contextlib.redirect_stderr(err):
-                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path], self.env), 0)
+                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path,
+                                          "--rule-version", "v1", "--labeler", "me"], self.env), 0)
             self.assertIn("recorded 1", err.getvalue())
             with contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path], self.env), 1)
+                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path,
+                                          "--rule-version", "v1"], self.env), 1)
+        r = [e for e in log.read_entries(self.env) if e.get("type") == "record"
+             and e["call_id"] == "A"][0]
+        self.assertEqual((r["rule_version"], r["labeler"]), ("v1", "me"))
         rows = report.build_report(log.read_entries(self.env), point="verify-stop")
         self.assertEqual(rows["verify-stop"]["recorded"], 2)
 

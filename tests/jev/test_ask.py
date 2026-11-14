@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import support
-from jevlib import ask, client, log
+from jevlib import ask, client, ctx, log, state
 
 STATE = {"text": "The moon is made of cheese.", "items": ["apple"]}
 
@@ -156,6 +156,44 @@ class AskTest(unittest.TestCase):
         self.assertFalse(out["enabled"])
         self.assertTrue(out["reason"].startswith("combine failed"), out["reason"])
 
+    def test_call_entry_has_state_sha_and_ctx(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            env = toy_env(srv); env["CLAUDE_CODE_SESSION_ID"] = "s-env"
+            ask.ask("toy", STATE, env)
+        e = log.read_entries(env)[0]
+        self.assertEqual(state.read_blob(e["state_sha"], log.log_dir(env)), STATE)
+        self.assertEqual(set(e["ctx"]), set(ctx.CTX_KEYS))
+        self.assertEqual(e["ctx"]["session_id"], "s-env")
+
+    def test_error_and_invalid_calls_still_persist_state(self):
+        with support.StubServer(lambda p: (500, {"detail": "boom"}, 0)) as srv:
+            env = toy_env(srv)
+            ask.ask("toy", STATE, env, call_id="c-err")
+        e = log.read_entries(env)[0]
+        self.assertTrue(e["error"])
+        self.assertEqual(state.load("c-err", env), STATE)
+        env2 = toy_env()
+        ask.ask("toy", {"nope": 1}, env2, call_id="c-bad")
+        e2 = log.read_entries(env2)[0]
+        self.assertTrue(e2["error"].startswith("state invalid"))
+        self.assertEqual(state.load("c-bad", env2), {"nope": 1})
+
+    def test_blob_failure_does_not_break_ask(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            env = toy_env(srv)
+            with mock.patch.object(state, "write_blob", side_effect=OSError("disk full")):
+                out = ask.ask("toy", STATE, env)
+        self.assertTrue(out["enabled"])
+        e = log.read_entries(env)[0]
+        self.assertIsNone(e["state_sha"])
+        self.assertEqual(e["verdict"], "flagged")
+
+    def test_write_log_false_writes_no_blob(self):
+        with support.StubServer(support.ok(noul=0.9)) as srv:
+            env = toy_env(srv)
+            ask.ask("toy", STATE, env, write_log=False)
+        self.assertFalse((log.log_dir(env) / "states").exists())
+
 
 class TruncatedBodyServer:
     """Raw socket server: claims a longer Content-Length than it sends, then closes,
@@ -286,10 +324,31 @@ class LogDirTest(unittest.TestCase):
                          Path(home) / ".superpowers" / "jev")
 
 
+class GitSpawnTest(unittest.TestCase):
+    def test_one_ask_spawns_git_at_most_once(self):
+        repo = Path(tempfile.mkdtemp(prefix="jevrepo-")).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+        env = toy_env(None)
+        env.pop("JEV_LOG_DIR", None)
+        env["HOME"] = tempfile.mkdtemp()
+        real = subprocess.run
+        calls = []
+
+        def counting(*a, **k):
+            calls.append(a)
+            return real(*a, **k)
+
+        with mock.patch.object(subprocess, "run", side_effect=counting):
+            with mock.patch.object(client, "post", return_value=(200, {})):
+                ask.ask("toy", STATE, env, cwd=str(repo))
+        self.assertLessEqual(len(calls), 1, calls)
+
+
 class CliTest(unittest.TestCase):
     def run_jev(self, args, env, stdin=None):
         full = dict(os.environ)
-        for k in ("SUPERPOWERS_JEV", "SUPERPOWERS_JEV_ON", "TYPESAFE_API_KEY", "JEV_ENDPOINT"):
+        for k in ("SUPERPOWERS_JEV", "SUPERPOWERS_JEV_ON", "TYPESAFE_API_KEY", "JEV_ENDPOINT",
+                  "JEV_REGISTRY"):
             full.pop(k, None)
         full.update(env)
         return subprocess.run([str(support.JEV)] + args, input=stdin, env=full,
@@ -304,6 +363,18 @@ class CliTest(unittest.TestCase):
             p = self.run_jev(["ask", "toy", "--state", "-"], toy_env(srv), stdin=json.dumps(STATE))
         self.assertEqual(p.returncode, 0)
         self.assertTrue(json.loads(p.stdout)["enabled"])
+
+    def test_ask_file_and_stdin_both_persist_state(self):
+        with support.StubServer(support.ok()) as srv:
+            env = toy_env(srv)
+            f = Path(tempfile.mkdtemp(prefix="jevst-")) / "s.json"
+            f.write_text(json.dumps(STATE))
+            self.run_jev(["ask", "toy", "--state", str(f)], env)
+            self.run_jev(["ask", "toy", "--state", "-"], env, stdin=json.dumps(STATE))
+        calls = [e for e in log.read_entries(env) if e["type"] == "call"]
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(c["state_sha"] for c in calls))
+        self.assertEqual(calls[0]["state_sha"], calls[1]["state_sha"])
 
     def test_ask_bad_state_file_exits_zero_disabled(self):
         p = self.run_jev(["ask", "toy", "--state", "/nonexistent.json"], toy_env())

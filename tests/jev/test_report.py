@@ -1,10 +1,12 @@
 import contextlib
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import support
-from jevlib import cli, log, report
+from jevlib import cli, log, registry, report
 
 
 def call(cid, point, compare, verdict, confident=True, ts="2026-10-11T10:00:00", **kw):
@@ -14,8 +16,13 @@ def call(cid, point, compare, verdict, confident=True, ts="2026-10-11T10:00:00",
     return e
 
 
-def rec(cid, verdict):
-    return {"type": "record", "call_id": cid, "claude_verdict": verdict}
+def rec(cid, verdict, source=None, ts=None):
+    e = {"type": "record", "call_id": cid, "claude_verdict": verdict}
+    if source is not None:
+        e["source"] = source
+    if ts is not None:
+        e["ts"] = ts
+    return e
 
 
 class ReportMathTest(unittest.TestCase):
@@ -187,6 +194,90 @@ class ReportMathTest(unittest.TestCase):
         self.assertIn(" - ", text)
 
 
+class TruthTest(unittest.TestCase):
+    def test_record_writes_source_default_in_session(self):
+        env = support.make_env()
+        report.record("a", {"verdict": "x"}, env)
+        e = [e for e in log.read_entries(env) if e["type"] == "record"][0]
+        self.assertEqual(e["source"], "in_session")
+        self.assertNotIn("rule_version", e)
+        self.assertNotIn("labeler", e)
+
+    def test_record_rejects_unknown_source(self):
+        env = support.make_env()
+        with self.assertRaises(ValueError):
+            report.record("a", {"verdict": "x"}, env, source="adjudicated")
+
+    def test_record_writes_rule_and_labeler(self):
+        env = support.make_env()
+        report.record("a", {"verdict": "x"}, env, source="blind_label", rule_version="v1",
+                      labeler="me")
+        e = [e for e in log.read_entries(env) if e["type"] == "record"][0]
+        self.assertEqual((e["source"], e["rule_version"], e["labeler"]), ("blind_label", "v1", "me"))
+
+    def test_legacy_record_source_inferred(self):
+        calls = {"p": {"point": "prompt-route"}, "t": {"point": "tier"}}
+        self.assertEqual(report.record_source({"call_id": "p"}, calls), "auto_hook")
+        self.assertEqual(report.record_source({"call_id": "t"}, calls), "in_session")
+        self.assertEqual(report.record_source({"call_id": "t", "source": "blind_label"}, calls),
+                         "blind_label")
+
+    def test_latest_wins_within_source_not_across(self):
+        es = [call("a", "verify-stop", "verdict", "block"),
+              rec("a", {"verdict": "block"}, source="blind_label"),
+              rec("a", {"verdict": "allow"}, source="in_session")]
+        self.assertEqual(report.build_report(es)["verify-stop"]["agree"], 1)
+        self.assertEqual(report.build_report(es, truth="in_session")["verify-stop"]["agree"], 0)
+        es.append(rec("a", {"verdict": "allow"}, source="blind_label"))
+        self.assertEqual(report.build_report(es)["verify-stop"]["agree"], 0)
+
+    def test_truth_filters_population(self):
+        es = [call("a", "verify-stop", "verdict", "block"),
+              rec("a", {"verdict": "block"}, source="in_session")]
+        r = report.build_report(es, truth="blind")["verify-stop"]
+        self.assertEqual(r["recorded"], 0)
+        self.assertEqual(r["unrecorded"], ["a"])
+
+    def test_import_excluded_from_every_truth(self):
+        es = [call("a", "verify-stop", "verdict", "block"),
+              rec("a", {"verdict": "block"}, source="import")]
+        for t in report.TRUTHS:
+            self.assertEqual(report.build_report(es, truth=t)["verify-stop"]["recorded"], 0)
+
+    def test_select_truth(self):
+        es = [call("a", "verify-stop", "verdict", "block"),
+              rec("a", {"verdict": "allow"}, source="in_session"),
+              rec("a", {"verdict": "block"}, source="blind_label")]
+        self.assertEqual(report.select_truth(es)["a"], ("blind_label", {"verdict": "block"}))
+        self.assertEqual(report.select_truth(es, "in_session")["a"],
+                         ("in_session", {"verdict": "allow"}))
+
+    def test_truth_mix(self):
+        es = [call("a", "verify-stop", "verdict", "block"),
+              call("b", "verify-stop", "verdict", "block"),
+              rec("a", {"verdict": "block"}, source="blind_label"),
+              rec("b", {"verdict": "block"}, source="in_session")]
+        self.assertEqual(report.build_report(es)["verify-stop"]["truth_mix"],
+                         {"blind_label": 1, "in_session": 1})
+
+    def test_format_footer_and_mix_column(self):
+        es = [call("a", "verify-stop", "verdict", "block"),
+              rec("a", {"verdict": "block"}, source="blind_label")]
+        text = report.format_report(report.build_report(es))
+        self.assertIn("truth: best (blind_label > in_session > auto_hook)", text)
+        self.assertIn("truth-mix", text.splitlines()[0])
+        self.assertIn("blind_label 1", text)
+
+    def test_cli_truth_flag(self):
+        env = support.make_env()
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["report", "--truth", "blind", "--json"], env), 0)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                cli.main(["report", "--truth", "adjudicated"], env)
+        self.assertEqual(cm.exception.code, 2)
+
+
 class RecordCliTest(unittest.TestCase):
     def test_record_appends_and_report_reads_it(self):
         env = support.make_env()
@@ -224,6 +315,73 @@ class RecordCliTest(unittest.TestCase):
         self.assertIn("operator-tier", rows)
         self.assertEqual(rows["operator-tier"]["recorded"], 1)
         self.assertIn("operator-tier", report.format_report(rows))
+        self.assertIs(rows["operator-tier"]["retired"], True)
+        self.assertIn("operator-tier (retired)", report.format_report(rows))
+        mixed = report.build_report(entries + [call("t", "tier", "picks", {})])
+        self.assertIs(mixed["tier"]["retired"], False)
+        text = report.format_report(mixed)
+        self.assertLess(text.index("\ntier "), text.index("operator-tier (retired)"))
+
+
+class ByAndAllTest(unittest.TestCase):
+    def test_by_model_splits(self):
+        es = [call("a", "verify-stop", "verdict", "block", model="jev-1.13.0", template_version=1),
+              call("b", "verify-stop", "verdict", "allow", model="jev-1.14.0", template_version=1),
+              rec("a", {"verdict": "block"})]
+        r = report.build_report(es, by="model")["verify-stop"]
+        self.assertEqual(set(r["by"]), {"jev-1.13.0", "jev-1.14.0"})
+        self.assertEqual((r["by"]["jev-1.13.0"]["recorded"], r["by"]["jev-1.14.0"]["recorded"]),
+                         (1, 0))
+        self.assertNotIn("by", r["by"]["jev-1.13.0"])
+
+    def test_by_template_version(self):
+        es = [call("a", "verify-stop", "verdict", "block", model="m", template_version=1),
+              call("b", "verify-stop", "verdict", "block", model="m", template_version=2),
+              call("c", "verify-stop", "verdict", "block", model="m")]
+        r = report.build_report(es, by="template_version")["verify-stop"]
+        self.assertEqual(set(r["by"]), {"1", "2", "-"})
+
+    def test_labels_on_current_model_needs_model_and_template_version(self):
+        es = [call("old", "verify-stop", "verdict", "block", model="jev-1.13.0",
+                   template_version=1, ts="2026-11-01T00:00:00"),
+              call("tv", "verify-stop", "verdict", "block", model="jev-1.14.0",
+                   template_version=1, ts="2026-11-02T00:00:00"),
+              call("cur", "verify-stop", "verdict", "block", model="jev-1.14.0",
+                   template_version=2, ts="2026-11-03T00:00:00"),
+              rec("old", {"verdict": "block"}), rec("tv", {"verdict": "block"})]
+        r = report.build_report(es)["verify-stop"]
+        self.assertEqual((r["current_model"], r["current_template_version"],
+                          r["labels_current"]), ("jev-1.14.0", 2, 0))
+        es.append(rec("cur", {"verdict": "allow"}))
+        self.assertEqual(report.build_report(es)["verify-stop"]["labels_current"], 1)
+
+    def test_report_all_aggregates_and_skips_missing(self):
+        tmp = Path(tempfile.mkdtemp(prefix="jevtest-"))
+        reg = str(tmp / "reg.json")
+        for name in ("r1", "r2"):
+            log.append(call(name, "tier", "picks", {}),
+                       support.make_env(JEV_LOG_DIR=str(tmp / name), JEV_REGISTRY=reg))
+        registry.register([tmp / "gone"], {"JEV_REGISTRY": reg})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["report", "--all", "--json"],
+                                      support.make_env(JEV_REGISTRY=reg)), 0)
+        self.assertEqual(json.loads(out.getvalue())["tier"]["calls"], 2)
+
+    def test_report_all_without_registry_exits_2(self):
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.main(["report", "--all"], support.make_env()), 2)
+        self.assertIn("jev report --all: no registry (set JEV_REGISTRY)", err.getvalue())
+
+    def test_cli_by_model_prints_split_lines(self):
+        env = support.make_env()
+        log.append(call("a", "verify-stop", "verdict", "block", model="jev-1.14.0",
+                        template_version=1), env)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["report", "--by", "model"], env), 0)
+        self.assertIn("  model=jev-1.14.0", out.getvalue())
+        self.assertIn("labels-cur", out.getvalue())
 
 
 if __name__ == "__main__":
