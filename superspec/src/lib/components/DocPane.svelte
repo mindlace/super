@@ -4,6 +4,7 @@
   import { renderMarkdown, renderSpecHtml } from '$lib/render';
   import { specKind, type SpecKind } from '$lib/specfile';
   import { scrollRatio, scrollTopFor } from '$lib/scrollratio';
+  import { renderViewFor, type RenderOutcome } from '$lib/renderview';
 
   let {
     path,
@@ -31,21 +32,30 @@
   let view = $state<View>(loadView());
   const kind: SpecKind = $derived(specKind(path) ?? 'markdown');
 
-  // What the rendered pane shows. The kind travels with the html so a pending
-  // render for a newly selected file of the other kind can't mis-wrap the old one.
+  // A finished render. The kind travels with the html so it is always wrapped
+  // the way it was rendered.
   interface Rendered {
     kind: SpecKind;
     html: string;
     removed: string[];
     problems: string[];
   }
-  let rendered = $state<Rendered>({ kind: 'markdown', html: '', removed: [], problems: [] });
+  // The last render that landed or failed, tagged with its file. Only an outcome
+  // for the selected path is ever shown (see renderViewFor).
+  let last = $state<RenderOutcome<Rendered> | null>(null);
+  const shown = $derived(renderViewFor(last, path));
+  const rendered = $derived(shown.status === 'ready' ? shown.result : null);
   let renderVersion = 0;
 
   let renderedEl = $state<HTMLDivElement>();
   // Relative scroll position carried between the two panes and across reloads.
   let ratio = $state(0);
-  let renderedPath: string | undefined;
+
+  // A newly selected file starts at the top in either view.
+  $effect(() => {
+    void path;
+    ratio = 0;
+  });
 
   async function renderDoc(src: string, specPath: string, k: SpecKind): Promise<Rendered> {
     if (k === 'html') return { kind: k, ...(await renderSpecHtml(src, specPath)) };
@@ -53,9 +63,10 @@
   }
 
   // Re-render whenever content changes. Rendering is async (Shiki); a version
-  // guard drops stale results so an older render can't overwrite a newer one,
-  // and the previous html stays up until the new one resolves, so the pane never
-  // flashes blank on an external reload.
+  // guard drops stale results so an older render can't overwrite a newer one.
+  // For the same file the previous html stays up until the new one resolves, so
+  // an external reload never flashes blank; a newly selected file shows nothing
+  // until its own render lands, never the previous file's.
   $effect(() => {
     const src = content;
     const specPath = path;
@@ -66,14 +77,17 @@
         if (version !== renderVersion) return;
         // Same file: hold the reader's relative position through the reload.
         // Another file: start at the top.
-        const sameFile = renderedPath === specPath;
+        const sameFile = last?.path === specPath;
         const keep = sameFile && renderedEl ? scrollRatio(renderedEl) : 0;
-        renderedPath = specPath;
-        rendered = out;
+        last = { path: specPath, result: out };
         await tick();
         if (renderedEl) renderedEl.scrollTop = scrollTopFor(keep, renderedEl);
       })
-      .catch((err) => console.error('render failed', err));
+      .catch((err) => {
+        console.error('render failed', err);
+        if (version !== renderVersion) return;
+        last = { path: specPath, error: err instanceof Error ? err.message : String(err) };
+      });
   });
 
   async function setView(next: View) {
@@ -91,7 +105,7 @@
     }
   }
 
-  const noticeCount = $derived(rendered.removed.length + rendered.problems.length);
+  const noticeCount = $derived(rendered ? rendered.removed.length + rendered.problems.length : 0);
 </script>
 
 <div class="flex h-full flex-col">
@@ -110,7 +124,7 @@
         >
       {/each}
     </div>
-    {#if kind === 'html' && rendered.kind === 'html' && noticeCount > 0}
+    {#if rendered?.kind === 'html' && noticeCount > 0}
       <details class="min-w-0 text-amber-300">
         <summary class="cursor-pointer select-none">
           {#if rendered.removed.length}{rendered.removed.length} removed{/if}{#if rendered.removed.length && rendered.problems.length},
@@ -131,10 +145,12 @@
   <div class="min-h-0 flex-1">
     {#if view === 'rendered'}
       <div bind:this={renderedEl} class="spec-doc h-full overflow-y-auto">
-        {#if rendered.kind === 'html'}
+        {#if shown.status === 'error'}
+          <article><p role="alert">Could not render this file: {shown.message}</p></article>
+        {:else if rendered?.kind === 'html'}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           {@html rendered.html}
-        {:else}
+        {:else if rendered}
           <!-- eslint-disable-next-line svelte/no-at-html-tags -->
           <article>{@html rendered.html}</article>
         {/if}
