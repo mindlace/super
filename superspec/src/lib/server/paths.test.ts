@@ -1,55 +1,107 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-import { assertSpecPath, assertAssetPath } from './paths';
+import { realpath, symlink } from 'node:fs/promises';
+import { assertDocPathShape, assertAssetPath, locateDoc } from './paths';
+import { makeTree } from './testtree';
 
 const ROOT = '/tmp/projects-root';
-const good = join(ROOT, 'planafoot/docs/superpowers/specs/2026-06-22-x-design.md');
-const goodWorktree = join(
-  ROOT,
-  'planafoot/.claude/worktrees/wt1/docs/superpowers/specs/2026-06-22-y-design.md'
-);
-
-describe('assertSpecPath', () => {
-  it('accepts a valid main spec path', () => {
-    expect(assertSpecPath(good, ROOT)).toBe(good);
+describe('assertDocPathShape', () => {
+  it.each([
+    'p/docs/x.md',
+    'p/docs/sub/y.html',
+    'p/docs/superpowers/specs/z.md',
+    'p/.claude/worktrees/wt/docs/x.md',
+    'p/.claude/worktrees/support/foo/docs/x.md'
+  ])('accepts %s', (rel) => {
+    const p = join(ROOT, rel);
+    expect(assertDocPathShape(p, ROOT)).toBe(p);
   });
 
-  it('accepts a valid worktree spec path', () => {
-    expect(assertSpecPath(goodWorktree, ROOT)).toBe(goodWorktree);
+  it.each([
+    ['a file outside docs', join(ROOT, 'p/README.md')],
+    ['a nested docs dir', join(ROOT, 'p/src/docs/x.md')],
+    ['a .txt file', join(ROOT, 'p/docs/x.txt')],
+    ['an .htm file', join(ROOT, 'p/docs/x.htm')],
+    ['a worktree nested 4 deep', join(ROOT, 'p/.claude/worktrees/a/b/c/d/docs/x.md')],
+    ['worktrees/docs with no worktree', join(ROOT, 'p/.claude/worktrees/docs/x.md')],
+    ['a path outside the root', '/etc/passwd'],
+    ['traversal escaping the root', join(ROOT, '../../etc/docs/x.md')],
+    ['the docs dir itself', join(ROOT, 'p/docs')],
+    ['a file directly in the root', join(ROOT, 'x.md')]
+  ])('rejects %s', (_n, p) => {
+    expect(() => assertDocPathShape(p, ROOT)).toThrow();
   });
 
-  it('accepts an .html spec path', () => {
-    const html = join(ROOT, 'planafoot/docs/superpowers/specs/2026-06-22-x-design.html');
-    expect(assertSpecPath(html, ROOT)).toBe(html);
+  it('throws with status 400', () => {
+    try {
+      assertDocPathShape('/etc/passwd', ROOT);
+      expect.unreachable();
+    } catch (e) {
+      expect((e as { status: number }).status).toBe(400);
+    }
+  });
+});
+
+async function statusOf(p: Promise<unknown>): Promise<number | undefined> {
+  try {
+    await p;
+  } catch (e) {
+    return (e as { status?: number }).status;
+  }
+  return undefined;
+}
+
+describe('locateDoc', () => {
+  it('returns the lexical path and the real path for a docs file', async () => {
+    const r = await makeTree({ 'p/docs/a.md': '# A' });
+    const p = join(r, 'p/docs/a.md');
+    const got = await locateDoc(p, r);
+    expect(got.path).toBe(p);
+    expect(got.real).toBe(await realpath(p));
   });
 
-  it('rejects an .htm file', () => {
-    const htm = join(ROOT, 'p/docs/superpowers/specs/x.htm');
-    expect(() => assertSpecPath(htm, ROOT)).toThrow();
+  it('rejects a symlink in docs pointing outside the root', async () => {
+    const outside = await makeTree({ 'secret.md': 'nope' });
+    const r = await makeTree({ 'p/docs/keep.md': '# K' });
+    await symlink(join(outside, 'secret.md'), join(r, 'p/docs/evil.md'));
+    expect(await statusOf(locateDoc(join(r, 'p/docs/evil.md'), r))).toBe(400);
   });
 
-  it('rejects a path outside the root', () => {
-    expect(() => assertSpecPath('/etc/passwd', ROOT)).toThrow();
+  it('rejects a symlinked docs dir pointing outside the root', async () => {
+    const outside = await makeTree({ 'stuff/secret.md': 'nope' });
+    const r = await makeTree({ 'p/README.md': 'hi' });
+    await symlink(join(outside, 'stuff'), join(r, 'p/docs'));
+    expect(await statusOf(locateDoc(join(r, 'p/docs/secret.md'), r))).toBe(400);
   });
 
-  it('rejects traversal escaping the root', () => {
-    const evil = join(ROOT, '../../etc/docs/superpowers/specs/x.md');
-    expect(() => assertSpecPath(evil, ROOT)).toThrow();
+  it('rejects a symlink in docs pointing at a .txt inside the root', async () => {
+    const r = await makeTree({ 'p/docs/notes.txt': 'plain' });
+    await symlink(join(r, 'p/docs/notes.txt'), join(r, 'p/docs/sneaky.md'));
+    expect(await statusOf(locateDoc(join(r, 'p/docs/sneaky.md'), r))).toBe(400);
   });
 
-  it('rejects a non-markdown file', () => {
-    const txt = join(ROOT, 'p/docs/superpowers/specs/x.txt');
-    expect(() => assertSpecPath(txt, ROOT)).toThrow();
+  it('404 for a directory named x.md', async () => {
+    const r = await makeTree({ 'p/docs/x.md/inner.md': '# I' });
+    expect(await statusOf(locateDoc(join(r, 'p/docs/x.md'), r))).toBe(404);
   });
 
-  it('rejects a markdown file not under specs', () => {
-    const elsewhere = join(ROOT, 'p/README.md');
-    expect(() => assertSpecPath(elsewhere, ROOT)).toThrow();
+  it('404 for a missing file', async () => {
+    const r = await makeTree({ 'p/docs/a.md': '# A' });
+    expect(await statusOf(locateDoc(join(r, 'p/docs/missing.md'), r))).toBe(404);
   });
 
-  it('accepts a plans path (any superpowers subdir)', () => {
-    const plan = join(ROOT, 'planafoot/docs/superpowers/plans/2026-06-22-x.md');
-    expect(assertSpecPath(plan, ROOT)).toBe(plan);
+  it('400 for a bad shape before touching the disk', async () => {
+    const r = await makeTree({ 'p/README.md': 'hi' });
+    expect(await statusOf(locateDoc(join(r, 'p/README.md'), r))).toBe(400);
+  });
+
+  it('falls back to the main copy when the worktree copy is gone', async () => {
+    const rel = 'docs/superpowers/specs/2026-06-22-landed-design.md';
+    const r = await makeTree({ [`p/${rel}`]: '# Landed' });
+    const gone = join(r, 'p/.claude/worktrees/wt/', rel);
+    const got = await locateDoc(gone, r);
+    expect(got.path).toBe(join(r, 'p', rel));
+    expect(got.real).toBe(await realpath(join(r, 'p', rel)));
   });
 });
 

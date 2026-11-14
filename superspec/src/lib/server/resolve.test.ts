@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolveDoc } from './resolve';
+import { captionFor } from '../caption';
 import { makeTree } from './testtree';
 
 let root: string;
@@ -148,5 +149,43 @@ describe('resolveDoc html', () => {
     await utimes(join(r, dir, '2026-06-25-b-design.html'), newer, newer);
     const g = await resolveDoc('2026-06-25-b-design', r);
     expect(g?.parent.filename).toBe('2026-06-25-b-design.html');
+  });
+});
+
+describe('resolveDoc loose docs', () => {
+  it('opens an undiscovered absolute docs path as a loose doc', async () => {
+    const r = await makeTree({ 'projL/docs/notes/idea.md': '# Idea\n' });
+    const abs = join(r, 'projL/docs/notes/idea.md');
+    const g = await resolveDoc(abs, r);
+    expect(g?.parent.type).toBe('doc');
+    expect(g?.parent.path).toBe(abs);
+    expect(g?.parent.filename).toBe('idea.md');
+    expect(g?.parent.title).toBe('Idea');
+    expect(g?.parent.project).toBe('projL');
+    expect(g?.parent.worktree).toBeNull();
+    expect(g?.children).toEqual([]);
+    expect(captionFor(g!)).toBe('main · projL · doc');
+  });
+
+  it('a loose doc in a nested worktree records the worktree', async () => {
+    const rel = 'projN/.claude/worktrees/support/foo/docs/readme.html';
+    const r = await makeTree({ [rel]: '<h1>R</h1>' });
+    const g = await resolveDoc(join(r, rel), r);
+    expect(g?.parent.type).toBe('doc');
+    expect(g?.parent.project).toBe('projN');
+    expect(g?.parent.worktree).toBe('support/foo');
+    expect(g?.children).toEqual([]);
+    expect(captionFor(g!)).toBe('support/foo · projN · doc');
+  });
+
+  it('a bare name does not find a loose doc', async () => {
+    const r = await makeTree({ 'projL/docs/notes/idea.md': '# Idea\n' });
+    expect(await resolveDoc('idea.md', r)).toBeNull();
+    expect(await resolveDoc('idea', r)).toBeNull();
+  });
+
+  it('an absolute path outside docs resolves to null', async () => {
+    const r = await makeTree({ 'projL/README.md': '# Readme\n' });
+    expect(await resolveDoc(join(r, 'projL/README.md'), r)).toBeNull();
   });
 });

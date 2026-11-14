@@ -1,4 +1,12 @@
-import { resolve as resolvePath, join, sep } from 'node:path';
+import {
+  resolve as resolvePath,
+  join,
+  sep,
+  isAbsolute,
+  dirname,
+  basename,
+  relative
+} from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import { listDirs, listSpecFiles } from './fswalk';
 import { isSpecFile } from '../specfile';
@@ -7,6 +15,8 @@ import type { GitRunner } from './gitdirty';
 import { pairAndGroup, soloGroup, type DisplayGroup } from '../pairing';
 import type { SpecEntry } from '../types';
 import { isWorktreePath, mainEquivalent } from '../mainpath';
+import { gitTopLevel } from './gittimes';
+import { docPathInfo, locateDoc } from './paths';
 
 interface Candidate {
   dir: string;
@@ -49,6 +59,29 @@ async function collectCandidates(root: string): Promise<Candidate[]> {
   return out;
 }
 
+/**
+ * Any other `.md`/`.html` under a project's `docs/` (main or worktree), opened
+ * by absolute path: a childless group of type `doc`. Null when it fails
+ * `locateDoc`'s shape/realpath checks or is missing.
+ */
+async function looseDoc(q: string, root: string, run?: GitRunner): Promise<DisplayGroup | null> {
+  let loc: { path: string; real: string };
+  try {
+    loc = await locateDoc(q, root);
+  } catch {
+    return null;
+  }
+  const { project, worktree } = docPathInfo(loc.path, root);
+  const dir = dirname(loc.real);
+  const top = await gitTopLevel(dir, run).catch(() => null);
+  const git = top
+    ? await readGitView(top, relative(top, loc.real), run).catch(() => NO_GIT)
+    : NO_GIT;
+  // Built from the real path so git's (real) keys match; shown under the lexical one.
+  const entry = await makeEntry(dir, basename(loc.real), project, worktree, 'doc', git);
+  return soloGroup({ ...entry, path: loc.path, filename: basename(loc.path) });
+}
+
 export async function resolveDoc(
   query: string,
   root: string = PROJECTS_ROOT,
@@ -71,7 +104,9 @@ export async function resolveDoc(
       if (mainEq) matches.push(...candidates.filter((c) => c.path === mainEq));
     }
   }
-  if (matches.length === 0) return null;
+  if (matches.length === 0) {
+    return isAbsolute(q) && isSpecFile(q) ? looseDoc(q, root, run) : null;
+  }
 
   // One status + log per distinct checkout among the candidates we materialise.
   const gitByCheckout = new Map<string, Promise<GitView>>();
