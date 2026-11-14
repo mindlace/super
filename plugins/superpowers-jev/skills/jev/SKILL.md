@@ -74,7 +74,7 @@ An `unclear` item pick counts as an abstention, not a verdict.
 
 `jev report --unrecorded` lists the calls that have no Claude verdict yet. The log is `.superpowers/jev/log.jsonl` at the main checkout's root, and it is gitignored. Promote a point to `on` only after `jev report` supports it.
 
-To label `verify-stop` calls, run `jev label verify-stop [--since YYYY-MM-DD]`; each listing row includes `ctx` with the resolved transcript path. Write one JSONL line `{"call_id": ..., "verdict": "block"|"allow"}` per call, then run `jev label verify-stop --apply <file> --rule-version <v> --labeler <who>`.
+To label `verify-stop` calls, run `jev label verify-stop [--since YYYY-MM-DD]`. It prints one blind JSON object per unrecorded call (`call_id`, `ts`, `state`, `ctx` with the resolved transcript path), without Jev's verdict, and reports on stderr how many unrecorded calls lack state. Decide `block` only if `state.last_message` claims completion, a fix, or passing AND no `state.commands_since_last_edit` output checks that claim; otherwise `allow`. Write one JSONL line `{"call_id": ..., "verdict": "block"|"allow"}` per call, then run `jev label verify-stop --apply <file> --rule-version <v> --labeler <who>`. It records the verdicts, and rejects unknown ids, other points' ids, bad labels, and ids already recorded.
 
 Calls from before the hook logged state have none. Run `jev recover-states verify-stop [--projects-dir DIR]` first. It rebuilds state from the Stop-hook summaries in `~/.claude/projects/` and prints a `recovered` count and `unmatched`/`ambiguous` lists of call ids.
 
