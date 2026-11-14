@@ -28,4 +28,20 @@ for s in 'superpowers-jev:jev' 'jev ask citation' 'jev coverage' 'still runs eve
 done
 tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state file>' \
   || { echo "FAIL: supercomposer citation must ask with --state <state file>"; exit 1; }
+# Package cutting: contracts first, write sets, row edges, the build graph, the partner's reasons.
+flat=$(tr '\n' ' ' < "$skill" | tr -s ' ')
+for s in 'Contracts' 'Write sets' 'build graph' 'Longest chain' 'names interface rows' "partner's reasons"; do
+  printf '%s\n' "$flat" | grep -qF -- "$s" || { echo "FAIL: supercomposer SKILL.md missing: $s"; exit 1; }
+done
+if grep -qF 'Dependency order' "$skill"; then
+  echo "FAIL: supercomposer SKILL.md still has a Dependency order section; order derives from edges"; exit 1
+fi
+printf '%s\n' "$flat" | grep -qF -- '-build-graph.md' \
+  || { echo "FAIL: supercomposer SKILL.md must name the <design-file-stem>-build-graph.md path"; exit 1; }
+for c in 'unit' 'implements (spec §)' 'writes' 'needs rows' 'produces rows others wait on'; do
+  printf '%s\n' "$flat" | grep -qF -- "| $c |" || printf '%s\n' "$flat" | grep -qF -- "| \`$c\` |" \
+    || { echo "FAIL: build graph table missing column: $c"; exit 1; }
+done
+desc_len=$(printf '%s' "$desc" | wc -c | tr -d ' ')
+[ "$desc_len" -le 500 ] || { echo "FAIL: description is $desc_len chars (max 500)"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

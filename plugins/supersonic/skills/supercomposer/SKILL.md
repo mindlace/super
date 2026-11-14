@@ -1,6 +1,6 @@
 ---
 name: supercomposer
-description: Use when co-designing a build large enough to decompose into multiple specs, when a design requires systemic understanding of existing code before it can be written, or when a supersonic:superconductor run has surfaced a frame defect, missing subsystem, or reappraisal need in its design. Produces the composition package a superconductor run executes. Not for single-spec features — use superpowers:brainstorming for those.
+description: Use when co-designing a build large enough to decompose into multiple specs, when a design requires systemic understanding of existing code before it can be written, when cutting such a package into contracts and build units for peer-session conduction, or when started as a composer fork to rule on a supersonic:superconductor question or merge review. Produces the composition package a superconductor run executes. Not for single-spec features — use superpowers:brainstorming for those.
 ---
 
 # Supercomposer
@@ -83,13 +83,28 @@ declarations in one section and to hand-written code in another) and get
 each resolved as an explicit partner ruling. An ambiguity you resolve
 silently while decomposing is where drift is born.
 
+Write the partner's reasons into the design doc beside each ruling and
+choice they explain. Nothing downstream sees this conversation: operators,
+the conductor and every composer fork read only the package.
+
 ## Phase C3 — The design doc
 
 Path: `docs/superpowers/design/YYYY-MM-DD-HHMM-<topic>.md`. Required
 sections: **Goal**; **Subsystems** (one-paragraph scope each, with a
-`<slug>`); **Interface table**; **Dependency order**; **Global
-constraints**; **Out of scope**; and two this skill adds:
+`<slug>` and the interface rows it needs); **Interface table**;
+**Global constraints**; **Out of scope**; and four this skill adds below.
+Every edge names interface rows; build order is derived from those edges,
+so the doc has no separate order section.
 
+- **Contracts.** The interface table as code: real types, schemas and
+  stubs that throw "not implemented", written as a `contracts` spec. One
+  operator builds it with the normal review loop and it lands before
+  anything else; every other unit builds against it, testing with its own
+  fakes.
+- **Write sets.** The files each subsystem writes. No two units that can
+  run together write the same file. A shared hotspot (`schema.ts`,
+  migrations, route indexes) goes into contracts or to one owner, and the
+  others need that owner's row.
 - **Traceability table.** Every load-bearing claim or mechanism in the
   source model documents → the interface row or spec section that carries
   it, or an explicit **dropped / narrowed / deferred** entry with partner
@@ -121,7 +136,28 @@ and **the delegation check** (rework-reduction spec, intervention 1): for
 each spec, is there a behavioural decision the spec *names* but delegates to
 the implementer whose consequences are visible outside the module? If so,
 the spec must decide it, not name it. This is a reading task for a judging
-agent — do not attempt to score it lexically. Fix findings inline.
+agent — do not attempt to score it lexically. The same agent takes the
+longest chain of edges and challenges every edge on it: does the consumer
+need that row, and does the row need everything before it? Fix findings
+inline.
+
+**The build graph.** The specs stay organised the way the system is
+understood; the build graph lists the units operators are assigned, at
+`docs/superpowers/design/<design-file-stem>-build-graph.md`. A unit is one
+serial lane: a chain of work where each step builds on the one before. It
+cites the spec sections it implements, and one spec may become several
+units or one unit draw on several specs. The graph is one table followed
+by its longest chain:
+
+| unit | implements (spec §) | writes | needs rows | produces rows others wait on |
+|---|---|---|---|---|
+| `contracts` | `contracts` §… | `src/contracts/**` | — | every contract row |
+| `<unit>` | `<slug>` §… | its write set | the rows it consumes | rows other units need |
+
+`Longest chain: contracts -> <unit> -> <unit>`
+
+`contracts` is always a unit and needs no rows. Writing the graph from the
+committed package is the translation step in Phase C5.
 
 **Optional Jev coverage pre-pass.** If the `superpowers-jev` plugin is
 installed (load `superpowers-jev:jev`), run `jev coverage --design <design
@@ -158,3 +194,6 @@ session.
   hard — that's an open decision, surface it.
 - Resolving a source-doc contradiction yourself because the answer "seems
   obvious."
+- A partner ruling in the design doc without the partner's reasons beside
+  it.
+- Two units that can run together with overlapping write sets.
