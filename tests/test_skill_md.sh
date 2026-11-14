@@ -13,29 +13,81 @@ desc=$(printf '%s\n' "$fm" | sed -n 's/^description: //p')
 case "$desc" in "Use when"*) ;; *) echo "FAIL: description must start with 'Use when'"; exit 1;; esac
 [ "${#desc}" -le 500 ] || { echo "FAIL: description over 500 chars (${#desc})"; exit 1; }
 
-for s in 'Phase 0' 'Phase 1' 'Phase 2' 'Supervision' 'Context economics' 'Integration' 'Ledger format' 'Hard rules'; do
-  grep -q "## .*$s" "$skill" || { echo "FAIL: SKILL.md missing section: $s"; exit 1; }
+# Section headings, exactly, in this order.
+expected='## Hard rules
+## Phase 0 — Resume check
+## Phase 1 — Package intake
+## Phase 2 — Admission
+## Supervision
+## Composer forks
+## Optional Jev judgments
+## Context economics
+## Integration
+## Ledger format'
+printf '%s\n' "$expected" | while IFS= read -r h; do
+  grep -qxF -- "$h" "$skill" || { echo "FAIL: SKILL.md missing section heading: $h"; exit 1; }
 done
-grep -qF 'operator-briefing.md' "$skill" || { echo "FAIL: SKILL.md never references the briefing"; exit 1; }
-grep -qF 'rate-limits.json' "$skill" || { echo "FAIL: SKILL.md never references the bridge file"; exit 1; }
-grep -qF 'supercomposer' "$skill" || { echo "FAIL: SKILL.md never references supercomposer (package intake)"; exit 1; }
-grep -q 'frame-defect\|Frame-defect' "$skill" || { echo "FAIL: SKILL.md missing the frame-defect tally"; exit 1; }
-grep -qF 'budget.sh' "$skill" || { echo "FAIL: gate never runs budget.sh"; exit 1; }
-grep -qF 'seven_day' "$skill" || { echo "FAIL: gate never references seven_day"; exit 1; }
-grep -qF 'defer-only' "$skill" || { echo "FAIL: gate is not declared defer-only"; exit 1; }
-grep -qF 'specs completed' "$skill" || { echo "FAIL: calibration must divide by specs completed"; exit 1; }
-grep -qF 'budget state MUST NOT be an input to tier selection' "$skill" \
-  || { echo "FAIL: budget-independence invariant missing"; exit 1; }
+got=$(grep -xF -f /dev/stdin "$skill" <<EOF
+$expected
+EOF
+)
+[ "$got" = "$expected" ] || { echo "FAIL: SKILL.md section headings out of order"; exit 1; }
+
+# The text with line breaks folded, so phrases that wrap still match.
+flat=$(tr '\n' ' ' < "$skill" | tr -s ' ')
+need() { printf '%s\n' "$flat" | grep -qF -- "$1" || { echo "FAIL: SKILL.md missing: $1"; exit 1; }; }
+forbid() { printf '%s\n' "$flat" | grep -qF -- "$1" && { echo "FAIL: SKILL.md must not contain: $1"; exit 1; }; return 0; }
+
+need 'operator-briefing.md'
+need 'supercomposer'
+need 'supersonic:supercomposer'
+forbid 'back to supercomposer'
+grep -q -e 'frame-defect' -e 'Frame-defect' "$skill" || { echo "FAIL: SKILL.md missing the frame-defect tally"; exit 1; }
+need "this skill's \`budget.sh\`"
+need 'budget state MUST NOT be an input to tier selection'
 grep -qi 'opus' "$skill" \
   && { echo "FAIL: operator tier must not be hardcoded to a specific model (Opus found)"; exit 1; }
-grep -qF 'rationale' "$skill" \
-  || { echo "FAIL: tier decisions must be recorded with a rationale"; exit 1; }
-grep -qF 'supersonic:supercomposer' "$skill" \
-  || { echo "FAIL: SKILL.md must route package work to supersonic:supercomposer"; exit 1; }
-grep -qF 'back to supercomposer' "$skill" \
-  && { echo "FAIL: un-namespaced route 'back to supercomposer'"; exit 1; }
-grep -qF "this skill's \`budget.sh\`" "$skill" \
-  || { echo "FAIL: gate must run this skill's budget.sh"; exit 1; }
+need 'rationale'
+
+# Sessions, admission, bands, resume.
+for s in 'claude --bg -n' '--allowedTools="' 'notify_when_idle' 'claude agents --json' 'claude stop' \
+         'BAND:' 'LOWER' 'seven_day' 'assignments/<unit-slug>.md' '<design-slug>-<unit-slug>' \
+         'build graph' 'Never send a message or schedule a wakeup solely to keep a cache warm'; do
+  need "$s"
+done
+# The launch line sets its cwd with env -C, never with a separate cd.
+need 'env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug>'
+for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
+         'rate-limits.json' 'defer-only' 'specs completed'; do
+  forbid "$s"
+done
+grep -qiw -e 'wave' -e 'waves' "$skill" && { echo "FAIL: SKILL.md still speaks of waves"; exit 1; }
+
+# Ledger sections, in order.
+ledger=$(awk '/^## Ledger format/{f=1} f' "$skill")
+lexp='Package worktree:
+Build graph:
+## Checkpoints
+## Units
+## Questions
+## Frame-defect tally
+## Integration
+## Cost'
+lgot=$(printf '%s\n' "$ledger" | sed -n -e 's/^    \(Package worktree:\).*/\1/p' -e 's/^    \(Build graph:\).*/\1/p' \
+  -e 's/^    \(## Checkpoints\)$/\1/p' -e 's/^    \(## Units\)$/\1/p' -e 's/^    \(## Questions\)$/\1/p' \
+  -e 's/^    \(## Frame-defect tally\)$/\1/p' -e 's/^    \(## Integration\)$/\1/p' -e 's/^    \(## Cost\)$/\1/p')
+[ "$lgot" = "$lexp" ] || { echo "FAIL: ledger format sections missing or out of order"; printf '%s\n' "$lgot"; exit 1; }
+for s in 'status: planning | admitted | running | complete | stopped | replaced | deferred' \
+         '[defect-class: <slug>]' 'changes contract: yes|no' 'seven_day <pct>' 'session <id>'; do
+  printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
+    || { echo "FAIL: ledger format missing: $s"; exit 1; }
+done
+
+# Every conductor->operator message template ends in an imperative, never a bare pointer.
+need 'Re-read'
+forbid 'ruling ready'
+
+# Jev section (Task 9 adjusts the bounce and citation lines).
 grep -q '^## Optional Jev judgments' "$skill" \
   || { echo "FAIL: SKILL.md missing the Optional Jev judgments section"; exit 1; }
 for pt in defect-class bounce surface-route citation; do
@@ -47,6 +99,6 @@ for s in 'superpowers-jev:jev' 'jev record' 'jev ask defect-class' 'jev ask boun
   grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md Jev section missing: $s"; exit 1; }
 done
 # The citation ask uses a saved state file, never a pipe: recorded claims follow its order.
-tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state file>' \
-  || { echo "FAIL: SKILL.md citation must ask with --state <state file>"; exit 1; }
+need 'jev ask citation --state <state file>'
+need 'Surface to your partner'
 echo "PASS: SKILL.md structure"
