@@ -197,3 +197,24 @@ spec states the answer, so do not open the ruling file. ... and carry on." with 
 wording. Every row-report rep merges `abc123`, runs the suite, starts the merge review and
 admits `world-funding` only after the tests pass, and notes that a failing merge would count
 nothing.
+
+## Task 9 fix round: replacement line and cut rows
+
+Change: a replacement operator's assignment carries `- Replaces: an earlier operator; kept
+commits <base sha>..<kept sha> stand and are not redone; superseded plan <plan path>` and
+nothing else about the old approach. The briefing deletes the superseded plan, does not read
+it, and plans only what remains after the kept commits. Rows a cut removes are marked
+`unmerged row` in `## Integration` until the fresh row report merges. The Pass criteria of
+`conductor-approach-change-replaces` gained the replacement line.
+
+- RED (SKILL.md at c20c15c): 0/3 on the new criterion. Every rep refreshes the assignment with
+  `Plan: none` and no line naming the kept commits or the superseded plan, so the fresh
+  operator would find the old plan on its branch with nothing telling it to drop it. The
+  earlier criteria still pass.
+- GREEN: 3/3. Every rep stops `5be2c0d1`, resets to `c19d4b2`, appends
+  `- unmerged row <row id>: cut by ruling map-stream-1` for any cut row that had merged, writes
+  `Replaces: an earlier operator; kept commits <base sha>..c19d4b2 stand and are not redone;
+  superseded plan <plan path>` with "nothing else about the old approach", and relaunches
+  `simstep-map-stream` in the `high` band.
+- Briefing scenarios were not rerun: the briefing change only adds a branch that applies when
+  `Replaces:` is not `none`, and none of them sets it.

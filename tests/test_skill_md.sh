@@ -100,6 +100,15 @@ for s in 'composer-forks.md' '--fork-session' 'questions/<id>.md' 'rulings/<id>.
          'first task that no longer holds' 'five' 'Changes contract' 'one writer' 'No agent loads'; do
   need "$s"
 done
+# Replacement: the assignment names kept commits and the superseded plan; cut rows are unmerged.
+need '- Replaces: none | an earlier operator; kept commits <base sha>..<kept sha> stand and are not redone; superseded plan <plan path>'
+need 'Bash(git rm:*)'
+need 'Write nothing else about the old approach in the assignment'
+need '- unmerged row <row id>: cut by ruling <id>'
+need 'so nothing new is admitted on it'
+need 'Do not revert the earlier merge on the integration branch'
+need "the fresh report's merge supersedes it"
+need 'only for the merge commit you just made in step 1'
 for s in 'Bounce rule' 'jev ask bounce' '**bounce**' 'Adjudicate yourself' 'exact delta'; do
   forbid "$s"
 done

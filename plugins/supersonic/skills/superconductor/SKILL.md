@@ -124,7 +124,9 @@ when an operator finishes or stops, and when the band changes.
   every row its `## Units` line lists under `produces:`. After a hand-back,
   a row belongs to the sibling that runs the task delivering it, so only
   that sibling's merge counts. The ledger's `## Integration` lines are the
-  record.
+  record: a later `unmerged row <row id>` line (a replacement cut the task
+  that delivered it) means the row has not merged until a newer merge line
+  names it again.
 - **A unit is ready** when every row in its build-graph `needs rows` cell
   has merged.
 - **Admit every ready unit** the band allows: start its operator with
@@ -194,12 +196,13 @@ result.
        - Plan: none | <plan path> at <sha>, tasks <numbers> (already written)
        - Siblings: <session names, or none>
        - Admitted: yes|no
+       - Replaces: none | an earlier operator; kept commits <base sha>..<kept sha> stand and are not redone; superseded plan <plan path>
        - Permission mode: acceptEdits
-       - Allowed git commands: git add, git commit, git rev-parse, git log, git diff, git status, git show, git merge
+       - Allowed git commands: git add, git commit, git rev-parse, git log, git diff, git status, git show, git merge, git rm
 
 3. **Launch**, as one Bash call:
 
-       env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(<test command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
+       env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git rm:*),Bash(<test command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
 
    - `env -C` sets the session's cwd for that one command. A `cd` in a
      separate call persists only inside this session's working
@@ -370,14 +373,14 @@ with the commit and `changes contract`. Then, in order:
 1. Each `clarification` unit, and the operator that asked if it is not
    listed, gets the ruling relay (`## Supervision`) by name.
 2. Each unit whose line reads `first task that no longer holds: <task>`:
-   stop its operator and cut its branch now (Replacing an operator, steps
-   1-3).
+   stop its operator, cut its branch and unmerge its cut rows now
+   (Replacing an operator, steps 1-4).
 3. If `Changes design: yes` and `## Affected units` lists any unit, run
    `## Build-graph fork` with "Units to write" set to those unit slugs. When
    it exits, update the ledger's `Build graph:` line.
 4. Re-checkpoint if one is due (below).
 5. Start the fresh operators from step 2 (Replacing an operator, steps
-   4-5), re-derive admission (Phase 2), and start the next queued amending
+   5-6), re-derive admission (Phase 2), and start the next queued amending
    fork.
 
 `rulings/` is the partner's record of what was decided and why. No agent
@@ -399,13 +402,27 @@ the change:
    worktree> reset --hard <the commit before it>`. Every later task goes,
    even one that might have survived, and no branch keeps a copy: no
    old-approach code or comment carries over. If the operator never reached
-   that task, nothing is cut.
-4. Refresh its assignment file: `Plan: none`, the `Implements`, `Writes` and
+   that task, nothing is cut. The kept commits are `<base sha>..<kept sha>`,
+   where `<base sha>` is `git -C <unit worktree> merge-base HEAD
+   superconductor/<design-slug>` and `<kept sha>` is the commit you cut
+   back to.
+4. Cut rows. A row whose delivering task the cut removed, and which had
+   already merged, is not merged any more: append `- unmerged row <row id>:
+   cut by ruling <id>` under `## Integration`, so nothing new is admitted on
+   it. It merges again only when the fresh operator's row report (or
+   `complete`) for it passes. Do not revert the earlier merge on the
+   integration branch: the fresh report's merge supersedes it. Units already
+   running against the old row are in the ruling's `## Affected units` and
+   are handled like any other affected unit.
+5. Refresh its assignment file: `Plan: none`, the `Implements`, `Writes` and
    `Produces rows` cells from the build graph as it now reads, `Needs rows`
-   with current merge shas, `Admitted` unchanged. The fresh operator writes
-   a new plan for the rest of the unit against the amended spec, on top of
-   the tasks its branch keeps.
-5. Launch it with the same name, worktree and model (Phase 2, Starting an
+   with current merge shas, `Admitted` unchanged, and the replacement line
+   `- Replaces: an earlier operator; kept commits <base sha>..<kept sha>
+   stand and are not redone; superseded plan <plan path>`. Write nothing
+   else about the old approach in the assignment: the fresh operator learns
+   the unit from the spec and the kept code, never from a summary of what
+   was dropped.
+6. Launch it with the same name, worktree and model (Phase 2, Starting an
    operator, step 3), and ledger the start. It keeps the running count, so
    it goes ahead in every band, `high` included.
 
@@ -492,8 +509,10 @@ one merge after another.
    fix-round message. A conflict in a file another unit writes means two
    units wrote one file: file it as a question (`## Composer forks`).
 4. On failing tests, take the merge back out with `git -C <package
-   worktree> reset --hard ORIG_HEAD` (nothing else has written there: one
-   writer) and send the owning operator the fix-round message by name. If
+   worktree> reset --hard ORIG_HEAD`. This is only for the merge commit
+   you just made in step 1, while you hold the one-writer slot and before
+   anything else writes to the package worktree; never reset any other
+   commit there. Then send the owning operator the fix-round message by name. If
    its name is absent from `claude agents --json`, start a fresh operator
    from its assignment file with the failure output path added. Never fix
    it yourself. A merge that fails its tests has not merged: its rows do
@@ -535,6 +554,7 @@ still listed (`claude stop <id>`).
     ## Integration
     - merged <unit-slug> [row <id>] @ <sha> into superconductor/<design-slug>,
       tests <result>, band <band>
+    - unmerged row <row id>: cut by ruling <id>
 
     ## Cost
     - <unit-slug>: admitted <ts> seven_day <pct> | finished <ts> seven_day

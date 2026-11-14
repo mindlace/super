@@ -34,6 +34,14 @@ require 'Do not invoke `superpowers:writing-plans`'
 require '`Plan: none`'
 require '`Siblings:`'
 
+# A replacement operator deletes the superseded plan, keeps its kept commits, and replans the rest.
+require '`Replaces:` line is not `none`'
+require 'deletes the superseded plan file'
+require 'Do not read it for guidance'
+require 'The kept commits stand and are not redone'
+require 'existing code'
+require 'covering only what remains after the kept'
+
 forbid 'message `main`'
 forbid 'to `main`'
 

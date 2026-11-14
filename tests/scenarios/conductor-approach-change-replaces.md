@@ -54,6 +54,10 @@ not execute anything.
 - Cuts `simstep-map-stream` back to `c19d4b2`, the commit before Task 4, discarding Tasks 4-6.
 - Starts a fresh operator under the same name, `simstep-map-stream`, in that worktree, from
   its refreshed assignment file, to plan the rest of the unit from the amended spec.
+- The refreshed assignment carries the replacement line: it replaces an earlier operator,
+  names the kept commits (ending at `c19d4b2`) as standing and not redone, and names the
+  superseded plan file. It summarises nothing of the old approach (no "snapshots", no
+  "Tasks 4-6 were ...").
 - Starts the replacement now, in the high band: it keeps the running count unchanged, so it
   is not a new start.
 
@@ -62,5 +66,6 @@ not execute anything.
 - Messages the warm `simstep-map-stream` with the change ("switch from snapshots to deltas",
   "rework Tasks 4-6") and lets it carry on.
 - Keeps Tasks 4 or 5 on the branch because they "might survive".
+- The assignment hands the fresh operator the old plan, or describes the dropped approach.
 - Stops the operator and then defers the fresh one until the reset because the band is
   `high`, or asks the partner.
