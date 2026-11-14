@@ -7,7 +7,6 @@
   import { DAY_MS } from '$lib/recency';
   import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
   import { findSelectedGroup, groupToPromote } from '$lib/openTabs';
-  import { isMainPath } from '$lib/mainpath';
   import { retryDelay } from '$lib/backoff';
 
   let specs = $state<SpecEntry[]>([]);
@@ -16,10 +15,7 @@
   let specsLoaded = $state(false);
   let content = $state('');
   let knownMtime = $state(0);
-  let saveStatus = $state<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  let readOnly = $state(false);
 
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
   let toast = $state<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -90,7 +86,7 @@
     const res = await fetch(`/api/resolve?q=${encodeURIComponent(newPath)}`);
     const group: DisplayGroup | null = res.ok ? await res.json() : null;
     // On a transient resolve failure the tab keeps its old path; it self-heals
-    // on the next click (selectSpec re-runs adoptPath) and writes are 403'd anyway.
+    // on the next click (selectSpec re-runs adoptPath).
     if (!group) return;
     openedGroups = openedGroups.map((g) => (g.parent.path === oldPath ? group : g));
     if (lastSelectedGroup?.parent.path === oldPath) lastSelectedGroup = group;
@@ -98,10 +94,6 @@
   }
 
   async function selectSpec(path: string): Promise<boolean> {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
     const res = await fetch(`/api/spec?path=${encodeURIComponent(path)}`);
     if (!res.ok) return false;
     const data = await res.json();
@@ -109,11 +101,9 @@
     knownMtime = data.mtime;
     const effective: string = data.path ?? path;
     selectedPath = effective;
-    readOnly = isMainPath(effective);
     // Worktree gone → server served the main copy; rewrite the opened tab so the
-    // selection, caption, autosave, and persistence all target the real file.
+    // selection, caption, and persistence all target the real file.
     if (effective !== path) await adoptPath(path, effective);
-    saveStatus = 'idle';
     localStorage.setItem(SELECTED_KEY, effective);
     return true;
   }
@@ -143,42 +133,9 @@
     if (selectedPath === path || hitChild) {
       selectedPath = null;
       content = '';
-      saveStatus = 'idle';
-      readOnly = false;
       lastSelectedGroup = null;
       localStorage.removeItem(SELECTED_KEY);
     }
-  }
-
-  async function save() {
-    if (!selectedPath || readOnly) return;
-    const savedPath = selectedPath;
-    saveStatus = 'saving';
-    try {
-      const res = await fetch(`/api/spec?path=${encodeURIComponent(savedPath)}`, {
-        method: 'PUT',
-        body: content
-      });
-      if (selectedPath !== savedPath) return;
-      if (!res.ok) {
-        saveStatus = 'error';
-        return;
-      }
-      const data = await res.json();
-      knownMtime = data.mtime;
-      saveStatus = 'saved';
-    } catch {
-      if (selectedPath !== savedPath) return;
-      saveStatus = 'error';
-    }
-  }
-
-  function handleInput(value: string) {
-    if (readOnly) return;
-    content = value;
-    saveStatus = 'saving';
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(save, 1000);
   }
 
   function showToast(message: string) {
@@ -188,7 +145,7 @@
   }
 
   async function pollExternalChange() {
-    if (!selectedPath || saveStatus === 'saving') return;
+    if (!selectedPath) return;
     const polledPath = selectedPath;
     const res = await fetch(`/api/spec?path=${encodeURIComponent(polledPath)}`);
     if (!res.ok) return;
@@ -197,7 +154,6 @@
     if (data.mtime > knownMtime) {
       content = data.content;
       knownMtime = data.mtime;
-      saveStatus = 'idle';
       showToast('Reloaded — file changed on disk');
     }
   }
@@ -265,14 +221,9 @@
     {#if selectedPath}
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
         <span class="truncate text-neutral-500" title={selectedPath}>{selectedPath}</span>
-        <span class="ml-2 shrink-0 text-neutral-500">
-          {#if saveStatus === 'saving'}saving…{:else if saveStatus === 'saved'}saved{:else if saveStatus === 'error'}<span
-              class="text-red-400">save failed</span
-            >{/if}
-        </span>
       </header>
       <div class="min-h-0 flex-1">
-        <DocPane path={selectedPath} {content} {readOnly} onInput={handleInput} />
+        <DocPane path={selectedPath} {content} />
       </div>
     {:else}
       <p class="p-6 text-neutral-500">

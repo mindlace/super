@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
-import { readFile, writeFile, stat } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { assertSpecPath } from '$lib/server/paths';
-import { isWorktreePath, isMainPath, mainEquivalent } from '$lib/mainpath';
+import { isWorktreePath, mainEquivalent } from '$lib/mainpath';
 import type { RequestHandler } from './$types';
 
 function safePath(url: URL): string {
@@ -52,13 +52,4 @@ export const GET: RequestHandler = async ({ url }) => {
 
   if (!data) throw error(404, 'spec not found');
   return json({ content: data.content, mtime: data.mtime, path: effectivePath });
-};
-
-export const PUT: RequestHandler = async ({ url, request }) => {
-  const path = safePath(url);
-  if (isMainPath(path)) throw error(403, 'main checkout is read-only');
-  const content = await request.text();
-  await writeFile(path, content, 'utf8');
-  const { mtimeMs } = await stat(path);
-  return json({ mtime: mtimeMs });
 };

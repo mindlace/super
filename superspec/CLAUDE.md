@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`superspec` is a **local-only** SvelteKit app for reading and lightly editing superpowers spec/plan markdown files across all projects under `~/Projects/`. It runs on `127.0.0.1:4510`, reads/writes the real filesystem via the Node adapter, and is not deployed anywhere (no Cloudflare, no D1 — unlike the other projects in this workspace).
+`superspec` is a **local-only** SvelteKit app for reading superpowers spec/plan markdown files across all projects under `~/Projects/`. It runs on `127.0.0.1:4510`, reads the real filesystem via the Node adapter, and is not deployed anywhere (no Cloudflare, no D1 — unlike the other projects in this workspace).
 
 ## Commands
 
@@ -48,16 +48,16 @@ Each `SpecEntry` carries `created` (when the doc first appeared) and `updated` (
 A set of ~115 **non-recursive** `fs.watch` handles feeds a debounced hub (300ms). Targets come from `listWatchTargets()` (`src/lib/server/watchtargets.ts`) — the root, each `.claude/worktrees` container, and each `docs/superpowers` dir plus its `specs`/`plans` leaves — enumerated from the same `listSuperpowersLocations()` that `scanSpecs()` uses, so the watcher and scanner cannot drift apart. `createWatchRegistry` (`watcher.ts`) diffs that set on each reconcile, which runs after every flush and on a 30s `.unref()`'d interval; that is how new projects and worktrees get picked up. **Never watch `PROJECTS_ROOT` recursively** — it is ~127GB, and doing so floods macOS `fseventsd` with events that are then discarded. The hub and registry are stored on `globalThis` so Vite HMR reuses rather than duplicates them. `/api/events` is an SSE stream; on any relevant `.md` change under `docs/superpowers/` the client re-fetches `/api/specs`. The client *also* polls the open file every 3s (`pollExternalChange`) to detect external edits and reload.
 
 **Path safety — `src/lib/server/paths.ts`:**
-Every read/write path goes through `assertSpecPath()`, which rejects anything outside `PROJECTS_ROOT`, not inside a `docs/superpowers/` segment, or not ending in `.md`. All endpoints touching the filesystem (`/api/spec`, `/open`) must use it.
+Every read path goes through `assertSpecPath()`, which rejects anything outside `PROJECTS_ROOT`, not inside a `docs/superpowers/` segment, or not ending in `.md`. All endpoints touching the filesystem (`/api/spec`, `/open`) must use it.
 
 **Endpoints — `src/routes/`:**
 - `api/specs` GET → `scanSpecs()` list
-- `api/spec` GET/PUT → read/write one file by `?path=`; PUT returns new mtime for the autosave/conflict flow
+- `api/spec` GET → read one file by `?path=` (returns content and mtime)
 - `api/events` GET → SSE change stream
 - `open` GET → validates `?path=` then 302-redirects to `/?path=…` (the agent deep-link entry point)
 
 **Client — `src/routes/+page.svelte`:**
-Owns all state (Svelte 5 runes). Autosave debounces 1s after input; tracks `knownMtime` to reconcile against on-disk changes; persists selected path and sidebar width to `localStorage`. A single `DocPane` shows the open file with a Rendered/Source toggle (no side-by-side preview). `Editor.svelte` is a source-only CodeMirror 6 editor in markdown or HTML mode, used by the Source view. `render.ts` renders `.md` via `marked` + `DOMPurify` and `.html` specs (a semantic-HTML subset, see `../docs/spec-format.md`) via `renderSpecHtml`. `.html` specs in a worktree are also editable in place in the rendered view; `.md` files are rendered and source-edited only.
+Owns all state (Svelte 5 runes). Tracks `knownMtime` to reconcile against on-disk changes; persists selected path and sidebar width to `localStorage`. There is no editing, autosave, Source view or Editor: a single `DocPane` shows the open file rendered only. `render.ts` renders `.md` via `marked` + `DOMPurify` and `.html` specs (a semantic-HTML subset, see `../docs/spec-format.md`) via `renderSpecHtml`. Rendered docs use the sans body font (`static/spec.css`).
 
 ## Conventions
 
