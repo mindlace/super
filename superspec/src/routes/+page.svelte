@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import TabStrip from '$lib/components/TabStrip.svelte';
-  import Editor from '$lib/components/Editor.svelte';
+  import DocPane from '$lib/components/DocPane.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import type { SpecEntry } from '$lib/types';
   import { DAY_MS } from '$lib/recency';
@@ -272,7 +272,7 @@
         </span>
       </header>
       <div class="min-h-0 flex-1">
-        <Editor {content} {readOnly} onInput={handleInput} />
+        <DocPane path={selectedPath} {content} {readOnly} onInput={handleInput} />
       </div>
     {:else}
       <p class="p-6 text-neutral-500">
