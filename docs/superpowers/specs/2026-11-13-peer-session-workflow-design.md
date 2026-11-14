@@ -418,7 +418,10 @@ never comes up within the bound in `beat.sh` is a failed start. A session that c
 start (for example with an invalid model) is listed at once and turns `idle`/`failed`
 within seconds, and stays listed (live drill, round 4); stopped sessions are not listed. So
 alive means listed and not `failed`, and a launch is confirmed only if the session is still
-alive at the end of the bound.
+alive at the end of the bound. A relaunch under a failed session's name succeeds beside the
+failed entry, leaving two entries with that name (live drill, round 5), so the conductor
+stops entries by their own short ids, looks a bounded number of times for them to leave,
+and launches even if a failed one stays; `beat.sh` takes the entry that is not `failed`.
 It runs the partner's normal session hooks and
 permission mode.
 
