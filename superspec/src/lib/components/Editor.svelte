@@ -193,13 +193,13 @@
 <div class="flex h-full overflow-hidden">
   <div
     bind:this={preview}
-    class="prose prose-invert prose-base min-w-0 max-w-none flex-1 overflow-y-auto bg-neutral-900 p-4"
+    class="spec-doc min-w-0 flex-1 overflow-y-auto p-4"
     onscroll={() => {
       if (view) sync(preview, view.scrollDOM);
     }}
   >
     <!-- eslint-disable-next-line svelte/no-at-html-tags -->
-    {@html html}
+    <article>{@html html}</article>
   </div>
   <div
     bind:this={editorEl}
