@@ -55,7 +55,11 @@ def safe_append(entry, env, cwd=None):
 
 
 def read_entries(env, cwd=None):
-    path = log_dir(env, cwd) / "log.jsonl"
+    return read_dir(log_dir(env, cwd))
+
+
+def read_dir(d):
+    path = Path(d) / "log.jsonl"
     if not path.exists():
         return []
     out = []
@@ -74,6 +78,13 @@ def state_entry(call_id, state, session_id, transcript_path, source):
     return {"type": "state", "call_id": call_id, "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "state": state, "session_id": session_id, "transcript_path": transcript_path,
             "source": source}
+
+
+def state_ref_entry(call_id, state_sha, session_id, transcript_path, source):
+    """Like state_entry, but the state lives in a blob referenced by `state_sha`."""
+    return {"type": "state", "call_id": call_id, "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "state_sha": state_sha, "session_id": session_id,
+            "transcript_path": transcript_path, "source": source}
 
 
 def states_by_call(entries):
