@@ -28,7 +28,10 @@ the build took.
 1. No agent blocks on a child for longer than its cache lifetime as a matter of structure.
 2. Escalations reach a composer and are ruled on without the partner starting anything.
 3. Every adjudication and merge review judges the design as it is now, not how it got there.
-4. More of a package can run at once, by how the composer cuts it.
+4. As much runs at once as the real dependencies allow, at every layer: units, tasks,
+   planning and review. The partner wants this done more intelligently than the April fork,
+   which means parallel work is always separated by construction (dependency edges, disjoint
+   files), every review is kept, and the workers can talk.
 5. No code we maintain. Skill text and settings only, on Claude Code's own primitives.
 
 ## Non-goals
@@ -255,13 +258,13 @@ into a **build graph**: the set of things that get built, in dependency order.
 - One spec may become several units and one unit may draw on several specs. `world-core`'s
   eleventh task would be its own unit, placed where its dependencies put it.
 - No two units that can run together write the same file.
-- Unit size is the dial for how parallel a build is. **(call)** Start with units worth an
-  operator: several tasks, one plan. Whatever the size, a unit is a whole operator run with
-  every review intact and the usual models, in its own worktree with files no other running
-  unit writes, so there is nothing to resolve at merge, and its operator can message the
-  others. Smaller units are the way to try finer parallelism later; the ledger records
-  tokens and wall-clock per finished unit so that trial can be judged on cost per finished
-  task.
+- Units are cut as fine as the dependencies allow: a unit is one serial lane, and anything
+  that could run beside it is a different unit. Whatever its size, a unit is a whole operator
+  run with every review intact and the usual models, in its own worktree with files no other
+  running unit writes, so there is nothing to resolve at merge, and its operator can message
+  the others. The composer cuts lanes from what the specs show; operators split further when
+  their plan reveals more (see Parallelism at each layer). The ledger records tokens and
+  wall-clock per finished unit, so the cost of fine cutting is visible.
 - Every edge names rows of the interface table, never a spec or a position in an order. The
   design doc carries no separate "dependency order" section; order is derived from the edges.
 - Anything two units would both need to build is its own unit or part of contracts, so that
@@ -294,6 +297,24 @@ graph is drawn. If the build graph is not adopted, they stand as written **(call
   go into the contracts commit or to one owner spec.
 - **The dependency chain is a design target.** The package reports the longest chain of specs
   that must run in order. The fresh-eyes check challenges every remaining edge.
+
+### Parallelism at each layer
+
+One rule does most of the work: **an operator is one serial lane.** A lane is a chain of
+tasks where each builds on the one before. All parallelism is between lanes, which are
+separate sessions in separate worktrees writing separate files. That is why
+subagent-driven-development can stay unchanged and still nothing waits needlessly.
+
+| Layer | What runs together | What keeps it safe |
+|---|---|---|
+| Units | Every unit whose deliverables have merged. | Edges name interface rows; contracts land first; disjoint files. |
+| Tasks | An operator's plan is itself a graph. Where it contains task groups that do not depend on each other and write different files, the operator keeps one group and hands the others back; the conductor starts a sibling operator for each, with that slice of the already-written plan. **(call)** | Same rules as units. Siblings message each other by name. Each lane keeps per-task review. |
+| Planning | Operators for units that cannot start yet are still started, to write their plan against the contracts while their dependencies are being built. **(call)** | A plan is cheap to redo if a ruling changes its unit; no code is written until admission. |
+| Review | Merge-review forks and adjudication forks run beside the operators and beside each other. | Read-only, or one amending fork at a time. |
+| Review inside a lane | Starting task N+1 while task N's review is still running. **(open)** | Not adopted yet. It is the one item here that changes the subagent-driven-development loop, and it only pays if first reviews usually pass clean. Being measured from existing ledgers. |
+
+The budget bands are the only cap. In the middle band, operators that are only planning count
+toward N.
 
 ### Why sessions stay warm
 
