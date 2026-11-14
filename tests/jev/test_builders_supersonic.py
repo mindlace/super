@@ -3,7 +3,7 @@ import subprocess
 import unittest
 
 import support
-from jevlib import cli, log
+from jevlib import cli, ctx, log, state
 from jevlib.builders import cite, ledger, spec
 
 FX = support.FIXTURES
@@ -71,6 +71,11 @@ class SpecTest(unittest.TestCase):
         entries = log.read_entries(env)
         self.assertEqual(len(entries), 1)
         self.assertEqual((entries[0]["call_id"], entries[0]["compare"]), ("cov-1", "coverage"))
+        st = state.load("cov-1", env)
+        self.assertEqual(st["requirements"], spec.traceability_requirements((FX / "design.md").read_text()))
+        self.assertEqual(set(st["specs"]), {str(FX / "spec-a.md"), str(FX / "spec-b.md")})
+        self.assertTrue(st["specs"][str(FX / "spec-a.md")].startswith("# Auth"))
+        self.assertEqual(set(entries[0]["ctx"]), set(ctx.CTX_KEYS))
 
     def test_coverage_fails_open_when_any_spec_ask_is_disabled(self):
         env = support.make_env()

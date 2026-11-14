@@ -86,7 +86,7 @@ def prompt_route(inp, env):
     state = sp.skills_state(prompt, root)
     if not state["skills"]:
         return None
-    res = ask_mod.ask("prompt-route", state, env, cwd=inp.get("cwd"))
+    res = ask_mod.ask("prompt-route", state, env, cwd=inp.get("cwd"), hook=inp)
     if not res.get("enabled"):
         return None
     path = _pending_path(inp, env)
@@ -128,10 +128,7 @@ def stop_verify(inp, env):
     if not last or not last.strip():
         return None
     state = transcript.stop_state(entries, last)
-    res = ask_mod.ask("verify-stop", state, env, cwd=inp.get("cwd"))
-    if res.get("call_id"):   # keep the judged input so the call can be labeled later
-        log.safe_append(log.state_entry(res["call_id"], state, inp.get("session_id"),
-                                        inp.get("transcript_path"), "hook"), env, inp.get("cwd"))
+    res = ask_mod.ask("verify-stop", state, env, cwd=inp.get("cwd"), hook=inp)
     if res.get("enabled") and res.get("mode") == "on" and res.get("verdict") == "block":
         return {"decision": "block", "reason": VERIFY_BLOCK_REASON}
     return None

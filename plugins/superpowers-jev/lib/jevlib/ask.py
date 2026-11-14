@@ -3,6 +3,8 @@ import secrets
 import time
 
 from . import client, combine, key, log, schema, templates
+from . import ctx as ctx_mod
+from . import state as state_mod
 from .mode import resolve_mode
 
 
@@ -25,7 +27,7 @@ def summary_confidence(answers):
     return {qid: a.get("confidence", a.get("noul")) for qid, a in answers.items()}
 
 
-def ask(point, state, env, call_id=None, cwd=None, post=None, write_log=True):
+def ask(point, state, env, call_id=None, cwd=None, post=None, write_log=True, hook=None):
     """Never raises: any exception becomes {"enabled": False, "reason": "internal error: ..."}."""
     post = post or client.post
     try:
@@ -36,6 +38,9 @@ def ask(point, state, env, call_id=None, cwd=None, post=None, write_log=True):
         return disabled("mode off")
     call_id = call_id or new_call_id()
     entry = {"type": "call", "call_id": call_id, "ts": now(), "point": point, "mode": mode}
+    if write_log:   # best-effort and never raises; done first so every fail() entry carries both
+        entry.update(state_sha=state_mod.safe_write(state, env, cwd),
+                     ctx=ctx_mod.safe_collect(env, hook, cwd))
 
     def fail(reason):
         if write_log:

@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 
 import support
-from jevlib import hooks, log
+from jevlib import hooks, log, state
 from test_builders_superpowers import fake_superpowers
 
 FX = support.FIXTURES
@@ -122,6 +122,14 @@ class PromptRouteTest(unittest.TestCase):
         self.assertEqual(log.read_entries(env)[0]["point"], "prompt-route")
         self.assertTrue((log.log_dir(env) / "sessions" / "sess-1.json").exists())
 
+    def test_prompt_route_call_carries_state_and_ctx(self):
+        with support.StubServer(self.pick_debugging()) as srv:
+            env = self.env(srv)
+            hooks.prompt_route(self.inp("the checkout page crashes on an empty cart, fix it"), env)
+        call = [e for e in log.read_entries(env) if e["type"] == "call"][0]
+        self.assertEqual(call["ctx"]["session_id"], "sess-1")
+        self.assertTrue(state.load(call["call_id"], env)["skills"])
+
     def test_on_injects_hint(self):
         with support.StubServer(self.pick_debugging()) as srv:
             out = hooks.prompt_route(self.inp("the checkout page crashes on an empty cart, fix it"),
@@ -199,33 +207,32 @@ class StopVerifyTest(unittest.TestCase):
         calls = [e for e in log.read_entries(env) if e["type"] == "call"]
         self.assertEqual(calls[-1]["verdict"], "block")
 
-    def test_shadow_logs_state_entry(self):
+    def test_shadow_call_carries_state_and_hook_ctx(self):
         with support.StubServer(support.ok(noul=0.9)) as srv:
             env = support.make_env(srv.url)
             hooks.stop_verify(self.inp(), env)
         entries = log.read_entries(env)
         call = [e for e in entries if e["type"] == "call"][-1]
-        st = entries[-1]
-        self.assertEqual(st["type"], "state")
-        self.assertEqual(st["call_id"], call["call_id"])
-        self.assertEqual(st["session_id"], "sess-1")
-        self.assertEqual(st["transcript_path"], str(FX / "transcript.jsonl"))
-        self.assertEqual(st["source"], "hook")
-        self.assertTrue(st["state"]["last_message"].startswith("Fixed: corrupt configs"))
+        self.assertTrue(state.load(call["call_id"], env)["last_message"].startswith("Fixed: corrupt configs"))
+        self.assertEqual(call["ctx"]["session_id"], "sess-1")
+        self.assertEqual(call["ctx"]["transcript_path"], str(FX / "transcript.jsonl"))
+        self.assertEqual(call["ctx"]["cwd"], "/tmp")
+        self.assertEqual([e for e in entries if e["type"] == "state"], [])
 
     def test_no_state_entry_when_off(self):
         env = support.make_env(None, SUPERPOWERS_JEV="off")
         self.assertIsNone(hooks.stop_verify(self.inp(), env))
         self.assertEqual(log.read_entries(env), [])
+        self.assertFalse((log.log_dir(env) / "states").exists())
 
-    def test_state_entry_on_api_error(self):
+    def test_error_call_carries_state_sha(self):
         with support.StubServer(lambda p: (500, {"detail": "boom"}, 0)) as srv:
             env = support.make_env(srv.url)
             self.assertIsNone(hooks.stop_verify(self.inp(), env))
-        entries = [e for e in log.read_entries(env) if e["type"] in ("call", "state")]
-        self.assertEqual([e["type"] for e in entries], ["call", "state"])
+        entries = log.read_entries(env)
+        self.assertEqual([e["type"] for e in entries], ["call"])
         self.assertTrue(entries[0].get("error"))
-        self.assertEqual(entries[0]["call_id"], entries[1]["call_id"])
+        self.assertTrue(entries[0]["state_sha"])
 
     def test_loop_guard(self):
         with support.StubServer(support.ok(noul=0.9)) as srv:
