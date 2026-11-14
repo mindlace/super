@@ -2,10 +2,11 @@
 # Live drill of the peer-session mechanisms. Gated on SUPERSONIC_LIVE=1.
 # Prints PASS:/FAIL:/OBSERVED: <step>; exits non-zero on any FAIL. The whole run is appended,
 # dated, to tests/peer-session-drill-result.txt.
-# Cost and time: four `claude --bg` sessions and five `claude -p` runs, all on haiku with
-# trivial prompts (plus two haiku subagents inside one session). Every wait has its own
-# deadline; a run takes about 10 minutes and never more than 25 (DRILL_DEADLINE). Every
-# session, worktree and process group it starts is stopped or removed on exit.
+# Cost and time: five `claude --bg` sessions (one meant to fail at start) and five
+# `claude -p` runs, all on haiku with trivial prompts (plus two haiku subagents inside one
+# session). Every wait has its own deadline; a run takes about 10 minutes and never more
+# than 25 (DRILL_DEADLINE). Every session, worktree and process group it starts is stopped
+# or removed on exit.
 if [ "${SUPERSONIC_LIVE:-}" != "1" ]; then
   echo "SKIP: set SUPERSONIC_LIVE=1 to run the live peer-session drill"
   exit 0
@@ -293,6 +294,19 @@ if [ -s "$o/sleep-woke.txt" ]; then pass "a background sleep's exit woke the ope
 if [ -s "$o/msg-read.txt" ] && [ -s "$o/sleep-woke.txt" ] && [ "$(mt "$o/msg-read.txt")" -le "$(mt "$o/sleep-woke.txt")" ]; then
   pass "a message was read while the background sleep ran ($(( $(mt "$o/msg-read.txt") - $(mt "$o/sleeping.txt") ))s after the stretch began)"
 else fail "message during the stretch (msg-read: $(cat "$o/msg-read.txt" 2>/dev/null); woke: $(cat "$o/sleep-woke.txt" 2>/dev/null))"; fi
+
+# 6. A --bg launch that cannot start (an invalid model): what it prints and exits with, and
+#    whether its name is ever listed (beat.sh launched treats "never listed in 3 tries over
+#    20 s" as a failed start).
+bad="drill-$pid-bad"
+env -C "$wtp" claude --bg -n "$bad" --model no-such-model-drill --permission-mode acceptEdits --allowedTools="Read" "Reply OK." >"$scratch/launch-bad.log" 2>&1 </dev/null; rc=$?
+seen=never; i=0
+while [ $i -lt 15 ]; do
+  if claude agents --json 2>/dev/null | grep -q "\"$bad\""; then seen="listed after $((i * 2))s, status $(agent_field "$bad" status)/$(agent_field "$bad" state)"; break; fi
+  sleep 2; i=$((i + 1))
+done
+observed "--bg launch with an invalid model: exit $rc, printed: $(head -c 200 "$scratch/launch-bad.log" | tr '\n' ' '); in the session list: $seen"
+[ "$seen" != never ] && sleep 10 && observed "the invalid-model session 10 s later: $(agent_field "$bad" status)/$(agent_field "$bad" state)"
 
 # --- stop ---
 claude stop "$op" >"$scratch/stop-op.log" 2>&1; echo "INFO stop by name ($op): exit $? $(head -c 120 "$scratch/stop-op.log")"
