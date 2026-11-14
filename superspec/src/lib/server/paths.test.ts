@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { join } from 'node:path';
-import { realpath, symlink } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { mkdir, realpath, symlink } from 'node:fs/promises';
 import { assertDocPathShape, assertAssetPath, locateDoc } from './paths';
 import { makeTree } from './testtree';
 
@@ -27,7 +27,9 @@ describe('assertDocPathShape', () => {
     ['a path outside the root', '/etc/passwd'],
     ['traversal escaping the root', join(ROOT, '../../etc/docs/x.md')],
     ['the docs dir itself', join(ROOT, 'p/docs')],
-    ['a file directly in the root', join(ROOT, 'x.md')]
+    ['a file directly in the root', join(ROOT, 'x.md')],
+    ['raw traversal escaping the root', `${ROOT}/p/docs/../../../etc/docs/x.md`],
+    ['raw traversal out of docs', `${ROOT}/p/docs/../README.md`]
   ])('rejects %s', (_n, p) => {
     expect(() => assertDocPathShape(p, ROOT)).toThrow();
   });
@@ -93,6 +95,26 @@ describe('locateDoc', () => {
   it('400 for a bad shape before touching the disk', async () => {
     const r = await makeTree({ 'p/README.md': 'hi' });
     expect(await statusOf(locateDoc(join(r, 'p/README.md'), r))).toBe(400);
+  });
+
+  it('rejects a worktree-shaped symlink pointing outside the root, without falling back to main', async () => {
+    const outside = await makeTree({ 'secret.md': 'nope' });
+    const rel = 'docs/superpowers/specs/2026-06-22-a-design.md';
+    const r = await makeTree({ [`p/${rel}`]: '# Main' });
+    const wt = join(r, 'p/.claude/worktrees/wt', rel);
+    await mkdir(dirname(wt), { recursive: true });
+    await symlink(join(outside, 'secret.md'), wt);
+    expect(await statusOf(locateDoc(wt, r))).toBe(400);
+  });
+
+  it('refuses a main fallback that is itself a symlink pointing outside the root', async () => {
+    const outside = await makeTree({ 'secret.md': 'nope' });
+    const rel = 'docs/superpowers/specs/2026-06-22-b-design.md';
+    const r = await makeTree({ 'p/README.md': 'hi' });
+    await mkdir(dirname(join(r, 'p', rel)), { recursive: true });
+    await symlink(join(outside, 'secret.md'), join(r, 'p', rel));
+    const gone = join(r, 'p/.claude/worktrees/wt', rel);
+    expect(await statusOf(locateDoc(gone, r))).toBe(400);
   });
 
   it('falls back to the main copy when the worktree copy is gone', async () => {
