@@ -64,20 +64,23 @@ valid inside one.
 
 ## Semantic rules
 
-The reader reports a problem (and still renders) when these are broken:
+All of these are required by the format. The reader enforces only the ones
+marked (enforced): it reports a problem for them and still renders. The rest are
+not checked, but a spec that breaks them is wrong.
 
-- Exactly one `h1`, inside the `header`. It is the title. The `header` may also
+- Exactly one `h1` (enforced), inside the `header`. It is the title. The `header` may also
   hold a one-line summary `p`.
-- Every `section`, `figure` and `table` has an `id`, unique in the whole file
-  and stable across edits (other people link to `#id`).
+- Every `section`, `figure` and `table` has an `id` (enforced), unique in the
+  whole file (enforced) and stable across edits (other people link to `#id`).
 - Sections nest; the heading level follows nesting depth (`h2` for a top-level
   section, `h3` inside it, up to `h4`).
 - A table has a `caption`. Its header cells are `th` with `scope="col"` or
   `scope="row"`.
 - A diagram sits in a `figure` with a `figcaption`, and its `svg` has a `title`
   child.
-- Every checklist `li` has an `id` (see Checklists).
-- No duplicate ids anywhere.
+- Every checklist `li` has an `id` (enforced; see Checklists).
+- No duplicate ids anywhere (enforced).
+- The file has a single `article` root (enforced).
 
 ## Callouts
 
@@ -122,9 +125,11 @@ never set colours.
   does not exist yet), `result` (the outcome), `external` (outside the system),
   `muted` (de-emphasised). Combine with `node`, for example
   `class="node missing"`.
-- Edges draw an arrowhead from a marker with the id `arrow`. Include this once
-  per `svg`, in `defs`:
+- Edges draw an arrowhead from a marker with the id `arrow`. Define it ONCE PER
+  FILE, in the `defs` of the first diagram:
   `<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs>`
+  With several diagrams, later ones define no marker and their edges still use
+  this one. Defining it again would duplicate the id `arrow`.
 
 ## Media
 

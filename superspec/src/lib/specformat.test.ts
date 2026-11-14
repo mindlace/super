@@ -17,6 +17,21 @@ describe('docs/spec-format.md', () => {
     }
   });
 
+  it('a two-diagram spec with one arrow marker is valid', async () => {
+    const marker =
+      '<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs>';
+    const fig = (id: string, defs: string) =>
+      `<figure id="${id}"><svg viewBox="0 0 200 60" role="img"><title>${id}</title>${defs}` +
+      '<g class="node" id="n-' + id + '-a"><rect x="5" y="5" width="60" height="30"/><text x="35" y="20">a</text></g>' +
+      '<g class="node" id="n-' + id + '-b"><rect x="120" y="5" width="60" height="30"/><text x="150" y="20">b</text></g>' +
+      `<g class="edge" data-from="n-${id}-a" data-to="n-${id}-b"><path d="M65 20H118"/></g>` +
+      `</svg><figcaption>${id}</figcaption></figure>`;
+    const src = `<article><header><h1>T</h1></header><section id="sec-a"><h2>A</h2>${fig('fig-one', marker)}${fig('fig-two', '')}</section></article>`;
+    const out = await renderSpecHtml(src, SPEC);
+    expect(out.removed).toEqual([]);
+    expect(out.problems).toEqual([]);
+  });
+
   it('the plan example has checkboxes, at least one checked', () => {
     const plan = examples[1];
     expect(plan).toContain('type="checkbox"');
