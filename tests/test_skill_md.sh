@@ -64,7 +64,7 @@ for s in 'Bash(bash <sdd scripts dir>/sdd-workspace:*)' 'Bash(bash <sdd scripts 
          'Bash(<project command>:*)' 'SDD scripts: <absolute path>' 'Project commands: <commands>' \
          '/skills/subagent-driven-development/scripts' 'installed_plugins.json' 'never from a plan' \
          'Relaunching with a longer list' 'A relaunch is not a death' \
-         'until its name is no longer listed'; do
+         'still listed: <ids>|none'; do
   need "$s"
 done
 forbid "per command the plan's tasks run"
@@ -80,7 +80,7 @@ drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
 # The live drill checks what beat.sh and the skill assume about real sessions.
 for s in 'fork drill-limit env -C' 'fork drill-normal env -C' 'claude logs "$opid"' 'claude logs "$op2id"' \
          'run_in_background true' 'TaskStop' 'beat.sh changed' 'drill-$pid-nobody' 'sleep-woke.txt' 'msg-read.txt' \
-         '30 s after its last step' 'stopped session transcript' 'no-such-model-drill' 'relaunch under a failed session' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
+         '30 s after its last step' 'stopped session transcript' 'no-such-model-drill' 'relaunch under a failed session' 'stop bad failed' 'beat.sh takes the relaunched session' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
   grep -qF -- "$s" "$drill" || { echo "FAIL: live drill lacks: $s"; exit 1; }
 done
 for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
@@ -224,7 +224,21 @@ forbid "--grep='): rule '"
 need 'uses only `[a-z0-9-]`'
 need 'stands in it as a whole word'
 # A launch that may never have happened is finished without counting a death (N-3, M-1).
-need 'If `claude agents --json` lists `<design-slug>-<unit-slug>` and not in state `failed`, start nothing'
+need 'If the report shows its session alive (listed under `<design-slug>-<unit-slug>` and not `failed`), start nothing'
+# N5-1: stops are bounded, by short id; a failed entry left listed blocks nothing.
+need 'sh <skill dir>/beat.sh <ledger dir> stop <unit-slug>`, or with `failed` after it'
+need 'by that entry'"'"'s own short `id` (never the name or the full `sessionId`; neither works)'
+need 'It never waits longer'
+need 'so a `failed` entry still listed blocks nothing'
+need 'unless a live entry is still listed under its name'
+forbid 'until its name is no longer listed'
+forbid 'wait until it is no longer listed'
+# N5-2: Phase 0 uses the report's one definition of alive.
+need '**The report shows its session alive** (listed under its name and not `failed`; Phase 0'"'"'s first report): live'
+need '**The report shows it `absent` or `failed`: dead.**'
+forbid 'Listed by its name in `claude agents --json`: live'
+# N5-3: every working file is named.
+need '`.asked`, `.session`, `.tail` and `.cause` files are working state, not ledger'
 need 'lists its worktree, step 1 is done: go on from step 2'
 need '**Ledger** the unit line (`## Units`) before the launch, then run `sh <skill dir>/beat.sh <ledger dir> launching <unit-slug>`'
 need 'The line has status `launching`'
@@ -381,7 +395,7 @@ need 'operator launching, launch failed, operator replaced'
 need 'With no command named, it kills nothing: treat the cause as `unknown`'
 need 'found again at the time it runs, never by a remembered pid'
 # R3-8: a usage-limited stall is stopped before it waits.
-need 'If its name is listed (a stall, or a `failed` entry), stop it first (Stopping an operator) and wait until it is no longer listed. Then run `sh <skill dir>/beat.sh <ledger dir> wait'
+need 'If its name is listed (a stall, or a `failed` entry), stop it first (Stopping an operator). Then run `sh <skill dir>/beat.sh <ledger dir> wait'
 # R3-9: the script says whether an investigation for this rung is ledgered.
 need 'If the report shows `investigated yes`'
 forbid 'line with no later `restarted <unit-slug>` line is in the ledger'

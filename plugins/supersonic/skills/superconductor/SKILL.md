@@ -113,9 +113,9 @@ branch, so that branch must hold only tested work.
 
 A unit whose newest `## Units` line reads `launching` was ledgered by Phase
 2, Starting an operator, step 3, and its launch may never have happened.
-If the report shows its session alive, it launched: do step 5. If its
-name is listed as `failed`, stop that entry first (`## Supervision`,
-Stopping an operator). Otherwise launch it now with steps 4-5. Keep its assignment as written,
+If the report shows its session alive, it launched: do step 5. If it
+shows it `failed`, stop the failed entry first (`## Supervision`, Stopping
+an operator, with `failed`). Otherwise launch it now with steps 4-5. Keep its assignment as written,
 except that `Plan:` names a plan its own SDD workspace already holds
 (`## Supervision`, Operator death, step 1); step 5 takes its status from
 the assignment's `Admitted:` line. This is a first launch, not a restart,
@@ -129,13 +129,14 @@ line records.
 Then, for every unit whose ledger status is planning or admitted, or
 whose fix round is open (`## Integration`, step 4):
 
-- **Listed by its name in `claude agents --json`: live.** Keep it. Never
+- **The report shows its session alive** (listed under its name and not
+  `failed`; Phase 0's first report): live. Keep it. Never
   start a second session under a live name. Send it the resume status ask
   (`## Supervision`) and record it (`sh <skill dir>/beat.sh <ledger dir> asked
   <unit-slug>`); its reply and the messages it sends again may carry a
   `plan ready`, hand-back, question or `complete` the last conductor never
   saw, and the heartbeat finds its unreported rows.
-- **Absent from the list: dead.** Handle it at once, without asking, as
+- **The report shows it `absent` or `failed`: dead.** Handle it at once, without asking, as
   `## Supervision`, Operator death, says, on the rung that report prints
   for it, so a death the last conductor was already handling resumes on
   the same rung. A restart refreshes its assignment's
@@ -339,10 +340,11 @@ result.
 > more than the tokens saved.
 
 **Starting an operator.** First check what a conductor that died may
-already have done. If `claude agents --json` lists
-`<design-slug>-<unit-slug>` and not in state `failed`, start nothing: never
-a second session under a live name. A `failed` entry under that name is
-stopped first (`## Supervision`, Stopping an operator). If `git -C <project> worktree list` lists its worktree, step 1
+already have done. If the report shows its session alive (listed under
+`<design-slug>-<unit-slug>` and not `failed`), start nothing: never a
+second session under a live name. A `failed` entry under that name is
+stopped first (`## Supervision`, Stopping an operator, with `failed`); it
+does not block the launch. If `git -C <project> worktree list` lists its worktree, step 1
 is done: go on from step 2.
 
 1. **Worktree.** `git -C <project> worktree add
@@ -418,9 +420,8 @@ is done: go on from step 2.
      that outlives its bound (`operator-briefing.md`). The entry admits
      only the `changed` command.
    - **Relaunching with a longer list.** Add the command to the ledger's
-     `Project commands:` line. Stop the operator by its short id
-     (`## Supervision`, Stopping an operator), run `claude agents --json`
-     until its name is no longer listed, set its assignment's `Plan:` line to
+     `Project commands:` line. Stop the operator (`## Supervision`,
+     Stopping an operator), set its assignment's `Plan:` line to
      the plan it already has (as for a restart, `## Supervision`, Operator
      death), ledger the relaunch with `sh <skill dir>/beat.sh <ledger dir>
      relaunched <unit-slug>` (it appends `- relaunched <unit-slug>` under
@@ -706,9 +707,19 @@ authority.
   unit go to it by name first (a cold fix round costs ~3.7× per line).
   Start a fresh one from its assignment file only when its name is absent
   from `claude agents --json`, or when a ruling changes its approach.
-- **Stopping an operator.** `claude stop <id>`, where `<id>` is the short
-  `id` field of its entry in `claude agents --json`, found by name. Never
-  pass the name or the full `sessionId`; neither works. Ledger the unit
+- **Stopping an operator.** `sh <skill dir>/beat.sh <ledger dir> stop
+  <unit-slug>`, or with `failed` after it to stop only entries in state
+  `failed`. It runs `claude stop <id>` for each entry listed under the
+  unit's name, by that entry's own short `id` (never the name or the full
+  `sessionId`; neither works), then looks `LAUNCH_TRIES` times
+  `LAUNCH_WAIT` seconds apart and prints `stop <unit-slug>: stopped <ids>;
+  still listed: <ids>|none`. It never waits longer. Several entries can
+  share a name: a `failed` one can stay listed after the stop, and a
+  relaunch under the name succeeds beside it (live drill), so a `failed`
+  entry still listed blocks nothing, and the report takes the entry that
+  is not `failed`. If a live entry is still listed, launch nothing under
+  that name this time: the next beat finds the unit again. Run again after
+  a death, it stops whatever is still listed and nothing else. Ledger the unit
   `stopped` only when it will not be restarted: the ladder's third rung
   and the end of the run. A stop for a restart or a relaunch is recorded by
   that `restarted` or `relaunched` line, and the unit keeps its status; a
@@ -754,8 +765,8 @@ authority.
     - denied command (`denied-command`): add it as Phase 2, Relaunching
       with a longer list, says, and launch with the longer list;
     - usage limit: not a death, and no restart yet. If its name is listed
-      (a stall, or a `failed` entry), stop it first (Stopping an operator) and wait until it is
-      no longer listed. Then run `sh <skill dir>/beat.sh <ledger dir> wait
+      (a stall, or a `failed` entry), stop it first (Stopping an
+      operator). Then run `sh <skill dir>/beat.sh <ledger dir> wait
       <unit-slug> <minutes>`, with the
       minutes until the reset `budget.sh` reports. The unit then shows
       `wait until-<epoch>`: it is not watched and the summary's
@@ -776,16 +787,14 @@ authority.
     - unknown (`unknown`): post your partner a one-line notice that asks
       nothing.
   - **Rung 3: stop.** Do not restart. If its name is listed (a stall, or a
-    `failed` entry), stop
-    it (Stopping an operator) and wait until it is no longer listed. Ledger
+    `failed` entry), stop it (Stopping an operator). Ledger
     `- stopped <unit-slug>: rung 3` under `## Supervision` and the unit
     `stopped` under `## Units`, and surface it to your partner with the
     rung-2 finding.
 
   To restart, with the same name, worktree and model:
-  1. If its name is listed (a stall, or a `failed` entry, which may keep the
-     name taken), stop it (Stopping an operator) and run `claude agents
-     --json` until its name is no longer listed.
+  1. If its name is listed (a stall, or a `failed` entry), stop it
+     (Stopping an operator).
   2. Refresh its assignment file: `Needs rows` with current merge shas,
      `Admitted` as the ledger has it, and `Plan:` naming the plan it
      already wrote, `<plan path> at <sha>, tasks <the unit's tasks, minus
@@ -805,8 +814,8 @@ authority.
      <unit-slug>: <cause>, rung <n>, since <key>` under `## Supervision`
      and prints it.
   4. Bring its branch up to date (Phase 2, Bringing a branch up to date)
-     and launch it (Phase 2, Starting an operator, step 4), unless its name
-     is listed.
+     and launch it (Phase 2, Starting an operator, step 4), unless a live
+     entry is still listed under its name (Stopping an operator).
   5. Record its session (`sh <skill dir>/beat.sh <ledger dir> launched
      <unit-slug>`, as Phase 2, Starting an operator, step 5, says; a
      session that never appears ends here with `launch failed`, and the next
@@ -982,11 +991,11 @@ stopped: once step 6 is done, it is an ordinary unit, which Phase 0
 restarts like any other if it dies.
 
 1. Ledger every member `replaced (ruling <id>)` in one append, then stop
-   each member still listed in `claude agents --json`: `claude stop <id>`
-   (`## Supervision`, Stopping an operator). When routing again, skip the
-   append if the ledger already holds it.
-2. Run `claude agents --json` again; start nothing under any member's name
-   while it is still listed.
+   each member still listed in `claude agents --json` (`## Supervision`,
+   Stopping an operator). When routing again, skip the append if the
+   ledger already holds it.
+2. Start nothing under any member's name while a live entry is still
+   listed under it (Stopping an operator says what that blocks).
 3. Cut each member's branch. Skip a member that has a `- cut <member> to
    <cut-to sha> for ruling <id>` line. Every sibling is cut whole, the
    named one included: remove its worktree if `git -C <project> worktree
@@ -1184,7 +1193,7 @@ one merge after another.
 
 When every unit has merged: present the integration branch to your partner,
 follow superpowers:finishing-a-development-branch, stop every operator
-still listed (`claude stop <id>`), and stop the heartbeat timer (`sh
+still listed (`## Supervision`, Stopping an operator), and stop the heartbeat timer (`sh
 <skill dir>/beat.sh <ledger dir> stop-timer`).
 
 ## Ledger format
@@ -1267,10 +1276,13 @@ aborted or taken back, fix round sent, deferral recorded, sibling notice
 sent, plan ledgered, status asked, operator stalled, operator
 investigated, relays and notices resent. A beat that changed none of these
 appends nothing. The heartbeat's `<ledger dir>/timer` and the `<ledger
-dir>/assignments/<unit-slug>.beat`, `.asked` and `.session` files are
-`beat.sh`'s working state, not ledger: losing a `.beat` or `.asked` file
-costs one beat of detection, and `beat.sh` rewrites it from git; losing a
-`.session` file leaves a rung-2 investigation the worktree fallback. `beat.sh` writes the
+dir>/assignments/<unit-slug>.beat`, `.asked`, `.session`, `.tail` and
+`.cause` files are working state, not ledger: losing a `.beat` or
+`.asked` file costs one beat of detection, and `beat.sh` rewrites it from
+git; losing a `.session` file leaves a rung-2 investigation the worktree
+fallback; a `.tail` is copied again on every beat that prints it; losing a
+`.cause` file leaves `kill-strays` no named command, so the cause is
+treated as `unknown`. `beat.sh` writes the
 `restarted` and `waiting reset` lines itself (`restart`, `wait`): the
 cause names one of `death`, `stall`, `denied-command`, `hung-process`,
 `defect`, `unknown` or `usage-limit`; `<key>` is the `@ <sha>` of the

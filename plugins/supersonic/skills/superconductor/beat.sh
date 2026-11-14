@@ -22,6 +22,10 @@
 #   beat.sh <dir> stop-timer            stop the timer, if one runs
 #   beat.sh <dir> fork <name> <cmd>     run a fork under FORK_LIMIT in its own process group
 #   beat.sh <dir> stop-fork <name>      stop a fork's process group (TERM, then KILL)
+#   beat.sh <dir> stop <unit-slug> [failed]  stop every session listed under the unit's name
+#                                       (only `failed` ones with `failed`), each by its own
+#                                       short id; then look LAUNCH_TRIES times LAUNCH_WAIT apart
+#                                       for them to leave the list, and report what is left
 #   beat.sh changed <marker>            operator: print one file under the cwd changed since
 #                                       <marker> (none: print nothing), then touch <marker>
 set -u
@@ -65,6 +69,9 @@ report)
   fi
   AGENTS=$agents SESSIONS=$sessions TAIL_LINES=$TAIL_LINES TAIL_BYTES=$TAIL_BYTES \
     pl report "$dir" "$BEAT" "$STALL_BEATS" "$timer" "$deadline" ;;
+stop)
+  [ $# -ge 2 ] || die "usage: beat.sh <dir> stop <unit-slug> [failed]"
+  LAUNCH_TRIES=$LAUNCH_TRIES LAUNCH_WAIT=$LAUNCH_WAIT pl "$@" "$dir" ;;
 seen|asked|restart|wait|strays|kill-strays|launching|relaunched)
   [ $# -ge 2 ] || die "usage: beat.sh <dir> $1 <unit-slug> ..."
   pl "$@" "$dir" ;;
@@ -177,7 +184,13 @@ sub mtime { my @s = stat $_[0]; @s ? $s[9] : undef }
 # One definition of a live session: listed under the unit's name, and not in state `failed`
 # (a session that cannot start stays listed with status idle, state failed).
 sub failed_entry { my $a = shift; grep { ($a->{$_} // "") eq "failed" } qw(state status) }
-sub entry { my ($list, $name) = @_; my ($a) = grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name } @$list; $a }
+# Several entries can share a name (a failed one stays listed beside its relaunch): the
+# unit's entry is one that is not failed if there is one, else a failed one.
+sub entry { my ($list, $name) = @_;
+  my @a = grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name } @$list;
+  my ($live) = grep { !failed_entry($_) } @a; $live // $a[0] }
+sub entries { my ($list, $name, $only_failed) = @_;
+  grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name && (!$only_failed || failed_entry($_)) } @$list }
 # The transcript of the unit's last confirmed session: <session id>.jsonl under ~/.claude/projects.
 sub transcript { my $u = shift; open(my $S, "<", "$dir/assignments/$u.session") or return undef;
   my $id = <$S> // ""; close $S; chomp $id; return undef unless $id =~ /^[0-9a-f-]+$/;
@@ -254,6 +267,8 @@ if ($mode eq "report") {
     my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
     if (ref $list eq "ARRAY") {
       for my $a (@$list) { next unless ref $a eq "HASH" && defined $a->{name};
+        # A live entry wins over a failed one under the same name.
+        next if exists $sess{$a->{name}} && $sess{$a->{name}} ne "failed";
         $sess{$a->{name}} = failed_entry($a) ? "failed" : ($a->{sessionId} // 1) }
     } else { $known = 0 }
   }
@@ -388,6 +403,20 @@ if ($mode eq "restart") {
   unlink "$dir/assignments/$u.session";
   append_sup($cause eq "usage-limit" ? "- restarted $u: usage-limit, since $sha gen $gen"
                                      : "- restarted $u: $cause, rung " . rung($u) . ", since $sha gen $gen");
+} elsif ($mode eq "stop") {
+  my $d = pop @ARGV; my ($which) = @ARGV; load($d); my $name = "$design-$u";
+  my $only = defined $which && $which eq "failed";
+  my $list = sub { my $j = join "", run("claude", "agents", "--json");
+    my $l = eval { JSON::PP->new->decode($j) }; ref $l eq "ARRAY" ? $l : undef };
+  my $l = $list->() or do { print "stop $u: the session list is unreadable; nothing stopped\n"; exit 0 };
+  my @ids = map { $_->{id} } grep { defined $_->{id} } entries($l, $name, $only);
+  run("claude", "stop", $_) for @ids;
+  my @left = @ids;
+  for my $try (1 .. $ENV{LAUNCH_TRIES}) {
+    my $now = $list->() // last; my %on = map { (($_->{id} // "") => 1) } entries($now, $name, 0);
+    @left = grep { $on{$_} } @ids; last unless @left;
+    sleep $ENV{LAUNCH_WAIT} if $try < $ENV{LAUNCH_TRIES} }
+  printf "stop %s: stopped %s; still listed: %s\n", $u, (@ids ? join(",", @ids) : "none"), (@left ? join(",", @left) : "none");
 } elsif ($mode eq "launching") {
   my ($d) = @ARGV; load($d); unlink "$dir/assignments/$u.session";
 } elsif ($mode eq "relaunched") {

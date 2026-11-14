@@ -70,6 +70,12 @@ HOME="$tmp/home"; export HOME
 cat > "$tmp/bin/claude" <<STUB
 #!/bin/sh
 [ -e "$tmp/agents.fail" ] && exit 1
+if [ "\$1" = stop ]; then
+  echo "\$2" >> "$tmp/stopped"
+  # With stop-removes, a stopped entry leaves the list; without it, it stays (as a failed one may).
+  [ -e "$tmp/stop-removes" ] && ID="\$2" perl -MJSON::PP -i -0pe '\$j=JSON::PP->new; \$_=\$j->encode([grep { \$_->{id} ne \$ENV{ID} } @{\$j->decode(\$_)}])' "$tmp/agents.json"
+  exit 0
+fi
 [ "\$1 \$2" = "agents --json" ] || exit 0
 next=\$(ls "$tmp/agents.seq" 2>/dev/null | head -n 1)
 if [ -n "\$next" ]; then cat "$tmp/agents.seq/\$next"; rm -f "$tmp/agents.seq/\$next"; else cat "$tmp/agents.json"; fi
@@ -242,6 +248,10 @@ out=$(b "$d"); python3 -c '
 import json,sys
 for l in open(sys.argv[1]): json.loads(l)' "$d/assignments/api.tail" || fail "every tail line must be a whole JSON line"
 [ "$(wc -c < "$d/assignments/api.tail" | tr -d ' ')" -le 65536 ] || fail "tail must be bounded by bytes"
+# A window that starts exactly on a line start keeps that line (N5-4).
+perl -e 'print q({"head":"), "h" x 100, qq("}\n); print q({"w":"), "w" x 65527, qq("}\n)' > "$tf"
+[ "$(tail -n 1 "$tf" | wc -c | tr -d ' ')" = 65536 ] || fail "fixture: the last line must be exactly TAIL_BYTES"
+out=$(b "$d"); [ "$(wc -l < "$d/assignments/api.tail" | tr -d ' ')" = 1 ] || fail "a line starting exactly at the window start must be kept"
 perl -e 'print qq({"n":1}\n), q({"big":"), "x" x 200000, qq("}\n)' > "$tf"
 out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a tail with no whole line must read none: $(printf '%s\n' "$out" | grep '^transcript')"
 rm -f "$tf"; out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a missing transcript must read none"
@@ -249,6 +259,37 @@ reset_ledger
 # Whole words in the pending check (R3-5).
 perl -0pi -e 's/(- plan web[^\n]*\n)/$1- restarted api-2: death, rung 1, since start gen 0\n/' "$d/ledger.md"
 out=$(b "$d"); [ "$(field api restart)" = none ] || fail "api-2's restart must not make api pending"
+reset_ledger
+
+# 7c. Same-named entries (N5-1): a failed one stays listed beside its relaunch.
+live2='{"name":"des-db","id":"d2","sessionId":"eeee1111-2222-3333-4444-555566667777","status":"busy","state":"working"}'
+failed2='{"name":"des-db","id":"d1","sessionId":"dddd1111-2222-3333-4444-555566667777","status":"idle","state":"failed"}'
+failed3='{"name":"des-db","id":"d0","sessionId":"cccc1111-2222-3333-4444-555566667777","status":"idle","state":"failed"}'
+printf '%s' "$agents" | sed "s/]\$/,$failed2,$live2]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = alive ] || fail "failed + live under one name is alive: $(line 'unit db')"
+r=$(bl "$d" launched db); [ "$r" = "des-db eeee1111-2222-3333-4444-555566667777" ] || fail "launched must record the live entry: $r"
+printf '%s' "$agents" | sed "s/]\$/,$live2,$failed2]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = alive ] || fail "the order of same-named entries must not matter"
+printf '%s' "$agents" | sed "s/]\$/,$failed3,$failed2]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = failed ] || fail "failed + failed is not alive: $(line 'unit db')"
+# stop targets each entry's own short id and waits a bounded time, whatever the list does.
+rm -f "$tmp/stopped"
+r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped d0,d1; still listed: d0,d1" ] || fail "stop with entries that stay: $r"
+[ "$(tr '\n' ' ' < "$tmp/stopped")" = "d0 d1 " ] || fail "stop must target short ids: $(cat "$tmp/stopped")"
+grep -q des-db "$tmp/stopped" && fail "stop must never pass the name"
+sl=$(sed 's/^LAUNCH_WAIT=10$/LAUNCH_WAIT=1/' "$src" > "$tmp/beat-1s.sh"; echo "$tmp/beat-1s.sh")
+t0=$(date +%s); sh "$sl" "$d" stop db failed >/dev/null; el=$(( $(date +%s) - t0 ))
+[ "$el" -ge 2 ] && [ "$el" -le 5 ] || fail "stop must look LAUNCH_TRIES times LAUNCH_WAIT apart and no longer (took ${el}s)"
+printf '%s' "$agents" | sed "s/]\$/,$failed2,$live2]/" > "$tmp/agents.json"; rm -f "$tmp/stopped"
+r=$(bl "$d" stop db failed); [ "$(cat "$tmp/stopped")" = d1 ] || fail "stop failed must leave the live entry alone: $(cat "$tmp/stopped")"
+: > "$tmp/stop-removes"; printf '%s' "$agents" | sed "s/]\$/,$failed2]/" > "$tmp/agents.json"
+r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped d1; still listed: none" ] || fail "stop with an entry that leaves: $r"
+r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped none; still listed: none" ] || fail "stop run again after it is done: $r"
+rm -f "$tmp/stop-removes" "$tmp/stopped"; printf '%s' "$agents" > "$tmp/agents.json"
+# A probe that sees failed stops at once, even if the session is up again later (N5-4).
+mkdir -p "$tmp/agents.seq"; printf '[%s]' "$dbup" > "$tmp/agents.seq/1"; printf '[%s]' "$dbfail" > "$tmp/agents.seq/2"; printf '[%s]' "$dbup" > "$tmp/agents.seq/3"
+bl "$d" launched db >/dev/null && fail "up, failed, up is a failed start"
+rm -rf "$tmp/agents.seq"
 reset_ledger
 
 # 8. Waiting for a usage reset (N4): not absent, not asked, not movable; then over; restart has no rung.
