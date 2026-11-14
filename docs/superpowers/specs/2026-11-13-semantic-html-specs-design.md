@@ -358,23 +358,46 @@ and is deferred. Planafoot's editor was looked at and set aside: it is
 Milkdown, which reads and writes markdown and shows unknown HTML as literal
 text.
 
-## Rollout
+## Sequence of work
 
-The reader accepting HTML changes nothing until specs are written in it, and
-that switch is deliberately not part of this project.
+The work spans the reader and the `super` plugin repo (`mindlace/super`,
+home of `superpowers-jev` and `supersonic`). It happens in this order.
 
-- This project adds `docs/spec-format.md`: the format section above as a
-  standalone reference an agent can be pointed at, with one complete example.
-- Specs and plans keep being written in markdown until this has shipped.
-- Turning HTML on afterwards is a follow-on piece of work, not part of this
-  plan. It is to be baked into superpowers rather than added to
-  `~/.claude/CLAUDE.md`: a SessionStart hook injects the instruction to write
-  both design docs and plans as `.html` per the format reference, the way
-  the `superpowers-jev` plugin injects its own session context.
-- So `docs/spec-format.md` must stand alone: an agent given only that file
-  can write a valid spec.
-- Until then the reader is exercised with hand-converted specs, starting with
-  the saved mockup's `article`.
+1. **Move spec_reader into `super`.** A separate exercise, run by Ethan,
+   before any of the implementation below. After it, the reader and the
+   plugins share one repo.
+   - This design doc, its `assets/` directory and the implementation plan
+     live on the unmerged branch `worktree-semantic-html-specs` of the
+     spec_reader repo. The move must carry that branch's commits (or these
+     files) across, or they are lost.
+   - File paths in this doc and in the plan are relative to the spec_reader
+     root as it is today. After the move they need the new prefix; nothing
+     else about them changes.
+2. **Build the reader changes** described in this document, from the plan
+   `docs/superpowers/plans/2026-11-13-semantic-html-specs.md`, in a fresh
+   worktree of the moved repo. Specs and plans keep being written in
+   markdown throughout; the reader is exercised with hand-converted specs,
+   starting with the saved mockup's `article`.
+3. **Add the SessionStart hook** in `super`, as a second, small plan written
+   once the move has settled where things live.
+   - It injects the instruction to write both design docs and plans as
+     `.html` per the format reference, the way `superpowers-jev` injects its
+     own session context. Nothing is added to `~/.claude/CLAUDE.md`.
+   - The format reference is one file that both the hook and the reader's
+     tests read. With both in one repo there is no second copy to keep in
+     step. Where that file sits is decided after the move; until then it is
+     `docs/spec-format.md`, and it must stand alone: an agent given only
+     that file can write a valid spec or plan.
+4. **Switch the hook on** only after step 2 has merged, so no session writes
+   HTML the reader cannot yet show.
+
+Later, and separately: the feedback loop, then structural editing if wanted.
+
+### Not yet decided
+
+- Where spec_reader lands inside `super`, and whether it becomes a plugin or
+  stays a standalone app in a subdirectory. The move exercise decides this.
+- Whether the hook is a new plugin or part of an existing one.
 
 ## Testing
 
