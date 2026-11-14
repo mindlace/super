@@ -29,8 +29,8 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
 - **Wait in bounded stretches.** While a leaf runs and you have no local work, start one
   background `sleep 300` (Bash, run in the background) unless one is already running, and
   end your turn. A leaf's completion, a message or the sleep's exit wakes you, so a
-  message from `<conductor name>` is answered within one stretch, well inside the
-  conductor's ten-minute beat. On each wake, act on
+  message from `<conductor name>` is answered within one stretch, inside one of the
+  conductor's beats. On each wake, act on
   any message first. When the wake is your sleep's exit, also check every leaf you have no
   result for: run `sh <beat.sh>
   changed <ledger dir>/assignments/<unit-slug>.stretch` (`<beat.sh>` is the `beat.sh`

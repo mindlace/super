@@ -8,14 +8,16 @@
 #   beat.sh <dir> seen <unit-slug>      progress seen (a message handled, a restart): rewrite its beat file
 #   beat.sh <dir> asked <unit-slug>     a status ask was sent: record it
 #   beat.sh <dir> launching <unit-slug> a first launch is ledgered: forget the last session's id
-#   beat.sh <dir> launched <unit-slug>  after a launch: wait for its session and record its id;
-#                                       if it never appears, ledger `launch failed`
+#   beat.sh <dir> launched <unit-slug>  after a launch: confirm its session is up over the whole
+#                                       bounded wait and record its id; if it never appears or
+#                                       fails, ledger `launch failed`
 #   beat.sh <dir> relaunched <unit-slug> ledger a relaunch with a longer list
 #   beat.sh <dir> resume                Phase 0: stop the old timer, restart every beat file, drop asks
 #   beat.sh <dir> restart <unit> <cause>  ledger a restart; the script writes its rung and key
 #   beat.sh <dir> wait <unit> <minutes> ledger a unit waiting for a usage reset that far ahead
 #   beat.sh <dir> strays <unit>         list processes left running in the unit's worktree
-#   beat.sh <dir> kill-strays <unit> <command>  stop those whose command line contains <command>
+#   beat.sh <dir> kill-strays <unit>    stop those whose command line contains the hung command
+#                                       named in <dir>/assignments/<unit>.cause
 #   beat.sh <dir> timer <seconds>       the heartbeat timer; run it in the background
 #   beat.sh <dir> stop-timer            stop the timer, if one runs
 #   beat.sh <dir> fork <name> <cmd>     run a fork under FORK_LIMIT in its own process group
@@ -67,18 +69,20 @@ seen|asked|restart|wait|strays|kill-strays|launching|relaunched)
   [ $# -ge 2 ] || die "usage: beat.sh <dir> $1 <unit-slug> ..."
   pl "$@" "$dir" ;;
 launched)
-  # The session must be listed within LAUNCH_TRIES tries LAUNCH_WAIT seconds apart; a launch
-  # whose session never appears is a failed start, ledgered so the ladder climbs.
+  # Over LAUNCH_TRIES looks LAUNCH_WAIT seconds apart the session must be listed and alive at
+  # the last look, and never `failed` (a session that cannot start is listed, then fails).
+  # A session that never appears or fails is a failed start, ledgered so the ladder climbs.
   [ $# -eq 2 ] || die "usage: beat.sh <dir> launched <unit-slug>"
   i=1; rc=3
   while :; do
     if agents=$(claude agents --json 2>/dev/null); then
-      AGENTS=$agents perl -x -MJSON::PP "$self" launched "$2" "$dir"; rc=$?
+      AGENTS=$agents perl -x -MJSON::PP "$self" probe "$2" "$dir"; rc=$?
     else rc=2; fi
-    [ "$rc" -eq 0 ] && exit 0
+    [ "$rc" -eq 4 ] && break
     [ "$i" -ge "$LAUNCH_TRIES" ] && break
     i=$((i + 1)); sleep "$LAUNCH_WAIT"
   done
+  [ "$rc" -eq 0 ] && AGENTS=$agents pl launched "$2" "$dir"
   [ "$rc" -eq 2 ] && die "the session list is unreadable; run launched again later"
   pl launch-failed "$2" "$dir" ;;
 resume)
@@ -170,6 +174,10 @@ sub head { my ($h) = run("git", "-C", shift, "rev-parse", "HEAD"); $h // "" }
 sub writebeat { my ($u, $h) = @_; mkdir "$dir/assignments";
   open(my $B, ">", "$dir/assignments/$u.beat") or die; print $B "$h\n"; close $B }
 sub mtime { my @s = stat $_[0]; @s ? $s[9] : undef }
+# One definition of a live session: listed under the unit's name, and not in state `failed`
+# (a session that cannot start stays listed with status idle, state failed).
+sub failed_entry { my $a = shift; grep { ($a->{$_} // "") eq "failed" } qw(state status) }
+sub entry { my ($list, $name) = @_; my ($a) = grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name } @$list; $a }
 # The transcript of the unit's last confirmed session: <session id>.jsonl under ~/.claude/projects.
 sub transcript { my $u = shift; open(my $S, "<", "$dir/assignments/$u.session") or return undef;
   my $id = <$S> // ""; close $S; chomp $id; return undef unless $id =~ /^[0-9a-f-]+$/;
@@ -185,19 +193,26 @@ sub rung { my $u = shift; my ($sha, $gen) = key($u);
   1 + scalar grep { /^- restarted \Q$u\E$w: .*, rung \d+, since (\S+) gen (\d+)\s*$/ && $1 eq $sha && $2 == $gen } @sup }
 # A restart or relaunch is seen through once a `resent to <session>` line follows it.
 # A launch that never brought a session up (`launch failed`) is seen through as well: it failed.
+# Returns 1 (pending), 2 (the launch was ledgered failed) or 0.
 sub pending { my $u = shift; my $s = "$design-$u"; my $p = 0;
   for (@sup) { $p = 1 if /^- (?:restarted|relaunched) \Q$u\E$w/;
-    $p = 0 if /^- resent to \Q$s\E\s*$/ || /^- launch failed \Q$u\E$w/ } $p }
+    $p = 0 if /^- resent to \Q$s\E\s*$/; $p = 2 if /^- launch failed \Q$u\E$w/ } $p }
 # An investigation for this rung: an `investigated` line with no later `restarted` line.
 sub investigated { my $u = shift; my $i = 0;
   for (@sup) { $i = 1 if /^- investigated \Q$u\E$w/; $i = 0 if /^- restarted \Q$u\E$w/ } $i }
 # The bounded tail of the transcript, copied into the ledger dir for the investigating agent.
+# Whole lines only: a line cut by the byte window is dropped; nothing left means none.
 sub tailfile { my $u = shift; my $t = transcript($u) // return undef;
   my $sz = -s $t // 0; open(my $T, "<", $t) or return undef;
-  seek($T, $sz > $ENV{TAIL_BYTES} ? $sz - $ENV{TAIL_BYTES} : 0, 0);
-  my @l = <$T>; close $T; shift @l if $sz > $ENV{TAIL_BYTES};
+  my $start = $sz > $ENV{TAIL_BYTES} ? $sz - $ENV{TAIL_BYTES} : 0;
+  my $cut = 0;
+  if ($start > 0) { seek($T, $start - 1, 0); read($T, my $c, 1); $cut = $c ne "\n" }
+  seek($T, $start, 0); my @l = <$T>; close $T;
+  shift @l if $cut;
   @l = @l[-$ENV{TAIL_LINES} .. -1] if @l > $ENV{TAIL_LINES};
-  my $f = "$dir/assignments/$u.tail"; open(my $O, ">", $f) or return undef; print $O @l; close $O; $f }
+  my $f = "$dir/assignments/$u.tail";
+  unless (@l) { unlink $f; return undef }
+  open(my $O, ">", $f) or return undef; print $O @l; close $O; $f }
 # Waiting for a usage reset: the newest `waiting reset` line with no later `restarted` line.
 sub waiting { my $u = shift; my $until;
   for (@sup) { $until = $1 if /^- waiting reset \Q$u\E$w until (\d+)/; undef $until if /^- restarted \Q$u\E$w/ } $until }
@@ -239,7 +254,7 @@ if ($mode eq "report") {
     my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
     if (ref $list eq "ARRAY") {
       for my $a (@$list) { next unless ref $a eq "HASH" && defined $a->{name};
-        $sess{$a->{name}} = $a->{sessionId} // 1 }
+        $sess{$a->{name}} = failed_entry($a) ? "failed" : ($a->{sessionId} // 1) }
     } else { $known = 0 }
   }
   my %fixopen; for my $u (@slugs) { my $o = 0;
@@ -263,11 +278,12 @@ if ($mode eq "report") {
     next unless $st eq "planning" || $st eq "admitted" || $fix;
     $n{watched}++; $n{fixrounds}++ if $fix;
     my $name = "$design-$u"; my $wt = wt($u);
-    my $session = !$known ? "unknown" : exists $sess{$name} ? "alive" : "absent";
+    my $session = !$known ? "unknown" : !exists $sess{$name} ? "absent"
+                : $sess{$name} eq "failed" ? "failed" : "alive";
     my $until = waiting($u);
     my $wait = !defined $until ? "none" : $until > $now ? "until-$until" : "over";
     if (defined $until && $until > $now) { $n{waiting}++; $next = $until if $next eq "-" || $until < $next }
-    $n{absent}++ if $session eq "absent" && $wait eq "none";
+    $n{absent}++ if ($session eq "absent" || $session eq "failed") && $wait eq "none";
     my $plan = (grep { /^- plan \Q$u\E$w/ } @sup) ? "yes" : "no";
     my $progress = !($st eq "planning" && $plan eq "yes") && $wait eq "none";
     my $bf = "$dir/assignments/$u.beat"; my $af = "$dir/assignments/$u.asked";
@@ -300,12 +316,15 @@ if ($mode eq "report") {
     $n{movable}++ if $movable eq "yes";
     my ($sha, $gen) = key($u);
     my $rung = rung($u);
+    # A launch ledgered failed whose session is up after all is owed its resends like any other.
+    my $pd = pending($u);
+    my $restart = ($pd == 1 || ($pd == 2 && $session eq "alive")) ? "pending" : "none";
     # A listed session's id is the unit's current one.
     if ($session eq "alive" && $sess{$name} =~ /^[0-9a-f-]+$/) {
       open(my $S, ">", "$dir/assignments/$u.session"); print $S "$sess{$name}\n"; close $S }
     printf "unit %s status %s session %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d investigated %s restart %s wait %s movable %s\n",
       $u, $st, $session, $evidence, $quiet, $ask, $asked, $plan, ($fix ? "open" : "none"),
-      $rung, (investigated($u) ? "yes" : "no"), (pending($u) ? "pending" : "none"), $wait, $movable;
+      $rung, (investigated($u) ? "yes" : "no"), $restart, $wait, $movable;
     # On the investigating rung, a bounded copy of its last session's transcript tail.
     print "transcript $u ", tailfile($u) // "none", "\n" if $rung >= 2;
 
@@ -375,12 +394,14 @@ if ($mode eq "restart") {
   my ($d) = @ARGV; load($d); unlink "$dir/assignments/$u.session"; append_sup("- relaunched $u");
 } elsif ($mode eq "launch-failed") {
   my ($d) = @ARGV; load($d); append_sup("- launch failed $u"); exit 1;
-} elsif ($mode eq "launched") {
+} elsif ($mode eq "probe" || $mode eq "launched") {
   my ($d) = @ARGV; load($d); my $name = "$design-$u";
   my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
   unless (ref $list eq "ARRAY") { print STDERR "beat.sh: the session list is unreadable\n"; exit 2 }
-  my ($a) = grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name } @$list;
+  my $a = entry($list, $name);
   unless ($a && ($a->{sessionId} // "") =~ /^[0-9a-f-]+$/) { print STDERR "beat.sh: $name is not listed\n"; exit 3 }
+  if (failed_entry($a)) { print STDERR "beat.sh: $name is listed as failed\n"; exit 4 }
+  exit 0 if $mode eq "probe";
   mkdir "$dir/assignments";
   open(my $S, ">", "$dir/assignments/$u.session") or die; print $S "$a->{sessionId}\n"; close $S;
   print "$name $a->{sessionId}\n";
@@ -400,8 +421,12 @@ if ($mode eq "restart") {
   my $d = pop @ARGV; my ($want) = @ARGV; load($d); units();
   my $wt = wt($u);
   if ($mode eq "strays") { print "stray $_->[0] $_->[1]\n" for strays($wt); exit 0 }
-  # Only processes whose command line contains the command the investigation named.
-  die "beat.sh: kill-strays needs the hung command\n" unless defined $want && length $want;
+  # Only processes whose command line contains the command the investigation named, read from
+  # its one-line answer in <unit>.cause (`cause: hung process <command>`), never from a shell.
+  $want = undef;
+  if (open(my $C, "<", "$dir/assignments/$u.cause")) { my $l = <$C> // ""; close $C; chomp $l;
+    ($want) = $l =~ /^\s*cause:\s*hung process\s+(.*\S)\s*$/ }
+  die "beat.sh: no hung command named in assignments/$u.cause\n" unless defined $want && length $want;
   my @s = strays($wt, $want);
   my @p = map { $_->[0] } @s; kill(TERM => @p) if @p;
   for (1..5) { @p = grep { kill(0, $_) } @p; last unless @p; sleep 1 }

@@ -67,7 +67,13 @@ cp "$d/ledger.md" "$tmp/ledger.base"
 reset_ledger() { cp "$tmp/ledger.base" "$d/ledger.md"; }
 agents='[{"name":"des-api","id":"a1","sessionId":"aaaa1111-2222-3333-4444-555566667777","status":"busy","state":"working"},{"name":"des-web","id":"w1","status":"busy"},{"name":"des-ops","id":"o1","status":"busy"}]'
 HOME="$tmp/home"; export HOME
-printf '#!/bin/sh\n[ -e "%s/agents.fail" ] && exit 1\n[ "$1 $2" = "agents --json" ] && cat "%s/agents.json"\n' "$tmp" "$tmp" > "$tmp/bin/claude"
+cat > "$tmp/bin/claude" <<STUB
+#!/bin/sh
+[ -e "$tmp/agents.fail" ] && exit 1
+[ "\$1 \$2" = "agents --json" ] || exit 0
+next=\$(ls "$tmp/agents.seq" 2>/dev/null | head -n 1)
+if [ -n "\$next" ]; then cat "$tmp/agents.seq/\$next"; rm -f "$tmp/agents.seq/\$next"; else cat "$tmp/agents.json"; fi
+STUB
 chmod +x "$tmp/bin/claude"; printf '%s' "$agents" > "$tmp/agents.json"
 PATH="$tmp/bin:$PATH"; export PATH
 
@@ -196,6 +202,27 @@ echo stale > "$d/assignments/web.session"; b "$d" launching web; [ -e "$d/assign
 r=$(b "$d" relaunched db); [ "$r" = "- relaunched db" ] || fail "relaunched said: $r"
 out=$(b "$d"); [ "$(field db restart)" = pending ] || fail "a relaunch is pending until seen through"
 reset_ledger
+# A session that cannot start is listed, then failed: launched must not record it (round-4 drill).
+dbup='{"name":"des-db","id":"d1","sessionId":"dddd1111-2222-3333-4444-555566667777","status":"busy","state":"working"}'
+dbfail='{"name":"des-db","id":"d1","sessionId":"dddd1111-2222-3333-4444-555566667777","status":"idle","state":"failed"}'
+mkdir -p "$tmp/agents.seq"; printf '[%s]' "$dbup" > "$tmp/agents.seq/1"; printf '[%s]' "$dbfail" > "$tmp/agents.seq/2"
+b "$d" restart db death >/dev/null
+bl "$d" launched db >/dev/null && fail "a session that fails after it is listed is no launch"
+grep -qx -- '- launch failed db' "$d/ledger.md" || fail "listed-then-failed must ledger launch failed"
+[ -e "$d/assignments/db.session" ] && fail "a failed session's id must not be recorded"
+mkdir -p "$tmp/agents.seq"; printf '[%s]' "$dbup" > "$tmp/agents.seq/1"; printf '[%s]' "$dbup" > "$tmp/agents.seq/2"; printf '[%s]' "$dbfail" > "$tmp/agents.seq/3"
+bl "$d" launched db >/dev/null && fail "launched must confirm the session over the whole wait"
+rm -rf "$tmp/agents.seq"
+# A failed entry on a beat is a death, not a live session, and the unit climbs.
+printf '%s' "$agents" | sed "s/]\$/,$dbfail]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = failed ] && [ "$(field db rung)" = 2 ] || fail "a failed session is dead and climbs: $(line 'unit db')"
+summary | grep -q ' absent 1 ' || fail "a failed session counts with the absent: $(summary)"
+# A session first listed after launch failed is owed its resends (R4-2).
+printf '%s' "$agents" | sed "s/]\$/,$dbup]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = alive ] && [ "$(field db restart)" = pending ] || fail "late session owed resends: $(line 'unit db')"
+printf '%s' "$agents" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db restart)" = none ] || fail "absent after launch failed: not pending"
+reset_ledger
 # The transcript tail: copied, bounded by lines and bytes, only from rung 2 (R3-6).
 out=$(b "$d"); printf '%s\n' "$out" | grep -q '^transcript api' && fail "no transcript line below rung 2"
 tdir="$HOME/.claude/projects/-my proj-x"; mkdir -p "$tdir"; tf="$tdir/aaaa1111-2222-3333-4444-555566667777.jsonl"
@@ -204,13 +231,19 @@ b "$d" restart api death >/dev/null; perl -0pi -e 's/(- restarted api: death[^\n
 rm -f "$d/assignments/api.session"
 out=$(b "$d"); printf '%s\n' "$out" | grep -qx "transcript api $(cd "$d" && pwd -P)/assignments/api.tail" || fail "transcript line wrong: $out"
 [ "$(wc -l < "$d/assignments/api.tail" | tr -d ' ')" = 200 ] && [ "$(tail -n 1 "$d/assignments/api.tail")" = '{"n":300}' ] || fail "tail must be the last 200 lines"
-perl -e 'print q({"big":"), "x" x 100000, qq("}\n) for 1..3' > "$tf"
-out=$(b "$d"); [ "$(wc -c < "$d/assignments/api.tail" | tr -d ' ')" -le 65536 ] || fail "tail must be bounded by bytes"
 [ "$(field api investigated)" = no ] || fail "no investigation yet"
 perl -0pi -e 's/(- resent to des-api\n)/$1- investigated api: unknown — restart\n/' "$d/ledger.md"
 out=$(b "$d"); [ "$(field api investigated)" = yes ] || fail "a ledgered investigation for this rung (R3-9)"
 b "$d" restart api unknown >/dev/null
 out=$(b "$d"); [ "$(field api investigated)" = no ] || fail "a restart uses the investigation up"
+# Whole lines only (R4-1): the line the byte window cuts is dropped; a tail with no whole line is none.
+perl -e 'printf qq({"n":%d,"pad":"%s"}\n), $_, "y" x 1000 for 1..100' > "$tf"
+out=$(b "$d"); python3 -c '
+import json,sys
+for l in open(sys.argv[1]): json.loads(l)' "$d/assignments/api.tail" || fail "every tail line must be a whole JSON line"
+[ "$(wc -c < "$d/assignments/api.tail" | tr -d ' ')" -le 65536 ] || fail "tail must be bounded by bytes"
+perl -e 'print qq({"n":1}\n), q({"big":"), "x" x 200000, qq("}\n)' > "$tf"
+out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a tail with no whole line must read none: $(printf '%s\n' "$out" | grep '^transcript')"
 rm -f "$tf"; out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a missing transcript must read none"
 reset_ledger
 # Whole words in the pending check (R3-5).
@@ -306,7 +339,12 @@ printf '%s\n' "$out" | grep -q 'sleep 63' && fail "a process in a sibling sharin
 printf '%s\n' "$out" | grep -q '^stray [0-9]* sleep 64$' && fail "a process with a terminal was listed"
 b "$d" kill-strays api >/dev/null 2>&1 && fail "kill-strays needs the named command"
 pgrep -f '^sleep 61$' >/dev/null || fail "kill-strays with no command must kill nothing"
-b "$d" kill-strays api "sleep 61" >/dev/null; sleep 1
+# The command comes from the investigation's answer in a file, never through a shell (R4-4).
+printf '%s\n' 'cause: hung process "$(touch '"$tmp"'/pwned)"' > "$d/assignments/api.cause"
+b "$d" kill-strays api >/dev/null; [ -e "$tmp/pwned" ] && fail "the named command must never reach a shell"
+pgrep -f '^sleep 61$' >/dev/null || fail "an unmatched command must kill nothing"
+printf '%s\n' 'cause: hung process sleep 61' > "$d/assignments/api.cause"
+b "$d" kill-strays api >/dev/null; sleep 1
 pgrep -f '^sleep 61$' >/dev/null && fail "kill-strays left the named stray"
 pgrep -f '^sleep 65$' >/dev/null || fail "kill-strays stopped a stray it was not named"
 pgrep -f '^sleep 62$' >/dev/null || fail "kill-strays stopped a process outside the worktree"

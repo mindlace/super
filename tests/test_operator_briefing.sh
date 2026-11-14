@@ -66,6 +66,7 @@ require 'do not use'
 require 'background `sleep 300`'
 forbid 'sleep 600'
 require 'answered within one stretch'
+forbid 'ten-minute'
 # I5: a leaf's progress is any file written in the worktree, read by beat.sh changed.
 require 'changed <ledger dir>/assignments/<unit-slug>.stretch'
 require 'nothing at the last two sleep exits (ten minutes with no file written)'

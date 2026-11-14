@@ -80,7 +80,7 @@ drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
 # The live drill checks what beat.sh and the skill assume about real sessions.
 for s in 'fork drill-limit env -C' 'fork drill-normal env -C' 'claude logs "$opid"' 'claude logs "$op2id"' \
          'run_in_background true' 'TaskStop' 'beat.sh changed' 'drill-$pid-nobody' 'sleep-woke.txt' 'msg-read.txt' \
-         '30 s after its last step' 'stopped session transcript' 'no-such-model-drill' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
+         '30 s after its last step' 'stopped session transcript' 'no-such-model-drill' 'relaunch under a failed session' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
   grep -qF -- "$s" "$drill" || { echo "FAIL: live drill lacks: $s"; exit 1; }
 done
 for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
@@ -224,7 +224,7 @@ forbid "--grep='): rule '"
 need 'uses only `[a-z0-9-]`'
 need 'stands in it as a whole word'
 # A launch that may never have happened is finished without counting a death (N-3, M-1).
-need 'If `claude agents --json` lists `<design-slug>-<unit-slug>`, start nothing'
+need 'If `claude agents --json` lists `<design-slug>-<unit-slug>` and not in state `failed`, start nothing'
 need 'lists its worktree, step 1 is done: go on from step 2'
 need '**Ledger** the unit line (`## Units`) before the launch, then run `sh <skill dir>/beat.sh <ledger dir> launching <unit-slug>`'
 need 'The line has status `launching`'
@@ -360,20 +360,28 @@ need '`checkpoint-<n>`, whose output is a session id'
 # restart line written; the prose says what each rung does, not how to count.
 need '**Rung 1: restart**, with cause `death` or `stall`.'
 need '**Rung 2: investigate, apply the remedy, restart.**'
-need '**Rung 3: stop.** Do not restart. If its name is listed (a stall), stop it'
+need '**Rung 3: stop.** Do not restart. If its name is listed (a stall, or a `failed` entry), stop it'
 forbid 'claude logs'
 forbid 'busy'
 need 'Read <the report'"'"'s transcript file> (the end of its transcript'
 need 'The copy keeps the investigation inside the project and ledger dirs'
 # R3-1: a session that never appears is a failed start that climbs.
-need 'A session that never appears is a failed start: `launched` ledgers `- launch failed <unit-slug>`'
+need 'A session that never appears or fails is a failed start: `launched` ledgers `- launch failed <unit-slug>`'
 forbid 'run it again a few seconds later'
 # R3-3: kill-strays only kills the named command.
-need 'kill-strays <unit-slug> "<the command line it named>"'
+need 'kill-strays <unit-slug>`, which reads the command line from the `.cause` file (never through a shell)'
+need 'Write its answer, as given, to `<ledger dir>/assignments/<unit-slug>.cause` with the Write tool'
+forbid '"<the command line it named>"'
+# Round-4 drill: a session that cannot start stays listed in state failed; alive excludes it.
+need 'Alive means listed under its name and not in state `failed`'
+need '`session failed`: it is listed in state `failed`'
+need 'stores the session id only if the session is alive at the last look and never failed in between'
+need 'A session that comes up after that line is owed its resends like any restart'
+need 'operator launching, launch failed, operator replaced'
 need 'With no command named, it kills nothing: treat the cause as `unknown`'
 need 'found again at the time it runs, never by a remembered pid'
 # R3-8: a usage-limited stall is stopped before it waits.
-need 'If its name is listed (a stall), stop it first (Stopping an operator) and wait until it is no longer listed. Then run `sh <skill dir>/beat.sh <ledger dir> wait'
+need 'If its name is listed (a stall, or a `failed` entry), stop it first (Stopping an operator) and wait until it is no longer listed. Then run `sh <skill dir>/beat.sh <ledger dir> wait'
 # R3-9: the script says whether an investigation for this rung is ledgered.
 need 'If the report shows `investigated yes`'
 forbid 'line with no later `restarted <unit-slug>` line is in the ledger'
