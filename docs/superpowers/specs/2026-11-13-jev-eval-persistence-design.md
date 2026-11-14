@@ -128,6 +128,69 @@ Each entry goes to the right repo's log via `call_id`. The command stays in the 
 
 `skills/jev/SKILL.md` gets a short **Evaluating** section: `report --all --by model`, then `label --sample` for the current model, then `adjudicate export`, a subagent, `adjudicate apply`, and `report --truth best`. It also gives the promotion bar used on 2026-11-13: confident-wrong measured against adjudicated truth, with a stricter bar for points whose `on` behavior removes a step.
 
+### Scoring with adjudications (my call)
+
+- **Population.** Accuracy is computed over calls that have a label: a blind or in-session record, or `auto_hook` for prompt-route.
+  - Per call, truth is the adjudication if one exists, otherwise the label.
+  - If a disagreement was never adjudicated, the label stands. The report then shows an **`unresolved N`** count. When N > 0, accuracy against the label is a lower bound for Jev.
+- **Rulings.**
+  - `both_defensible` counts as agreement and is also reported in its own column. Its `truth` is `null`.
+  - `undeterminable` is excluded and counted separately.
+- **Sampling frame.** `label --sample` and `adjudicate export` write a `sample` entry: `batch`, the filter, `strata` with `{key: [population_size, n]}`, and the seed.
+  - Records and adjudications carry `batch`.
+  - With `--reweight`, the report weights per-stratum rates by population size. Unweighted is the default, and the report says which it used.
+- **Splits.** `--by` takes `model`, `template_version`, `rule_version` or `source`, and they can be combined.
+  - The "labels on current model" column means labels whose call has the current `model` **and** the current `template_version`. Labels made on v1 states don't count toward v2.
+
+### Truth sources (my call)
+
+- `--truth` takes `in_session`, `auto_hook`, `blind`, `adjudicated` or `best`.
+- `best` uses adjudication, then blind, then in-session, then auto_hook.
+- Legacy records with no `source` are `auto_hook` for prompt-route and `in_session` for everything else.
+- Latest-wins applies per (call, source). A blind relabel under a newer rule supersedes an older blind label.
+
+### Units for each compare kind (my call)
+
+- An adjudication's `item` is the unit key: an integer index for `items` points, the question key for `picks` points (for example `"implementer"`), the requirement index for `coverage`, and null for `verdict`.
+- `truth` is that unit's value only.
+- `export` makes one case per disagreeing unit. A and B are the two unit values, so randomising them is the same for every compare kind.
+
+### Legacy state and the ask path (my call)
+
+- **One accessor.** `state.load(call_id)` prefers the `state_sha` blob and falls back to an inline `state` entry. Old calls stay labelable, which the 1.14.0 backfill needs.
+- **New writes.** `recover-states` writes blobs from now on.
+- **Failure paths.** Errored calls (invalid state, over budget, Jev unavailable) get a blob too, but it is capped: blobs over 256 KB are stored truncated, with `truncated: true` set.
+- **`ctx` cost and source.**
+  - `ctx` uses the hook's `cwd` when there is one, otherwise the process cwd.
+  - `git_head` and `git_branch` come from reading `.git` directly: HEAD, plus the `gitdir` pointer for worktrees. There is no subprocess.
+  - `main_repo_root`'s existing git call stays as it is.
+
+### Registry details (my call)
+
+- The registry path is `$JEV_REGISTRY` if set, otherwise `~/.superpowers/jev/registry.json`.
+- When `JEV_LOG_DIR` is set and `JEV_REGISTRY` isn't, the run doesn't register at all, so tests never pollute the real registry.
+- `jev register --scan <root>...` seeds the registry from existing `.superpowers/jev/log.jsonl` files. It is also run once during rollout over `~/Projects`.
+
+### Blinding (my call)
+
+- `label` and `export` include `ctx.transcript_path`, resolved through `locate`. Adjudicators need it, because Jev's state lacks briefs and diffs.
+- Their README, and `label`'s stderr notice, tell the reader to ignore `jev record`/`jev label` text and Jev hook messages, and to stop at the call's `ts`.
+- Labels are about what was true, not what Jev saw, so having extra context is intended.
+
+### Backfill inputs (answered)
+
+All backfill inputs are in `~/.claude/plugins/data/superpowers-jev-super/evals/2026-11-13/`:
+
+- **Answer key.** `sealed/key.json` maps each case to its `call_id`, which A/B side was Jev, and `jev_confident`. The case-id prefix gives the point: `verify-stop-`, `report-evidence-`, `tier-`, `severity-`, `sevc-`, `vs14-`.
+- **Case files.** `adj/cases-*.json` and `adj/label-vs14-*.json`. Severity cases carry `finding_index`, and tier cases carry the role in A/B.
+- **Results.** `adj/results-*.jsonl` are adjudications. Every round-1 file was judged under rule v1, the prose in SKILL.md. `results-severity-confident.jsonl` is round 2. `adj/labels-vs14-*.jsonl` are blind labels under rule v2.
+- **Rule text.**
+  - `adj/verify-stop-rule-v2.md` is the v2 text, which becomes `rules/verify-stop.v2.md`.
+  - `rules/verify-stop.v1.md` is the current SKILL.md prose, extracted as it is.
+  - Other points start with rubric pointers only, and their rule version is `none`.
+- **Repo lookup.** `call_id` → repo is found by scanning registered logs, after `register --scan`.
+- **Copying.** `import-eval` copies the dir into `~/.superpowers/jev/evals/<date>/`; it doesn't move it.
+
 ## Constraints
 
 - Python stdlib only, following the existing `lib/jevlib` layout.
