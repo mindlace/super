@@ -43,7 +43,7 @@ The editing in this project is sized to that.
 8. The text of an HTML spec can be corrected where it is read, without
    switching to the source, and such an edit changes nothing else in the file.
 
-**Stretch:** bold, italic and underline on a selection, and adding or removing
+**Stretch:** bold and italic on a selection, and adding or removing
 list items, in the same in-place editor.
 
 ## Non-goals
@@ -111,7 +111,7 @@ doctype, `html`, `head`, `body`, `style`, `script` or `link`.
 |---|---|
 | Structure | `article`, `header`, `section`, `h1`–`h4`, `hr` |
 | Prose | `p`, `ul`, `ol`, `li`, `dl`, `dt`, `dd`, `blockquote`, `details`, `summary` |
-| Inline | `a`, `em`, `strong`, `u`, `code`, `kbd`, `mark`, `sub`, `sup`, `br` |
+| Inline | `a`, `em`, `strong`, `code`, `kbd`, `mark`, `sub`, `sup`, `br` |
 | Callouts | `aside` with `data-kind` = `note`, `warning`, `decision` or `question` |
 | Code | `pre` > `code`, language in `data-lang` |
 | Tables | `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `th`, `td` |
@@ -317,8 +317,10 @@ is sanitised and post-processed, so it is never written back. Instead:
 A test must show that editing one paragraph of a multi-section spec with
 tables and a diagram yields a diff confined to that paragraph.
 
-**Stretch.** In the same editor: Cmd-B, Cmd-I and Cmd-U wrap or unwrap the
-selection in `strong`, `em` and `u`; Enter at the end of a list item adds a
+**Stretch.** In the same editor: Cmd-B and Cmd-I wrap or unwrap the
+selection in `strong` and `em` (never `b` or `i`). There is no underline:
+underlining is reserved for links, so `u` is not in the subset and Cmd-U does
+nothing. Enter at the end of a list item adds a
 sibling item, and Backspace in an empty item removes it. List items are the
 one place the splice replaces a parent's (`ul`/`ol`) inner range rather than
 a leaf's. Turning a paragraph into a list, or the reverse, is not included.
