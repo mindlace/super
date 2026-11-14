@@ -1,13 +1,22 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import TabStrip from '$lib/components/TabStrip.svelte';
+  import { onMount, untrack } from 'svelte';
+  import Sidebar from '$lib/components/Sidebar.svelte';
   import DocPane from '$lib/components/DocPane.svelte';
   import Toast from '$lib/components/Toast.svelte';
   import type { SpecEntry } from '$lib/types';
-  import { DAY_MS } from '$lib/recency';
   import { pairAndGroup, type DisplayGroup } from '$lib/pairing';
   import { findSelectedGroup, groupToPromote } from '$lib/openTabs';
   import { retryDelay } from '$lib/backoff';
+  import { buildEntries, listGroups } from '$lib/sidebar';
+  import {
+    loadSeenState,
+    markClosed,
+    markOpened,
+    pruneSeenState,
+    recordFirstSight,
+    saveSeenState,
+    type SeenState
+  } from '$lib/seen';
 
   let specs = $state<SpecEntry[]>([]);
   let selectedPath = $state<string | null>(null);
@@ -19,30 +28,58 @@
   let toast = $state<string | null>(null);
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const visibleGroups = $derived(
-    pairAndGroup(specs).filter((g) => g.updated >= Date.now() - DAY_MS)
-  );
+  function storageOrNull(): Storage | null {
+    try {
+      return localStorage;
+    } catch {
+      return null;
+    }
+  }
+
+  const pageLoadedAt = Date.now();
+  let seenState = $state<SeenState>(pruneSeenState(loadSeenState(storageOrNull()), Date.now()));
+
+  // Only assign (and persist) when a seen.ts function actually changed something; they return
+  // the same object otherwise, so effects that call this cannot loop.
+  function persistSeen(next: SeenState) {
+    if (next === seenState) return;
+    seenState = next;
+    saveSeenState(storageOrNull(), next);
+  }
 
   let openedGroups = $state<DisplayGroup[]>([]);
 
   const OPENED_KEY = 'sr:openedPaths';
 
-  const visiblePaths = $derived(new Set(visibleGroups.map((g) => g.parent.path)));
-  // Drop opened groups already shown by discovery (dedupe); keep the rest.
-  const openedRendered = $derived(
-    openedGroups.filter((g) => !visiblePaths.has(g.parent.path))
-  );
-  const tabGroups = $derived([...visibleGroups, ...openedRendered]);
-  const openedPaths = $derived(new Set(openedRendered.map((g) => g.parent.path)));
+  const discovered = $derived(pairAndGroup(specs));
+  const groups = $derived(listGroups(discovered, openedGroups, seenState, Date.now()));
+  const entries = $derived(buildEntries(groups, selectedPath, seenState));
+
+  /** The group parent path that seen/closed state is keyed on for a selected doc. */
+  function groupPathFor(path: string): string {
+    return findSelectedGroup([...discovered, ...openedGroups], path)?.parent.path ?? path;
+  }
+
+  // Every specs refresh: give newly discovered groups a first-sight time, and treat the open
+  // doc's group as seen now (its changes are on screen, so they must not highlight later).
+  $effect(() => {
+    if (!specsLoaded) return;
+    const current = discovered;
+    untrack(() => {
+      let next = recordFirstSight(current, seenState, pageLoadedAt, Date.now());
+      if (selectedPath) next = markOpened(next, groupPathFor(selectedPath), Date.now());
+      persistSeen(next);
+    });
+  });
 
   $effect(() => {
     if (!specsLoaded || !selectedPath) return;
-    const live = findSelectedGroup(tabGroups, selectedPath);
+    const live = findSelectedGroup(groups, selectedPath);
     if (live) {
       lastSelectedGroup = live; // capture while visible (idempotent: same ref)
       return;
     }
-    const promote = groupToPromote(selectedPath, tabGroups, lastSelectedGroup, openedGroups);
+    const promote = groupToPromote(selectedPath, groups, lastSelectedGroup, openedGroups);
     if (promote) {
       openedGroups = [...openedGroups, promote];
       persistOpened();
@@ -67,8 +104,8 @@
   }
 
   // Never give up: until this succeeds once, specsLoaded stays false, which
-  // disables the tab-retention effect below — so a single transient failure
-  // (dev server restarting at mount) would otherwise leave the strip empty
+  // disables the retention effect above — so a single transient failure
+  // (dev server restarting at mount) would otherwise leave the sidebar empty
   // for the life of the page while the open doc keeps rendering.
   async function loadSpecs() {
     if (specsRetryTimer) {
@@ -104,6 +141,7 @@
     // Worktree gone → server served the main copy; rewrite the opened tab so the
     // selection, caption, and persistence all target the real file.
     if (effective !== path) await adoptPath(path, effective);
+    persistSeen(markOpened(seenState, groupPathFor(effective), Date.now()));
     localStorage.setItem(SELECTED_KEY, effective);
     return true;
   }
@@ -117,7 +155,7 @@
     if (!res.ok) return false;
     const group: DisplayGroup = await res.json();
     const path = group.parent.path;
-    const known = tabGroups.some((g) => g.parent.path === path);
+    const known = groups.some((g) => g.parent.path === path);
     if (!known) {
       openedGroups = [...openedGroups, group];
       persistOpened();
@@ -125,11 +163,16 @@
     return selectSpec(path);
   }
 
-  function closeOpened(path: string) {
-    const removed = openedGroups.find((g) => g.parent.path === path);
-    openedGroups = openedGroups.filter((g) => g.parent.path !== path);
-    persistOpened();
-    const hitChild = removed?.children.some((c) => c.path === selectedPath);
+  function closeEntry(path: string) {
+    const group = groups.find((g) => g.parent.path === path);
+    if (openedGroups.some((g) => g.parent.path === path)) {
+      openedGroups = openedGroups.filter((g) => g.parent.path !== path);
+      persistOpened();
+    }
+    if (discovered.some((g) => g.parent.path === path)) {
+      persistSeen(markClosed(seenState, path, Date.now()));
+    }
+    const hitChild = group?.children.some((c) => c.path === selectedPath);
     if (selectedPath === path || hitChild) {
       selectedPath = null;
       content = '';
@@ -208,16 +251,9 @@
   });
 </script>
 
-<div class="flex h-screen flex-col bg-neutral-900 text-neutral-200">
-  <TabStrip
-    groups={tabGroups}
-    {selectedPath}
-    onSelect={selectSpec}
-    onPick={pickDoc}
-    onClose={closeOpened}
-    {openedPaths}
-  />
-  <main class="flex min-h-0 flex-1 flex-col overflow-hidden">
+<div class="flex h-screen bg-neutral-900 text-neutral-200">
+  <Sidebar {entries} onSelect={selectSpec} onPick={pickDoc} onClose={closeEntry} />
+  <main class="flex min-w-0 flex-1 flex-col overflow-hidden">
     {#if selectedPath}
       <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2 text-xs">
         <span class="truncate text-neutral-500" title={selectedPath}>{selectedPath}</span>
@@ -227,7 +263,7 @@
       </div>
     {:else}
       <p class="p-6 text-neutral-500">
-        {visibleGroups.length === 0 ? 'No specs in the last 24 hours.' : 'Select a spec.'}
+        {groups.length === 0 ? 'No specs in the last 24 hours.' : 'Select a spec.'}
       </p>
     {/if}
   </main>

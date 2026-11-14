@@ -55,12 +55,12 @@ describe('findSelectedGroup', () => {
 describe('groupToPromote', () => {
   const culled = group('/a/spec.md', ['/a/plan.md']);
 
-  it('promotes the cached selection when it is no longer in tabGroups', () => {
-    // selection points at the culled group's child; tabGroups no longer contains it
+  it('promotes the cached selection when it is no longer in listedGroups', () => {
+    // selection points at the culled group's child; listedGroups no longer contains it
     expect(groupToPromote('/a/plan.md', [group('/b/spec.md')], culled, [])).toBe(culled);
   });
 
-  it('does not promote while the selection is still live in tabGroups', () => {
+  it('does not promote while the selection is still live in listedGroups', () => {
     expect(groupToPromote('/a/spec.md', [culled], culled, [])).toBeNull();
   });
 
