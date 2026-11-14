@@ -3,6 +3,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from contextlib import redirect_stderr
@@ -51,6 +52,20 @@ class StateBlobTest(unittest.TestCase):
         p.parent.mkdir(parents=True)
         p.write_bytes(b"not gzip")
         self.assertIsNone(state.read_blob(sha, self.d))
+
+    def test_read_blob_corrupt_deflate_body(self):
+        sha = "2" * 64
+        p = state.blob_path(self.d, sha)
+        p.parent.mkdir(parents=True)
+        good = gzip.compress(b'{"a":1}' * 50, mtime=0)
+        p.write_bytes(good[:10] + b"\xff" * 20 + good[30:])
+        self.assertIsNone(state.read_blob(sha, self.d))
+
+    def test_read_blob_rejects_trailing_newline_sha(self):
+        sha = state.write_blob({"a": 1}, self.d)
+        bad = sha + "\n"
+        shutil.copy(state.blob_path(self.d, sha), state.blob_path(self.d, bad))
+        self.assertIsNone(state.read_blob(bad, self.d))
 
     def test_safe_write_swallows_unserializable(self):
         env = support.make_env()

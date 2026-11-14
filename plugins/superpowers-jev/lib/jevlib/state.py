@@ -6,12 +6,13 @@ import os
 import re
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 from . import log
 
 MAX_BLOB_BYTES = 256 * 1024
-_SHA = re.compile(r"^[0-9a-f]{64}$")
+_SHA = re.compile(r"[0-9a-f]{64}")
 
 
 def canonical(obj):
@@ -50,11 +51,11 @@ def write_blob(obj, log_dir):
 
 
 def read_blob(sha, log_dir):
-    if not isinstance(sha, str) or not _SHA.match(sha):
+    if not isinstance(sha, str) or not _SHA.fullmatch(sha):
         return None
     try:
         obj = json.loads(gzip.decompress(blob_path(log_dir, sha).read_bytes()).decode("utf-8"))
-    except (OSError, ValueError, EOFError):
+    except (OSError, ValueError, EOFError, zlib.error):
         return None
     return obj if isinstance(obj, dict) else None
 
