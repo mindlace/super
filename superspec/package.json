@@ -37,6 +37,7 @@
     "@lezer/highlight": "^1.2.3",
     "dompurify": "^3.2.0",
     "marked": "^15.0.0",
+    "parse5": "^8.1.1",
     "shiki": "^4.2.0"
   }
 }
