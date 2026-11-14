@@ -15,9 +15,9 @@ from .mode import resolve_mode
 def command_modules():
     """Modules exposing add_parser(subparsers); each sets func(args, env) -> exit code.
     `jev ask` skips them, so a broken builder import can never break fail-open asks."""
-    from . import hooks, label, recover, report
+    from . import hooks, label, recover, registry, report
     from .builders import cite, diag, generic, ledger, review, spec, superpowers
-    return [report, label, recover, generic, review, diag, superpowers, cite, ledger, spec, hooks]
+    return [report, label, recover, generic, review, diag, superpowers, cite, ledger, spec, hooks, registry]
 
 
 def read_json_arg(value):

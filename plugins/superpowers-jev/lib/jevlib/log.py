@@ -38,6 +38,7 @@ def append(entry, env, cwd=None):
     if not ignore.exists():
         ignore.write_text("*\n", encoding="utf-8")
     line = json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
+    first = not (d / "log.jsonl").exists()
     with open(d / "log.jsonl", "a", encoding="utf-8") as fh:
         try:
             import fcntl
@@ -45,6 +46,9 @@ def append(entry, env, cwd=None):
         except (ImportError, OSError):
             pass
         fh.write(line)
+    if first:
+        from . import registry   # inside: keeps `ask`'s import surface small
+        registry.safe_register(d, env)
 
 
 def safe_append(entry, env, cwd=None):
