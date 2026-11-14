@@ -4,7 +4,7 @@
 
 **Goal:** supercomposer, and superpowers through a new `superpowers-html` overlay plugin, write design docs, specs and plans in the semantic HTML format; HTML plans still execute; the jev checks that read design docs and specs work on HTML.
 
-**Architecture:** supersonic's skill text changes paths to `.html` and points at a symlinked `docs/spec-format.md`. superpowers-jev gains one stdlib `html.parser` reader module (`builders/htmldoc.py`) that `spec.py` and `ledger.py` dispatch to by file extension. The new plugin `superpowers-html` is a SessionStart note plus an `html-docs` overlay skill, a Python helper CLI (`bin/superpowers-html`: hook, compat, upstream-root, brief), and two bash entry points (`bin/task-brief`, `bin/task-start`) that mirror upstream's command lines and delegate non-HTML plans to the installed upstream scripts.
+**Architecture:** supersonic's skill text changes paths to `.html` and points at a symlinked `docs/spec-format.md`. superpowers-jev's fidelity-coverage question moves to v2, which takes a spec as structured `spec_sections` (headings, paths, prose, tables) built from either format: a stdlib `html.parser` reader (`builders/htmldoc.py`) for HTML and a heading splitter in `spec.py` for markdown, chosen by file extension. The new plugin `superpowers-html` is a SessionStart note plus an `html-docs` overlay skill, a Python helper CLI (`bin/superpowers-html`: hook, compat, upstream-root, brief), and two bash entry points (`bin/task-brief`, `bin/task-start`) that mirror upstream's command lines and delegate non-HTML plans to the installed upstream scripts.
 
 **Tech Stack:** bash, Python 3 stdlib only (`html.parser`, `unittest`), Claude Code plugin manifests/hooks, Markdown skill files.
 
@@ -22,7 +22,7 @@
 - `task-brief` keeps upstream's command line `[-C DIR] PLAN_FILE TASK_NUMBER [OUTFILE]`, output line `wrote <path>: N lines`, exit codes 2 usage, 3 not found. Task ids match as whole strings; a deeper task section whose id extends the requested one stays in the brief.
 - `task-start` keeps upstream's command line `PLAN_FILE TASK_NUMBER` and prints `brief: <path>` then `base: <sha>`.
 - Plan checkboxes are never ticked during execution; the workspace ledger is the progress record.
-- Jev receives extracted text (tags stripped, SVG dropped apart from its `title`, block breaks kept) for an HTML spec, never raw HTML. Question templates do not change.
+- Jev receives every spec, markdown or HTML, as structured `spec_sections` (one schema for both formats; `fidelity-coverage.json` version `2`, `additionalProperties: false`), never raw HTML and never a `spec_text` blob. SVG diagrams contribute only their `title` and `from → to` edges.
 - A jev builder that cannot find an expected HTML table or title says so; it never silently returns nothing.
 - The superconductor ledger, operator reports and `.superpowers/` working files stay markdown.
 - Never `cd X && cmd`: issue `cd` as its own command. Conventional Commits; no Claude attribution or co-author trailers.
@@ -34,7 +34,7 @@
 2. **Escaped markup that looks like a task inside a `pre`** (a plan that documents the format, e.g. `&lt;section id="sec-task-9"&gt;&lt;h2&gt;Task 9`): must not become a task. Test: Task 4 `test_escaped_task_in_pre_is_not_a_task`.
 3. **A task heading with inline markup or line breaks** (`<h2>Task <code>3</code>:\n  Inline</h2>`): the id is read from the heading's text, not its raw source. Test: Task 4 `test_heading_with_inline_markup`.
 4. **A task section that never closes** (`</section>` missing, the HTML analogue of upstream's unclosed fence): refuse with exit 4 rather than brief the rest of the file, and leave no output file. Test: Task 4 `test_unclosed_section_exits_4`.
-5. **An HTML spec with a big inline SVG**: the text sent to Jev must drop the drawing (node and edge labels) but keep the SVG `title`, so blobs stay small and comparable. Test: Task 1 `test_text_drops_svg_but_keeps_title`.
+5. **A markdown spec with a fenced code block holding `# comment` or `| pipe |` lines**: they must stay text, not split the spec into false sections or tables. Test: Task 1 `test_markdown_fence_hides_headings_and_pipes`. (An HTML spec's big inline SVG is pinned by `test_svg_gives_title_and_edges_only`.)
 
 ---
 
@@ -42,8 +42,9 @@
 
 | Path | Responsibility |
 |---|---|
-| `plugins/superpowers-jev/lib/jevlib/builders/htmldoc.py` (new) | Read a format HTML file: extracted text, `h1` title, a section's text by heading, tables with caption / enclosing heading / body rows |
-| `plugins/superpowers-jev/lib/jevlib/builders/spec.py` | `coverage`: choose markdown or HTML reader by extension for requirements and spec text |
+| `plugins/superpowers-jev/lib/jevlib/builders/htmldoc.py` (new) | Read a format HTML file into sections (id, heading, path, text, tables) and its `h1` title |
+| `plugins/superpowers-jev/lib/jevlib/builders/spec.py` | Markdown sections; `coverage` picks the reader by extension for requirements and `spec_sections` |
+| `plugins/superpowers-jev/questions/fidelity-coverage.json`, `lib/jevlib/schema.py` | v2 state schema (`spec_sections`); validator gains `null` and list types |
 | `plugins/superpowers-jev/lib/jevlib/builders/ledger.py` | `spec_summary`: HTML title/goal |
 | `tests/jev/fixtures/{design,spec-a,spec-b}.html` (new) | HTML counterparts of the markdown fixtures |
 | `plugins/supersonic/skills/supercomposer/SKILL.md`, `spec-format.md` (symlink, new) | Design doc and specs written as HTML |
@@ -60,62 +61,114 @@
 
 ---
 
-### Task 1: superpowers-jev 0.7.0 reads HTML design docs and specs
+### Task 1: superpowers-jev 0.7.0 sends specs to Jev as structured sections
 
 **Files:**
 - Create: `plugins/superpowers-jev/lib/jevlib/builders/htmldoc.py`
-- Modify: `plugins/superpowers-jev/lib/jevlib/builders/spec.py:42-59` (requirements and spec text by extension)
-- Modify: `plugins/superpowers-jev/lib/jevlib/builders/ledger.py:39-46` (`spec_summary`)
+- Modify: `plugins/superpowers-jev/lib/jevlib/builders/spec.py:15-59` (markdown sections, requirements and spec sections by extension; `coverage` state)
+- Modify: `plugins/superpowers-jev/lib/jevlib/builders/ledger.py:39-46` (`spec_summary` HTML branch)
+- Modify: `plugins/superpowers-jev/lib/jevlib/schema.py:9-25` (`"null"` type; `type` may be a list)
+- Modify: `plugins/superpowers-jev/questions/fidelity-coverage.json` (version `2`, `spec_sections`)
 - Modify: `plugins/superpowers-jev/.claude-plugin/plugin.json` (version `0.7.0`)
 - Create: `tests/jev/fixtures/design.html`, `tests/jev/fixtures/spec-a.html`, `tests/jev/fixtures/spec-b.html`
-- Test: `tests/jev/test_builders_supersonic.py` (new classes `HtmlDocTest`; additions to `SpecTest`, `LedgerTest`)
+- Modify: `tests/jev/fixtures/states/fidelity-coverage.json` (`spec_sections` from `spec-b.md`)
+- Test: `tests/jev/test_builders_supersonic.py`, `tests/jev/test_templates_supersonic.py:21,148-151`, `tests/jev/test_schema.py`
 
 **Interfaces:**
-- Consumes: existing `spec.traceability_requirements(text) -> list[str]` (spec.py:42), `ledger.section(text, title)` (ledger.py:16), `ask_mod.disabled(reason)` (used at spec.py:53-56).
-- Produces (all in `jevlib/builders/htmldoc.py`, stdlib `html.parser` only):
-  - `text(html: str) -> str` — extracted text. Each block element (`article header section h1-h4 p ul ol li dl dt dd blockquote details summary pre table caption tr figure figcaption aside hr br`) starts a new line; table cells within a row joined by `" | "`; `svg` content dropped except the text of its `title` child; `pre` keeps its internal newlines and indentation; other lines whitespace-collapsed and stripped; empty lines removed; entities decoded.
-  - `title(html: str) -> str | None` — text of the first `h1`.
-  - `section_text(html: str, heading: str) -> str | None` — `text()` of the first `section` whose first heading's text equals `heading` case-insensitively, excluding that heading; `None` if absent.
-  - `tables(html: str) -> list[dict]` — in document order, each `{"caption": str, "heading": str, "rows": list[list[str]]}`; `heading` is the first-heading text of the nearest enclosing `section` (`""` if none); `rows` are body rows only (rows in `thead` and rows whose cells are all `th scope="col"` are excluded), each a list of cell texts.
-  - `spec.html_traceability_requirements(html: str) -> list[str] | None` — first table whose `caption` or `heading` contains "traceability" (case-insensitive); first cell of each body row, non-empty. `None` when no such table exists.
-  - `spec.requirements(path) -> list[str]` — `.html` → `html_traceability_requirements`, and on `None` raises `ValueError("no traceability table in %s (looked for a table whose caption or section heading contains 'traceability')" % path)`; otherwise the markdown path unchanged.
-  - `spec.spec_text(path) -> str` — `.html` → `htmldoc.text(raw)`; otherwise the raw text.
-  - `ledger.spec_summary(path) -> str` — unchanged for markdown; for `.html`: `"<h1>: <goal>"`, or `"<h1>"` without a Goal section, or `"%s (no h1)" % path` when there is no `h1`; truncated to `SUMMARY_CHARS`.
+- Consumes: existing `spec.traceability_requirements(text) -> list[str]` (spec.py:42, markdown design docs, unchanged), `spec.cells(row)` and `spec.SEP_RE` (spec.py:15,38), `ledger.SUMMARY_CHARS` (ledger.py:13), `ask_mod.disabled(reason)` (spec.py:53-56).
+- Produces:
+  - **Section shape** (one schema for both formats): `{"id": str | None, "heading": str, "path": [str], "text": str, "tables"?: [Table]}`. `path` is the chain of enclosing headings, outermost first, ending with this one; it starts at the document title (HTML `h1`, markdown `#`). `text` is the section's own prose only (not nested sections, not table cells), one block per line, whitespace-collapsed, blank lines dropped, entities decoded, `pre` kept verbatim. `tables` is present only when the section holds a table. **Table** = `{"id": str | None, "caption": str, "header": [str], "rows": [[str]]}`: `header` is the column-header cells (`[]` if none), `rows` the body rows as cell texts; markdown tables have `id` `None` and `caption` `""`.
+  - `htmldoc.sections(html: str) -> list[Section]` (stdlib `html.parser`). The `header` is the first entry: `id` `None`, `heading` and `path` from the `h1`, `text` from the rest of the header. Then one entry per `section`, in document order, with its `id` and first heading. An `svg` contributes only its `title` text, then one line per edge `"<from> → <to>"`, where `data-from`/`data-to` resolve to that node's `text` (the raw id when no node has it). Node text, edge labels and shapes are dropped. A `figcaption` is ordinary text.
+  - `htmldoc.title(html: str) -> str | None` — text of the first `h1`.
+  - `spec.md_sections(text: str) -> list[Section]` — split on ATX headings (`#`–`####`). Lines inside a fenced code block (```` ``` ````) are text, never headings or tables. Pipe tables become Table: the first row is `header`, separator rows are dropped, and `id` is `None`. Text before the first heading becomes an entry with heading `""` and path `[]`, and only when it is non-empty.
+  - `spec.spec_sections(path) -> list[Section]` — `Path(path).suffix == ".html"` → `htmldoc.sections`, otherwise `md_sections` (builder's call: the format's file names are lowercase `.html`).
+  - `spec.html_traceability_requirements(html: str) -> list[str] | None` — the first table, in `sections()` order, whose `caption` or owning section's `heading` contains "traceability" (case-insensitive); first cell of each body row, non-empty ones only. `None` when no such table exists.
+  - `spec.requirements(path) -> list[str]` — `.html` → `html_traceability_requirements`; on `None` raise `ValueError("no traceability table in %s (looked for a table whose caption or section heading contains 'traceability')" % path)`. Otherwise `traceability_requirements` unchanged.
+  - `coverage` state per spec becomes `{"requirements": reqs, "spec_sections": spec_sections(spec)}`. There is no `spec_text` anywhere any more.
+  - `ledger.spec_summary(path)`: markdown unchanged. `.html` gives `"<h1>: <goal>"`, where goal is the `text` of the first section headed "Goal" (case-insensitive). It gives `"<h1>"` when there is no Goal section, and `"%s (no h1)" % path` when there is no `h1`. Truncated to `SUMMARY_CHARS`.
+  - `schema.validate`: `_TYPES["null"] = type(None)`. A `type` given as a list passes when any listed type matches. The error for a list reads `"%s: expected %s" % (path, " or ".join(types))`.
+  - `questions/fidelity-coverage.json` v2: `state_schema.required = ["requirements", "spec_sections"]`, still `additionalProperties: false`. Items are closed objects with `required` `["id", "heading", "path", "text"]`, `id` `{"type": ["string", "null"]}`, and an optional `tables` whose items are closed objects with `id` (`["string", "null"]`), `caption`, `header` (array of string) and `rows` (array of array of string). The `carries` instructions name state only as backticked paths, for example: "The spec is `spec_sections`: one entry per section, with its `heading`, its `path` of enclosing headings, its prose `text`, and any `tables` as `header` and `rows` of cells. Does this spec carry the design requirement `requirements[{i}]`, by stating it in a section or through a table row that implements it?" Criteria, combine, `item_label` and `compare` are unchanged. `notes` gets one sentence saying v2 replaced v1's `spec_text`.
 
 - [ ] **Step 1: Write the HTML fixtures**
 
-Mirror the markdown fixtures' content in the format (`docs/spec-format.md`): `design.html` has `h1` "Shop design", a `sec-goal` section ("Goal" / "Sell things."), then an **interface table first** (`tbl-interfaces`, caption "Interface table", one row), then section `sec-traceability` headed "Traceability table" containing `tbl-traceability` (caption "Traceability table", `thead` row `Model claim | Carried by`, the three body rows from `design.md` with the claim in `th scope="row"`). `spec-a.html`: `h1` "Auth spec", section `sec-goal` headed "Goal" with "Validate session tokens in middleware for every route.", an interface table, and a `figure` with an `svg` whose `title` is "Token flow" and a node `text` "token-node". `spec-b.html`: `h1` "Billing spec", Goal "Charge customers; prices are integer cents.".
+`design.html`: `h1` "Shop design"; section `sec-goal` ("Goal" / "Sell things."); then the **interface table first**: section `sec-interfaces` headed "Interface table" with `tbl-interfaces`. Then section `sec-traceability` headed "Traceability table" with `tbl-traceability` (caption "Traceability table", `thead` row `Model claim | Carried by`, and the three body rows from `design.md` with the claim in `th scope="row"`).
+
+`spec-a.html` (exact structure; whitespace free):
+
+```html
+<article>
+  <header><h1>Auth spec</h1></header>
+  <section id="sec-goal"><h2>Goal</h2><p>Validate session tokens in middleware for every route.</p></section>
+  <section id="sec-interfaces"><h2>Interface rows</h2>
+    <table id="tbl-interfaces"><caption>Interface rows</caption>
+      <thead><tr><th scope="col">Producer</th><th scope="col">Consumer</th><th scope="col">Signature</th></tr></thead>
+      <tbody><tr><td>auth</td><td>billing</td><td>verify(token) -&gt; User</td></tr>
+        <tr><td>auth</td><td>search</td><td>current_user() -&gt; User</td></tr></tbody>
+    </table>
+  </section>
+  <section id="sec-flow"><h2>Flow</h2>
+    <figure id="fig-flow"><svg class="diagram" viewBox="0 0 300 60" role="img"><title>Token flow</title>
+      <g class="node" id="n-client"><rect x="0" y="0" width="80" height="40"/><text x="40" y="20">client</text></g>
+      <g class="node" id="n-mw"><rect x="200" y="0" width="80" height="40"/><text x="240" y="20">middleware</text></g>
+      <g class="edge" data-from="n-client" data-to="n-mw"><path d="M80 20H198"/><text x="140" y="14">token</text></g>
+    </svg><figcaption>Figure 1. Tokens pass through middleware.</figcaption></figure>
+  </section>
+</article>
+```
+
+`spec-b.html`: `h1` "Billing spec", section `sec-goal` with "Charge customers; prices are integer cents.".
 
 - [ ] **Step 2: Write the failing tests**
 
+In `tests/jev/test_builders_supersonic.py` (imports gain `tempfile` and `htmldoc`):
+
 ```python
-class HtmlDocTest(unittest.TestCase):
-    def test_text_strips_tags_keeps_block_breaks(self):
-        self.assertEqual(htmldoc.text('<article><header><h1>T</h1></header><p>a <code>b</code> &amp; c</p>'
-                                      '<ul><li>x</li><li>y</li></ul></article>'), "T\na b & c\nx\ny")
+SPEC_A_MD_SECTIONS = [
+    {"id": None, "heading": "Auth spec", "path": ["Auth spec"], "text": ""},
+    {"id": None, "heading": "Goal", "path": ["Auth spec", "Goal"],
+     "text": "Validate session tokens in middleware for every route."},
+    {"id": None, "heading": "Interface rows", "path": ["Auth spec", "Interface rows"], "text": "",
+     "tables": [{"id": None, "caption": "", "header": ["Producer", "Consumer", "Signature"],
+                 "rows": [["auth", "billing", "verify(token) -> User"],
+                          ["auth", "search", "current_user() -> User"]]}]},
+]
 
-    def test_text_drops_svg_but_keeps_title(self):
-        html = ('<figure id="f"><svg viewBox="0 0 1 1"><title>Flow</title><g class="node"><rect/>'
-                '<text>n1</text></g></svg><figcaption>Fig 1</figcaption></figure>')
-        self.assertEqual(htmldoc.text(html), "Flow\nFig 1")
+class SectionsTest(unittest.TestCase):
+    def test_markdown_sections(self):
+        self.assertEqual(spec.md_sections((FX / "spec-a.md").read_text()), SPEC_A_MD_SECTIONS)
 
-    def test_text_keeps_pre_lines(self):
-        self.assertEqual(htmldoc.text('<pre><code data-lang="sh">a\n  b</code></pre>'), "a\n  b")
+    def test_html_sections(self):
+        got = htmldoc.sections((FX / "spec-a.html").read_text())
+        self.assertEqual([s["id"] for s in got], [None, "sec-goal", "sec-interfaces", "sec-flow"])
+        self.assertEqual(got[1], dict(SPEC_A_MD_SECTIONS[1], id="sec-goal"))
+        self.assertEqual(got[2]["tables"], [dict(SPEC_A_MD_SECTIONS[2]["tables"][0],
+                                                 id="tbl-interfaces", caption="Interface rows")])
+        self.assertEqual(got[2]["text"], "")
 
-    def test_text_table_cells(self):
-        self.assertEqual(htmldoc.text('<table id="t"><caption>C</caption><tr><th scope="row">k</th><td>v</td></tr></table>'),
-                         "C\nk | v")
+    def test_svg_gives_title_and_edges_only(self):
+        flow = htmldoc.sections((FX / "spec-a.html").read_text())[3]
+        self.assertEqual(flow["text"], "Token flow\nclient → middleware\nFigure 1. Tokens pass through middleware.")
 
-    def test_title_and_missing_title(self):
-        self.assertEqual(htmldoc.title((FX / "spec-a.html").read_text()), "Auth spec")
-        self.assertIsNone(htmldoc.title("<article><p>x</p></article>"))
+    def test_nested_section_path_and_own_text(self):
+        got = htmldoc.sections('<article><header><h1>T</h1></header><section id="a"><h2>A</h2><p>x</p>'
+                               '<section id="b"><h3>B</h3><p>y</p></section></section></article>')
+        self.assertEqual([(s["path"], s["text"]) for s in got[1:]], [(["T", "A"], "x"), (["T", "A", "B"], "y")])
 
-    def test_section_text_goal(self):
-        self.assertEqual(htmldoc.section_text((FX / "spec-a.html").read_text(), "goal"),
-                         "Validate session tokens in middleware for every route.")
+    def test_markdown_fence_hides_headings_and_pipes(self):
+        got = spec.md_sections("# T\n## A\n```sh\n# not a heading\n| not | a table |\n```\n")
+        self.assertEqual(len(got), 2)
+        self.assertEqual(got[1]["text"], "```sh\n# not a heading\n| not | a table |\n```")
+        self.assertNotIn("tables", got[1])
+
+    def test_both_formats_validate_against_the_template(self):
+        t = support.template("fidelity-coverage")
+        self.assertEqual(t["version"], 2)
+        for p in ("spec-a.md", "spec-a.html", "spec-b.md", "spec-b.html"):
+            state = {"requirements": ["r"], "spec_sections": spec.spec_sections(FX / p)}
+            self.assertEqual(schema.validate(t["state_schema"], state), [], p)
 ```
 
-In `SpecTest`:
+In `SpecTest`, replace the `spec_text` assertions in `test_coverage_counts_carriers_across_specs_and_logs_once` and `test_coverage_big_specs_rebuild_exactly`. `fake_ask` picks the spec by `state["spec_sections"][0]["heading"] == "Auth spec"`. The blob equals `{"requirements": ..., "spec_sections": spec.spec_sections(path)}`. Then add:
 
 ```python
     def test_html_traceability_skips_earlier_tables(self):
@@ -135,21 +188,16 @@ In `SpecTest`:
         self.assertFalse(out["enabled"])
         self.assertIn("no traceability table in %s" % p, out["reason"])
 
-    def test_coverage_html_spec_sends_extracted_text(self):
+    def test_coverage_html_sends_sections_never_raw_html(self):
         env = support.make_env()
         spec.coverage(FX / "design.html", [FX / "spec-a.html"], env, call_id="cov-h",
                       ask_fn=lambda *a, **k: {"enabled": True, "verdict": [0], "confident": True,
-                                              "raw": {}, "template_version": 1})
-        st = state.load("cov-h", env)
-        blob = state.read_blob(st["specs"][str(FX / "spec-a.html")], log.log_dir(env))
-        self.assertEqual(blob["spec_text"], htmldoc.text((FX / "spec-a.html").read_text()))
-        self.assertTrue(blob["spec_text"].startswith("Auth spec"))
-        self.assertNotIn("<", blob["spec_text"])
-        self.assertIn("Token flow", blob["spec_text"])
-        self.assertNotIn("token-node", blob["spec_text"])
+                                              "raw": {}, "template_version": 2})
+        blob = state.read_blob(state.load("cov-h", env)["specs"][str(FX / "spec-a.html")], log.log_dir(env))
+        self.assertEqual(sorted(blob), ["requirements", "spec_sections"])
+        self.assertEqual(blob["spec_sections"], htmldoc.sections((FX / "spec-a.html").read_text()))
+        self.assertNotIn("<", json.dumps(blob["spec_sections"]))
 ```
-
-The test module gains `import tempfile` at the top and `htmldoc` in `from jevlib.builders import cite, htmldoc, ledger, spec`.
 
 In `LedgerTest`:
 
@@ -164,18 +212,22 @@ In `LedgerTest`:
         self.assertEqual(ledger.spec_summary(p), "%s (no h1)" % p)
 ```
 
-The existing markdown tests stay unchanged and must keep passing.
+In `tests/jev/test_templates_supersonic.py`, change `AGENT_FIELDS["fidelity-coverage"]` (line 21) to `["spec_sections[].heading", "spec_sections[].text", "spec_sections[].tables[].caption", "spec_sections[].tables[].rows"]`. In `test_fidelity_coverage_end_to_end_through_coverage` (line 150), make the responder pick by `payload["state"]["spec_sections"][0]["heading"] == "Auth spec"`. Add `test_fidelity_coverage_fixture_state_matches_builder`, which asserts `support.fixture_state("fidelity-coverage")["spec_sections"] == spec.md_sections((support.FIXTURES / "spec-b.md").read_text())`.
+
+In `tests/jev/test_schema.py`: `validate({"type": ["string", "null"]}, None) == []`, the same for `"x"`, and `validate({"type": ["string", "null"]}, 3) == ["$: expected string or null"]`.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
-Run: `python3 -m unittest discover -s tests/jev -t tests/jev -p test_builders_supersonic.py`
-Expected: FAIL / ERROR with `ImportError: cannot import name 'htmldoc'`.
+Run: `python3 -m unittest discover -s tests/jev -t tests/jev`
+Expected: ERROR `cannot import name 'htmldoc'`, plus failures in the template and schema tests.
 
-- [ ] **Step 4: Implement `htmldoc.py`, `spec.requirements`, `spec.spec_text`, `spec.html_traceability_requirements`, and the HTML branch of `ledger.spec_summary`**
+- [ ] **Step 4: Implement `schema.py` list and null types, `htmldoc.py`, `spec.md_sections`, `spec.spec_sections`, `spec.requirements`, `spec.html_traceability_requirements`, the `coverage` state, and the HTML branch of `ledger.spec_summary`**
 
-`coverage` (spec.py:49) calls `requirements(design_path)` inside a `try`; a `ValueError` becomes `ask_mod.disabled(str(exc))`. An empty list keeps the existing reason `"no traceability table rows in %s"`. `specs` (spec.py:59) is built with `spec_text(s)`. Extension test is `Path(p).suffix == ".html"` (builder's call: the format's file names are lowercase `.html`).
+`coverage` (spec.py:49) calls `requirements(design_path)` inside a `try`, and a `ValueError` becomes `ask_mod.disabled(str(exc))`. An empty list keeps the existing reason `"no traceability table rows in %s"`. The per-spec `specs` dict (spec.py:59) becomes `{str(s): spec_sections(s)}`. Remove every `spec_text` use.
 
-- [ ] **Step 5: Bump `plugins/superpowers-jev/.claude-plugin/plugin.json` version to `0.7.0`**
+- [ ] **Step 5: Bump `questions/fidelity-coverage.json` to version 2 with the v2 schema and instructions, rewrite `tests/jev/fixtures/states/fidelity-coverage.json` with `spec_sections` from `spec-b.md`, and set `plugins/superpowers-jev/.claude-plugin/plugin.json` to `0.7.0`**
+
+There is no `jev lint` command; `test_lint_clean_and_plugin` (test_templates_supersonic.py) lints the v2 template.
 
 - [ ] **Step 6: Run the whole jev suite**
 
@@ -186,8 +238,10 @@ Expected: OK (the live test skips without `JEV_LIVE=1`).
 
 ```bash
 git add plugins/superpowers-jev tests/jev
-git commit -m "feat(jev): read HTML design docs and specs in coverage and spec summaries"
+git commit -m "feat(jev): send specs to fidelity-coverage as structured sections and read HTML design docs"
 ```
+
+**Report note.** I checked `jev report` and it does not separate template versions by default. `build_report` (report.py:160-198) pools v1 and v2 calls into one fidelity-coverage row. Only `labels-cur` is restricted to the current `template_version`, and `--by template_version` (report.py:282) splits the row. Comparing v2 against past v1 runs therefore needs `jev report --point fidelity-coverage --by template_version`. Changing the default is out of scope for this task.
 
 ---
 
@@ -627,5 +681,5 @@ git commit -m "feat(superpowers-html): html-docs skill overlays brainstorming, w
 
 ## Self-review notes
 
-- Spec coverage: supersonic 0.3.0 → Task 2; jev 0.7.0 → Task 1; hook, plugin, marketplace, manifests → Task 3; task-brief → Task 4; task-start → Task 5; html-docs, version check, symlink → Task 6; "symlink resolves" test → Tasks 2 and 6; "supercomposer names .html paths" → Task 2; task-brief found / not found / 6 vs 6b / markdown pass-through → Task 4; hook note and exit 0 on error → Task 3; jev builders on HTML fixtures → Task 1. Calls made without asking: operator plans HTML (Task 2 conditional line), own task-start (Task 5), no ticking (Task 6), extracted text to Jev (Task 1), 7.x check (Tasks 3, 6).
+- Spec coverage: supersonic 0.3.0 → Task 2; jev 0.7.0 → Task 1; hook, plugin, marketplace, manifests → Task 3; task-brief → Task 4; task-start → Task 5; html-docs, version check, symlink → Task 6; "symlink resolves" test → Tasks 2 and 6; "supercomposer names .html paths" → Task 2; task-brief found / not found / 6 vs 6b / markdown pass-through → Task 4; hook note and exit 0 on error → Task 3; jev builders on HTML fixtures → Task 1. Calls made without asking: operator plans HTML (Task 2 conditional line), own task-start (Task 5), no ticking (Task 6), structured sections to Jev (Task 1), 7.x check (Tasks 3, 6).
 - Exit code 4 (unclosed section) is added beyond the spec's "2 usage, 3 not found", mirroring upstream's exit 4 for an unclosed fence.

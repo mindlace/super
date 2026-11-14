@@ -115,10 +115,18 @@
         <li>Both choose the parser by file extension and keep the markdown path. When an HTML
           file has no table or title where expected, they report it instead of returning
           nothing.</li>
-        <li>The spec text sent to Jev for an HTML spec is its extracted text, not raw HTML:
-          tags stripped, SVG dropped apart from its <code>title</code>, block breaks kept. That
-          keeps blobs under the size cap and comparable with past markdown runs, so the question
-          templates don't change.</li>
+        <li>Jev gets each spec as structured sections, not text. The fidelity-coverage
+          question moves to version 2: its state replaces <code>spec_text</code> with
+          <code>spec_sections</code>, one entry per section holding its <code>id</code> (null for
+          markdown), its <code>heading</code>, the <code>path</code> of enclosing headings
+          (outermost first, ending with its own) and its prose <code>text</code>. A section's tables
+          come as <code>tables</code>, each with its <code>id</code>, <code>caption</code>,
+          <code>header</code> and <code>rows</code> of cells, and table text is not repeated in
+          <code>text</code>. An SVG diagram contributes only its <code>title</code> and its edges
+          as "from → to", named by the nodes' text. Markdown specs are split on headings into
+          the same shape, with pipe tables parsed into rows, so both formats share one schema
+          (still closed with <code>additionalProperties: false</code>). The question is still one
+          noul per requirement, asked once per spec. The extracted-text path is gone.</li>
       </ul>
     </section>
     <section id="sec-overlay">
@@ -202,7 +210,8 @@
       <li>executing-plans gets its own <code>task-start</code> instead of instructions to stitch
         one together.</li>
       <li>Checkboxes are never ticked during execution; the ledger stays the progress record.</li>
-      <li>Jev receives extracted text from HTML specs.</li>
+      <li>Jev receives every spec, markdown or HTML, as structured sections
+        (fidelity-coverage version 2).</li>
       <li>The version check accepts superpowers 7.x and warns on anything else, as
         <code>jev compat</code> does.</li>
     </ul>
