@@ -1,9 +1,9 @@
-"""superpowers-html command line: hook, compat, upstream-root."""
+"""superpowers-html command line: hook, compat, upstream-root, brief."""
 import json
 import os
 import sys
 
-from . import hook, upstream
+from . import brief, hook, upstream
 
 
 def main(argv):
@@ -24,5 +24,32 @@ def main(argv):
             return 1
         print(root)
         return 0
-    print("usage: superpowers-html {hook session-start|compat|upstream-root}", file=sys.stderr)
+    if cmd == "brief" and len(argv) == 4:
+        return _brief(*argv[1:])
+    print("usage: superpowers-html {hook session-start|compat|upstream-root|brief PLAN N OUT}",
+          file=sys.stderr)
     return 2
+
+
+NO_TASKS = ('task-brief: no task sections found. A task is a <section> whose first heading '
+            'starts with "Task <id>" (docs/spec-format.md, "Example: a plan").')
+
+
+def _brief(plan, n, out):
+    with open(plan, encoding="utf-8", newline="") as f:
+        html = f.read()
+    try:
+        text = brief.extract(html, n)
+    except brief.TaskNotFound:
+        print("task %s not found in %s (no section headed 'Task %s')" % (n, plan, n),
+              file=sys.stderr)
+        if not brief.task_sections(html):
+            print(NO_TASKS, file=sys.stderr)
+        return 3
+    except brief.SectionUnclosed as exc:
+        print("task-brief: the <section> opened at line %d of %s never closes; close it and rerun"
+              % (exc.line, plan), file=sys.stderr)
+        return 4
+    with open(out, "w", encoding="utf-8", newline="") as f:
+        f.write(text)
+    return 0

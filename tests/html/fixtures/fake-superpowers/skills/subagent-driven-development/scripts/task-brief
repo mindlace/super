@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+[ "${1:-}" = "-C" ] && { cd "$2"; shift 2; }
+out=${3:-$(bash "$(dirname "$0")/sdd-workspace" "$1")/task-$2-brief.md}
+printf 'UPSTREAM %s\n' "$*" > "$out"
+echo "wrote $out: 1 lines"
+exit "${UPSTREAM_RC:-0}"

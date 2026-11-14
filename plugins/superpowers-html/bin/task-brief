@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# task-brief for superpowers-html: same command line, output line and exit codes as
+# superpowers' task-brief. A non-.html plan is handed to the installed upstream script
+# unchanged; an .html plan has the requested task's <section> copied verbatim.
+#
+# Usage: task-brief [-C DIR] PLAN_FILE TASK_NUMBER [OUTFILE]
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+orig_args=("$@")
+
+# Parse (without cd) to decide md vs html first: a hand-off must see the original
+# arguments from the original cwd, or -C would be applied twice.
+dir=""
+args=("$@")
+if [ "${args[0]:-}" = "-C" ]; then
+  dir=${args[1]:-}
+  [ -d "$dir" ] || { echo "bad -C directory: $dir" >&2; exit 2; }
+  args=("${args[@]:2}")
+fi
+if [ ${#args[@]} -lt 2 ] || [ ${#args[@]} -gt 3 ]; then
+  echo "usage: task-brief [-C DIR] PLAN_FILE TASK_NUMBER [OUTFILE]" >&2
+  exit 2
+fi
+
+upstream_root() {
+  python3 "$here/superpowers-html" upstream-root 2>&1 || return 2
+}
+
+plan=${args[0]}
+n=${args[1]}
+
+if [ "${plan%.html}" = "$plan" ]; then
+  root=$(upstream_root) || { echo "$root" >&2; exit 2; }
+  exec "${BASH:-bash}" "$root/skills/subagent-driven-development/scripts/task-brief" "${orig_args[@]}"
+fi
+
+if [ -n "$dir" ]; then cd "$dir"; fi
+[ -f "$plan" ] || { echo "no such plan file: $plan" >&2; exit 2; }
+
+if [ ${#args[@]} -eq 3 ]; then
+  out=${args[2]}
+else
+  root=$(upstream_root) || { echo "$root" >&2; exit 2; }
+  ws=$("${BASH:-bash}" "$root/skills/subagent-driven-development/scripts/sdd-workspace" "$plan")
+  out="$ws/task-${n}-brief.md"
+fi
+
+rc=0
+python3 "$here/superpowers-html" brief "$plan" "$n" "$out" || rc=$?
+[ "$rc" -eq 0 ] || exit "$rc"
+echo "wrote ${out}: $(wc -l < "$out" | tr -d ' ') lines"
