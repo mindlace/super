@@ -4,8 +4,8 @@ A Claude Code plugin marketplace with three plugins.
 
 | Plugin | What it does |
 |---|---|
-| `supersonic` | `supersonic:superconductor` conducts a multi-spec build through operator subagents. `supersonic:supercomposer` composes the design package it executes. |
-| `superpowers-jev` | Optional [TypeSafe](https://typesafe.ai) Jev typed judgments at 13 decision points in superpowers and supersonic. Shadow mode by default. Fails open. |
+| `supersonic` | `supersonic:superconductor` conducts a multi-spec build through named `claude --bg` operator sessions admitted by dependency, and sends design questions to one-shot forks of a frozen composer checkpoint. `supersonic:supercomposer` composes the design package it executes. |
+| `superpowers-jev` | Optional [TypeSafe](https://typesafe.ai) Jev typed judgments at 11 decision points in superpowers and supersonic. Shadow mode by default. Fails open. |
 | `superpowers-html` | Overlays superpowers 7.x so specs and plans are written as `.html` in the supersonic spec format. Fails open. |
 
 `superspec/` is a local SvelteKit app for reading superpowers specs and plans across `~/Projects`. It is not a plugin yet. See `superspec/README.md`.
@@ -25,6 +25,21 @@ For local development, add the checkout as a directory marketplace instead:
 `superpowers-jev` overlays the official `superpowers` plugin and does not replace it. Keep superpowers installed.
 
 `superpowers-html` overlays superpowers 7.x the same way and makes the specs and plans it writes `.html` instead of markdown. Keep superpowers installed; a `.md` plan still runs as before.
+
+## Requirements
+
+`supersonic` needs:
+
+- Claude Code 2.1.325 or newer.
+- Prompt caching of 1 hour for subagents. Add this to `~/.claude/settings.json`, because implementers, reviewers and composer forks otherwise get a 5-minute cache:
+
+  ```json
+  {"subagentPromptCacheTtl": "1h"}
+  ```
+
+- A trusted repo. `claude --bg` refuses to start in a directory whose workspace trust prompt has never been accepted, so open `claude` in the repo once, accept the prompt and exit before the first run.
+- A named conductor. Operators message the conductor by name, so start it as an interactive session with `claude -n <design-slug>-conductor`, then invoke `supersonic:superconductor` in it. Under any other name, operator messages do not reach it.
+- On machines where `claude` adds a permission hook, launch lines carry `--permission-mode` and `--allowedTools`. The skills' launch lines already include both; keep them when you edit a line.
 
 ## Jev modes
 

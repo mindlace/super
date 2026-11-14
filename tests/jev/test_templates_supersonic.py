@@ -9,14 +9,13 @@ from jevlib import schema, templates
 from jevlib.builders import spec
 from jevlib.lint import lint_template
 
-POINTS = ["defect-class", "bounce", "surface-route", "fidelity-coverage", "citation"]
+POINTS = ["defect-class", "surface-route", "fidelity-coverage", "citation"]
 ALL_POINTS = ["re-review", "severity", "tier", "report-evidence", "verify-stop", "prompt-route",
               "diag-confidence"] + POINTS
 # State fields carrying agent-written text, per point (see AGENT_FIELDS in test_templates_superpowers).
 # citation's unreadable[].claim is deliberately absent: no question references it.
 AGENT_FIELDS = {
     "defect-class": ["escalation"],
-    "bounce": ["message"],
     "surface-route": ["event"],
     "fidelity-coverage": ["spec_sections[].heading", "spec_sections[].text",
                           "spec_sections[].tables[].caption", "spec_sections[].tables[].rows"],
@@ -27,7 +26,7 @@ AGENT_FIELDS = {
 UNJUDGED_FIELDS = {"citation": ["unreadable[].claim"]}
 # Spec-derived (partner-approved design-package) text allowed to reach the model ONLY as a Choice
 # option description, via options_from_state.description. Never in instructions.
-OPTION_DESCRIPTION_FIELDS = {"bounce": ["operators[].summary"]}
+OPTION_DESCRIPTION_FIELDS = {}
 
 
 def option_description_violations(t, state, paths):
@@ -78,16 +77,6 @@ class SupersonicTemplatesTest(unittest.TestCase):
                 self.assertNotIn(path.split("[")[0], texts, p)
             self.assertEqual(option_description_violations(t, s, OPTION_DESCRIPTION_FIELDS.get(p, [])), [], p)
 
-    def test_option_description_allowance_rejects_pasted_summary(self):
-        t, s = support.template("bounce"), support.fixture_state("bounce")
-        paths = OPTION_DESCRIPTION_FIELDS["bounce"]
-        bad = copy.deepcopy(t)
-        bad["questions"]["operator"]["instructions"]["question"] += " " + s["operators"][0]["summary"]
-        self.assertTrue(any("appears in instructions" in v for v in option_description_violations(bad, s, paths)))
-        bad = copy.deepcopy(t)
-        del bad["questions"]["operator"]["options_from_state"]["description"]
-        self.assertTrue(any("not routed" in v for v in option_description_violations(bad, s, paths)))
-
     def test_agent_text_check_rejects_bad_supersonic_templates(self):
         t, s = support.template("surface-route"), support.fixture_state("surface-route")
         unticked = copy.deepcopy(t)
@@ -121,13 +110,6 @@ class SupersonicTemplatesTest(unittest.TestCase):
         self.assertEqual(out["verdict"], {"class": "missing-declaration"})
         out, _ = support.ask_point("defect-class", support.fixture_state("defect-class"), support.ok(pick="new_class"))
         self.assertEqual(out["verdict"], {"class": None})
-
-    def test_bounce_needs_0_8(self):
-        out, reqs = support.ask_point("bounce", support.fixture_state("bounce"), support.ok(pick="billing", conf=0.85))
-        self.assertEqual(list(reqs[0]["payload"]["questions"]["operator"]["criteria"]), ["unattributable", "auth", "billing"])
-        self.assertEqual(out["verdict"], {"operator": "billing"})
-        out, _ = support.ask_point("bounce", support.fixture_state("bounce"), support.ok(pick="billing", conf=0.75))
-        self.assertEqual(out["verdict"], {"operator": None})
 
     def test_surface_route_override_on_repeated_death(self):
         state = dict(support.fixture_state("surface-route"), consecutive_deaths=2)

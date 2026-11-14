@@ -10,7 +10,7 @@
     {
       "name": "supersonic",
       "source": "./plugins/supersonic",
-      "description": "superconductor conducts a multi-spec build through operator subagents; supercomposer composes the package it executes."
+      "description": "superconductor conducts a multi-spec build through named claude --bg operator sessions; supercomposer composes the package it executes."
     },
     {
       "name": "superpowers-jev",

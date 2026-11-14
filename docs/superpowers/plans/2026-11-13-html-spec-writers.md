@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Plugin versions: supersonic `0.2.0` → `0.3.0`; superpowers-jev `0.6.0` → `0.7.0`; new superpowers-html `0.1.0`. Each in its `.claude-plugin/plugin.json`.
+- Plugin versions: supersonic `0.3.1` → `0.4.0`; superpowers-jev `0.7.0` → `0.8.0`; new superpowers-html `0.1.0`. Each in its `.claude-plugin/plugin.json`.
 - The format reference has exactly one copy, `docs/spec-format.md`. Each plugin that writes the format holds a **symlink** to it; never copy it.
 - Never edit, fork or patch superpowers' own files. superpowers-html overlays; supersonic never depends on superpowers-html (each works without the other).
 - Superpowers version written against: `7.0.2`. The version check accepts superpowers `7.x` and warns on anything else, as `jev compat` does; on an unknown version it warns once and carries on.
@@ -61,7 +61,7 @@
 
 ---
 
-### Task 1: superpowers-jev 0.7.0 sends specs to Jev as structured sections
+### Task 1: superpowers-jev 0.8.0 sends specs to Jev as structured sections
 
 **Files:**
 - Create: `plugins/superpowers-jev/lib/jevlib/builders/htmldoc.py`
@@ -69,7 +69,7 @@
 - Modify: `plugins/superpowers-jev/lib/jevlib/builders/ledger.py:39-46` (`spec_summary` HTML branch)
 - Modify: `plugins/superpowers-jev/lib/jevlib/schema.py:9-25` (`"null"` type; `type` may be a list)
 - Modify: `plugins/superpowers-jev/questions/fidelity-coverage.json` (version `2`, `spec_sections`)
-- Modify: `plugins/superpowers-jev/.claude-plugin/plugin.json` (version `0.7.0`)
+- Modify: `plugins/superpowers-jev/.claude-plugin/plugin.json` (version `0.8.0`)
 - Create: `tests/jev/fixtures/design.html`, `tests/jev/fixtures/spec-a.html`, `tests/jev/fixtures/spec-b.html`
 - Modify: `tests/jev/fixtures/states/fidelity-coverage.json` (`spec_sections` from `spec-b.md`)
 - Test: `tests/jev/test_builders_supersonic.py`, `tests/jev/test_templates_supersonic.py:21,148-151`, `tests/jev/test_schema.py`
@@ -225,7 +225,7 @@ Expected: ERROR `cannot import name 'htmldoc'`, plus failures in the template an
 
 `coverage` (spec.py:49) calls `requirements(design_path)` inside a `try`, and a `ValueError` becomes `ask_mod.disabled(str(exc))`. An empty list keeps the existing reason `"no traceability table rows in %s"`. The per-spec `specs` dict (spec.py:59) becomes `{str(s): spec_sections(s)}`. Remove every `spec_text` use.
 
-- [ ] **Step 5: Bump `questions/fidelity-coverage.json` to version 2 with the v2 schema and instructions, rewrite `tests/jev/fixtures/states/fidelity-coverage.json` with `spec_sections` from `spec-b.md`, and set `plugins/superpowers-jev/.claude-plugin/plugin.json` to `0.7.0`**
+- [ ] **Step 5: Bump `questions/fidelity-coverage.json` to version 2 with the v2 schema and instructions, rewrite `tests/jev/fixtures/states/fidelity-coverage.json` with `spec_sections` from `spec-b.md`, and set `plugins/superpowers-jev/.claude-plugin/plugin.json` to `0.8.0`**
 
 There is no `jev lint` command; `test_lint_clean_and_plugin` (test_templates_supersonic.py) lints the v2 template.
 
@@ -245,14 +245,14 @@ git commit -m "feat(jev): send specs to fidelity-coverage as structured sections
 
 ---
 
-### Task 2: supersonic 0.3.0 writes HTML packages and accepts either format
+### Task 2: supersonic 0.4.0 writes HTML packages and accepts either format
 
 **Files:**
 - Modify: `plugins/supersonic/skills/supercomposer/SKILL.md:86-124` (Phase C3 path and format, Phase C4 spec path)
 - Create: `plugins/supersonic/skills/supercomposer/spec-format.md` — symlink to `../../../../docs/spec-format.md`
 - Modify: `plugins/supersonic/skills/superconductor/SKILL.md:56-70` (Phase 1 intake, either format) and `:138-153` (Dispatch, conditional line)
 - Modify: `plugins/supersonic/skills/superconductor/operator-briefing.md:35-37` (spec may be `.md` or `.html`)
-- Modify: `plugins/supersonic/.claude-plugin/plugin.json` (version `0.3.0`)
+- Modify: `plugins/supersonic/.claude-plugin/plugin.json` (version `0.4.0`)
 - Create: `tests/test_format_links.sh`
 - Modify: `tests/test_supercomposer_md.sh`, `tests/test_skill_md.sh`, `tests/test_operator_briefing.sh`, `tests/test_supersonic_layout.sh:7`
 - Modify: `.gitattributes` (add `*.html text eol=lf`)
@@ -296,11 +296,11 @@ Run: `ln -s ../../../../docs/spec-format.md plugins/supersonic/skills/supercompo
 - supercomposer Phase C3: path `docs/superpowers/design/YYYY-MM-DD-HHMM-<topic>.html`, an HTML fragment following `spec-format.md` in this skill's directory (read it; do not restate it). Required sections keep their names, become `section`s with the ids in Interfaces; the interface, traceability and coverage tables are captioned `table`s with those ids.
 - supercomposer Phase C4: spec path `docs/superpowers/specs/YYYY-MM-DD-<slug>-design.html`, same format, embedded interface rows as a captioned table.
 - supercomposer Phase C0 (reappraisal): an amended package keeps the format it was composed in (builder's call: converting old packages is a spec non-goal).
-- superconductor Phase 1: the design doc and specs may be `.md` (composed before supersonic 0.3.0) or `.html`; check required sections by heading in either.
+- superconductor Phase 1: the design doc and specs may be `.md` (composed before supersonic 0.4.0) or `.html`; check required sections by heading in either.
 - superconductor Dispatch: after the `## Your assignment` block, "If `superpowers-html:html-docs` is among your available skills, add the line `- Before superpowers:writing-plans, load superpowers-html:html-docs.` to the assignment. Otherwise the prompt is unchanged."
 - operator-briefing step 2: the spec file may be markdown (`.md`) or HTML (`.html`); read either. No mention of superpowers-html.
 
-- [ ] **Step 5: Bump `plugins/supersonic/.claude-plugin/plugin.json` to `0.3.0`; add `*.html text eol=lf` to `.gitattributes`**
+- [ ] **Step 5: Bump `plugins/supersonic/.claude-plugin/plugin.json` to `0.4.0`; add `*.html text eol=lf` to `.gitattributes`**
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -681,5 +681,5 @@ git commit -m "feat(superpowers-html): html-docs skill overlays brainstorming, w
 
 ## Self-review notes
 
-- Spec coverage: supersonic 0.3.0 → Task 2; jev 0.7.0 → Task 1; hook, plugin, marketplace, manifests → Task 3; task-brief → Task 4; task-start → Task 5; html-docs, version check, symlink → Task 6; "symlink resolves" test → Tasks 2 and 6; "supercomposer names .html paths" → Task 2; task-brief found / not found / 6 vs 6b / markdown pass-through → Task 4; hook note and exit 0 on error → Task 3; jev builders on HTML fixtures → Task 1. Calls made without asking: operator plans HTML (Task 2 conditional line), own task-start (Task 5), no ticking (Task 6), structured sections to Jev (Task 1), 7.x check (Tasks 3, 6).
+- Spec coverage: supersonic 0.4.0 → Task 2; jev 0.8.0 → Task 1; hook, plugin, marketplace, manifests → Task 3; task-brief → Task 4; task-start → Task 5; html-docs, version check, symlink → Task 6; "symlink resolves" test → Tasks 2 and 6; "supercomposer names .html paths" → Task 2; task-brief found / not found / 6 vs 6b / markdown pass-through → Task 4; hook note and exit 0 on error → Task 3; jev builders on HTML fixtures → Task 1. Calls made without asking: operator plans HTML (Task 2 conditional line), own task-start (Task 5), no ticking (Task 6), structured sections to Jev (Task 1), 7.x check (Tasks 3, 6).
 - Exit code 4 (unclosed section) is added beyond the spec's "2 usage, 3 not found", mirroring upstream's exit 4 for an unclosed fence.

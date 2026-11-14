@@ -32,4 +32,13 @@ if command -v claude >/dev/null 2>&1; then
 fi
 grep -q 'eol=lf' "$root/.gitattributes" || fail ".gitattributes must force LF"
 grep -qx '.superpowers/' "$root/.gitignore" || fail ".gitignore must ignore .superpowers/"
+readme="$root/README.md"
+grep -q 'subagentPromptCacheTtl' "$readme" || fail "README must document subagentPromptCacheTtl"
+grep -q '^## Requirements' "$readme" || fail "README needs a Requirements section"
+grep -q 'claude --bg' "$readme" || fail "README must mention claude --bg"
+if grep -rIl -e 'operator subagents' "$root/plugins/supersonic" "$root/.claude-plugin" "$readme" >/dev/null 2>&1; then
+  fail "stale wording 'operator subagents'"
+fi
+jev_n=$(ls "$root"/plugins/superpowers-jev/questions/*.json | wc -l | tr -d ' ')
+grep -q "at $jev_n decision points" "$readme" || fail "README Jev count must be $jev_n"
 echo "PASS: manifests"

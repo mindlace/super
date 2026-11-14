@@ -383,6 +383,16 @@ class ByAndAllTest(unittest.TestCase):
         self.assertIn("  model=jev-1.14.0", out.getvalue())
         self.assertIn("labels-cur", out.getvalue())
 
+    def test_report_tolerates_retired_bounce(self):
+        entries = [
+            call("old", "bounce", "picks", {"operator": "auth"},
+                 detail={"choices": {"operator": "auth"}}),
+            rec("old", {"picks": {"operator": "auth"}}),
+        ]
+        rows = report.build_report(entries)
+        self.assertIn("bounce", rows)
+        self.assertIn("bounce", report.format_report(rows))
+
 
 if __name__ == "__main__":
     unittest.main()

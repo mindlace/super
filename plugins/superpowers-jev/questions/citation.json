@@ -2,7 +2,7 @@
   "point": "citation",
   "version": 1,
   "plugin": "supersonic",
-  "anchor": "supersonic supercomposer/SKILL.md ## Phase C1 step 3 (Provenance in every survey report); superconductor/operator-briefing.md ## Design fidelity: Claims carry provenance",
+  "anchor": "supersonic supercomposer/SKILL.md ## Phase C1 step 3 (Provenance in every survey report); supercomposer/composer-forks.md ## Adjudication fork",
   "cookbook": "https://docs.typesafe.ai/cookbooks/citation_check.md: deterministic locate step first (unreadable claims are present in state but no question judges them, and code forces downgrade), then one `relation` Choice per claim over {claim, section} with the cookbook's criteria; AUTO_ACCEPT 0.8",
   "model": "jev-latest",
   "state_schema": {

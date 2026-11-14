@@ -84,7 +84,7 @@
   <section id="sec-design">
     <h2>Design</h2>
     <section id="sec-supersonic">
-      <h3>supersonic 0.3.0</h3>
+      <h3>supersonic 0.4.0</h3>
       <ul>
         <li><code>supercomposer/SKILL.md</code>: the design doc moves to
           <code>docs/superpowers/design/YYYY-MM-DD-HHMM-&lt;topic&gt;.html</code> and specs to
@@ -96,24 +96,24 @@
           restating it.</li>
         <li><code>superconductor/SKILL.md</code> and <code>operator-briefing.md</code>: accept a
           design package in either format, so a run composed before this change still resumes.
-          Operators are subagents, and the superpowers-html SessionStart note never reaches
-          them. So when superconductor builds an operator's prompt, it checks whether
+          Operators are named <code>claude --bg</code> sessions launched with a fixed tool
+          list. When superconductor writes an operator's assignment, it checks whether
           <code>superpowers-html:html-docs</code> is among its available skills. If it is, it adds
           one line telling the operator to load that skill before
-          <code>superpowers:writing-plans</code>. If it isn't, the prompt stays as it is today. The
-          briefing file itself stays static.</li>
+          <code>superpowers:writing-plans</code>, and allows the plugin's <code>task-brief</code>
+          and <code>superpowers-html</code> scripts beside SDD's (resolved at intake as the
+          ledger's <code>HTML scripts:</code> line). If it isn't, the assignment stays as it is.
+          The briefing file itself stays static.</li>
       </ul>
     </section>
     <section id="sec-jev">
-      <h3>superpowers-jev 0.7.0</h3>
+      <h3>superpowers-jev 0.8.0</h3>
       <ul>
         <li><code>builders/spec.py</code> (<code>jev coverage --design</code>) reads the
           traceability table from an HTML design doc: the <code>table</code> whose
           <code>caption</code> or enclosing section heading contains "traceability".</li>
-        <li><code>builders/ledger.py</code> (<code>spec_summary</code>) takes the title from the
-          <code>h1</code> and the goal from the section headed "Goal".</li>
-        <li>Both choose the parser by file extension and keep the markdown path. When an HTML
-          file has no table or title where expected, they report it instead of returning
+        <li>It chooses the parser by file extension and keeps the markdown path. When an HTML
+          design doc has no traceability table, it reports that instead of returning
           nothing.</li>
         <li>Jev gets each spec as structured sections, not text. The fidelity-coverage
           question moves to version 2: its state replaces <code>spec_text</code> with
@@ -206,7 +206,7 @@
   <section id="sec-calls">
     <h2>Calls made without asking</h2>
     <ul>
-      <li>Operator plans are HTML when superpowers-html is installed (see supersonic 0.3.0).</li>
+      <li>Operator plans are HTML when superpowers-html is installed (see supersonic 0.4.0).</li>
       <li>executing-plans gets its own <code>task-start</code> instead of instructions to stitch
         one together.</li>
       <li>Checkboxes are never ticked during execution; the ledger stays the progress record.</li>

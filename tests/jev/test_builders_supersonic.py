@@ -84,12 +84,6 @@ class SectionsTest(unittest.TestCase):
                                    % (br, hr))
             self.assertEqual(got[0]["text"], "one\ntwo\nx\ny", br)
 
-    def test_spec_summary_goal_breaks_at_br(self):
-        p = Path(tempfile.mkdtemp()) / "g.html"
-        p.write_text('<article><header><h1>T</h1></header><section id="g"><h2>Goal</h2>'
-                     '<p>one<br>two</p></section></article>', encoding="utf-8")
-        self.assertEqual(ledger.spec_summary(p), "T: one two")
-
     def test_title(self):
         self.assertEqual(htmldoc.title((FX / "spec-a.html").read_text()), "Auth spec")
         self.assertIsNone(htmldoc.title("<p>x</p>"))
@@ -110,19 +104,10 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(ledger.defect_classes(self.text),
                          ["missing-declaration", "unmodeled-consumer", "schema-drift"])
 
-    def test_spec_summary_html(self):
-        self.assertEqual(ledger.spec_summary(FX / "spec-a.html"),
-                         "Auth spec: Validate session tokens in middleware for every route.")
-
-    def test_spec_summary_html_without_h1_reports(self):
-        p = Path(tempfile.mkdtemp()) / "s.html"
-        p.write_text('<article><p>x</p></article>', encoding="utf-8")
-        self.assertEqual(ledger.spec_summary(p), "%s (no h1)" % p)
-
-    def test_live_operators_are_dispatched_only_with_spec_summaries(self):
-        ops = ledger.live_operators(self.text, FX)
-        self.assertEqual([o["slug"] for o in ops], ["auth", "billing"])
-        self.assertEqual(ops[0]["summary"], "Auth spec: Validate session tokens in middleware for every route.")
+    def test_bounce_state_command_removed(self):
+        with self.assertRaises(SystemExit) as cm:
+            cli.main(["bounce-state", "--ledger", "x", "--message", "y"])
+        self.assertEqual(cm.exception.code, 2)
 
 
 class SpecTest(unittest.TestCase):
