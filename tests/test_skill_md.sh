@@ -97,7 +97,7 @@ lgot=$(printf '%s\n' "$ledger" | sed -n -e 's/^    \(Package worktree:\).*/\1/p'
   -e 's/^    \(## Checkpoints\)$/\1/p' -e 's/^    \(## Units\)$/\1/p' -e 's/^    \(## Questions\)$/\1/p' \
   -e 's/^    \(## Frame-defect tally\)$/\1/p' -e 's/^    \(## Integration\)$/\1/p' -e 's/^    \(## Cost\)$/\1/p')
 [ "$lgot" = "$lexp" ] || { echo "FAIL: ledger format sections missing or out of order"; printf '%s\n' "$lgot"; exit 1; }
-for s in 'status: planning | admitted | running | complete | stopped | replaced (ruling <id>) | deferred' \
+for s in 'status: launching | planning | admitted | running | complete | stopped | replaced (ruling <id>) | deferred' \
          '[defect-class: <slug>]' 'changes contract: yes|no' 'seven_day <pct>' 'session <id>'; do
   printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
     || { echo "FAIL: ledger format missing: $s"; exit 1; }
@@ -180,30 +180,52 @@ need 'append `- routed <id>` under `## Questions`'
 need 'routing begun'
 need 'routing done'
 need 'A ruling with a `routing <id>` line and no `routed <id>` line is routed again from the top'
-# An unrouted ruling is one whose question line has no commit yet, true on any ledger (I-3).
-need 'whose `## Questions` line has no commit recorded yet is a ruling whose fork exited'
-need 'A question line with its commit recorded and no `routing <id>` line was routed in full'
+# An unrouted ruling is one whose question line lacks its completion part, true on any ledger (I-3, N-7).
+need 'line does not yet end with its `(commit <sha|none>, changes contract: yes|no)` part is a ruling whose fork exited'
+need 'A question line that ends with that part and has no `routing <id>` line was routed in full'
 forbid 'exists but which has no `routing <id>` line'
 forbid 'Once every ruling has its `routed <id>` line'
-# Routing again never stops the fresh operator the ruling already started (I-1).
-need 'When routing again, never stop the fresh operator this ruling already started'
-need 'has a `## Units` line below its `replaced (ruling <id>)` line is already replaced: skip steps 1-6'
-need 'a session listed under `<unit-slug>`'"'"'s name now is the fresh one: skip steps 1-3'
-# A rule commit with no ruling file is reverted, found by its whole subject, before the fork restarts (I-2).
+forbid 'has no commit recorded yet'
+# Replacing records each step's progress explicitly; routing again resumes at the first step with no
+# done line, so a death after step 1 stops a live operator still cuts, reverts and relaunches (C-1).
+printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- '- replacing <unit-slug> for <id>: step <n> done' \
+  || { echo "FAIL: ledger format missing the replacing step done line"; exit 1; }
+need 'Each step below ends by appending its done line under `## Questions`: `- replacing <unit-slug> for <id>: step <n> done`'
+need 'Routing again runs the steps for a family from the first step with no done line'
+need 'Replacing an operator runs from its first step with no done line'
+forbid 'When routing again, never stop the fresh operator this ruling already started'
+forbid 'skip steps 1-6'
+forbid 'skip steps 1-3'
+# After step 6 is done the fresh operator is an ordinary unit, restarted if it died (N-1).
+need 'until the ledger holds that replacement'"'"'s `- replacing <unit-slug> for <id>: step 6 done` line'
+need 'Once step 6 is done, the fresh operator is an ordinary unit: if it is dead, restart it here'
+need 'once step 6 is done, it is an ordinary unit, which Phase 0 restarts like any other if it dies'
+need 'and step 6'"'"'s done line'
+# A rule commit with no ruling file is undone with a fixed subject, independent of revert config (I-2, N-4, N-5).
 need "git -C <package worktree> log -1 --format=%H --grep='^docs(<design-slug>): rule <id>\$'"
-need "--grep='^This reverts commit <that sha>\\.\$'"
-need '- reverted <sha> for <id>: no ruling file'
+need "--grep='^docs(<design-slug>): unrule <id>\$' <that sha>..HEAD"
+need 'revert --no-commit <that sha>'
+need 'commit -m "docs(<design-slug>): unrule <id>"'
+need '- unruled <sha> for <id>: no ruling file'
+need 'file question `unrule-<id>`'
+need 'is not one: the Questions bullet ledgers it'
+forbid 'This reverts commit'
 need "--grep='^docs(<design-slug>): rule ' <checkpoint package sha>..HEAD"
+need "less the \`unrule\` commits Phase 0 made in that range"
 forbid "--grep='): rule '"
-# Minor: start checks, family not restarted, build-graph commit found, whole-id match, plan path.
-need 'If `claude agents --json` lists `<design-slug>-<unit-slug>`, the operator is started'
+# Ids are slugs and are matched as whole words (N-2, N-6).
+need 'uses only `[a-z0-9-]`'
+need 'stands in it as a whole word'
+# A launch that may never have happened is finished without counting a death (N-3, M-1).
+need 'If `claude agents --json` lists `<design-slug>-<unit-slug>`, start nothing'
 need 'lists its worktree, step 1 is done: go on from step 2'
-need '**Ledger** the unit line (`## Units`) before the launch'
-need 'Starting an operator, step 4'
-forbid 'Starting an operator, step 3'
+need '**Ledger** the unit line (`## Units`) before the launch, with status `launching`'
+need 'This is a first launch, not a restart, and counts no death'
+need 'launch it (Phase 2, Starting an operator, step 4)'
 need 'Restart no member of a family that a ruling still to be routed'
 need "--grep='^docs(<design-slug>): build graph\$' <package commit>..HEAD"
-need 'Every such check matches the id whole'
+# The start of a brought-up branch is HEAD after that merge, before step 3 ledgers it.
+need 'before Starting an operator, step 3, ledgers its `start`'
 need 'drop a leading `<unit worktree>/` (an absolute path) or `./`'
 need 'Routing a ruling again after a death is still routing it'
 need 'unless a `relayed <id> to <session name>` line records it'
@@ -212,7 +234,7 @@ need 'unless a `## Checkpoints` line names `ruling <id>`'
 need 'Skip a member that has a `- cut <member>'
 need 'that has no `- reverted` line for ruling <id>'
 need 'revert-<member>-<ruling id>'
-need 'If its name is listed in `claude agents --json`, it is already launched'
+need 'Phase 0 already launched it from its `launching` line: launch nothing'
 # One package writer at a time: resume finishes all routing before any other package writer.
 need 'Phase 0 finishes all routing, the build-graph forks it runs included, before it starts or restarts any other fork that writes the package worktree, and before it merges anything'
 need "start the next once the running one's ruling is routed"
