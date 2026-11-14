@@ -30,7 +30,7 @@ tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state f
   || { echo "FAIL: supercomposer citation must ask with --state <state file>"; exit 1; }
 # Package cutting: contracts first, write sets, row edges, the build graph, the partner's reasons.
 flat=$(tr '\n' ' ' < "$skill" | tr -s ' ')
-for s in 'Contracts' 'Write sets' 'build graph' 'Longest chain' 'names interface rows' "partner's reasons"; do
+for s in 'Contracts' 'Write sets' 'build graph' 'Longest chain' 'names interface rows' "partner's reasons" 'never a spec' 'its own unit' 'as fine as the dependencies allow'; do
   printf '%s\n' "$flat" | grep -qF -- "$s" || { echo "FAIL: supercomposer SKILL.md missing: $s"; exit 1; }
 done
 if grep -qF 'Dependency order' "$skill"; then

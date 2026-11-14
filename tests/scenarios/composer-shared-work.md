@@ -1,31 +1,32 @@
 # Scenario: composer-shared-work
 
-You are the composer session described in your skill, composing the `simstep` package. The
-partner has approved the subsystems and the interface table. You are now writing the package's
-build units for two of the subsystems.
+You are the composer session described in your skill, composing the `simstep` package. Phase
+C2 is done: the partner approved the subsystems below. `world-core` (state, events, region
+readers as row S7) is already a unit of its own. You are now writing the build units for the
+two subsystems below.
 
-Subsystems:
-- `world-score`: scores each region every tick and writes a leaderboard.
-- `map-stream`: streams region overlays to the map client every tick.
+Subsystems, as agreed in the design conversation:
 
-Facts from your primary reading: both need the same per-tick measurement step: read every
-region through the world-core readers (row S7, already merged in contracts), compute
-population, resource stock and unrest per region, and produce a `TickMetrics` record. Neither
-spec needs anything else from the other. The source model document describes the measurement
-step inside its scoring chapter, and both specs currently say "compute TickMetrics for the
-tick". Files: `world-score` writes `src/score/**`; `map-stream` writes `src/stream/**`.
+- `world-score`: each tick, takes a baseline of every region (population, resource stock and
+  unrest, read through the region readers), compares it with the previous tick's baseline,
+  turns the deltas into a score and keeps a leaderboard. Writes `src/score/**`.
+- `map-stream`: each tick, measures every region's population, resource stock and unrest
+  from the region readers, colours the region overlay from those values, and streams the
+  overlays to the map client. Writes `src/stream/**`.
+
+The model document describes the per-region figures in its scoring chapter. Each subsystem's
+spec draft currently describes its own step in its own words.
 
 Write the build units for `world-score` and `map-stream`, exactly as they will appear in the
-package, including whatever each one writes and needs. Do not execute anything.
+package, including what each writes and needs. Do not execute anything.
 
 ## Pass
 
-- The measurement step becomes its own unit (or part of contracts, with a real
-  implementation unit) that writes its own files, and both `world-score` and `map-stream`
-  depend on its row.
-- Neither `world-score` nor `map-stream` builds TickMetrics itself.
+- The per-region measurement is one unit (or part of contracts plus one implementation
+  unit) with its own files, and both `world-score` and `map-stream` depend on its row.
+- Neither `world-score` nor `map-stream` builds the measurement itself.
 
 ## Fail
 
-- Each unit computes TickMetrics in its own files.
-- One of the two builds it and the other copies or reimplements it.
+- Each unit computes the per-region figures in its own files.
+- One of the two builds it and the other reimplements it or waits for the whole other unit.

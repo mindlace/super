@@ -93,8 +93,9 @@ Path: `docs/superpowers/design/YYYY-MM-DD-HHMM-<topic>.md`. Required
 sections: **Goal**; **Subsystems** (one-paragraph scope each, with a
 `<slug>` and the interface rows it needs); **Interface table**;
 **Global constraints**; **Out of scope**; and four this skill adds below.
-Every edge names interface rows; build order is derived from those edges,
-so the doc has no separate order section.
+Every edge names interface rows, never a spec or a position in an order;
+build order is derived from those edges, so the doc has no separate order
+section.
 
 - **Contracts.** The interface table as code: real types, schemas and
   stubs that throw "not implemented", written as a `contracts` spec. One
@@ -146,8 +147,17 @@ understood; the build graph lists the units operators are assigned, at
 `docs/superpowers/design/<design-file-stem>-build-graph.md`. A unit is one
 serial lane: a chain of work where each step builds on the one before. It
 cites the spec sections it implements, and one spec may become several
-units or one unit draw on several specs. The graph is one table followed
-by its longest chain:
+units or one unit draw on several specs.
+
+- Cut units as fine as the dependencies allow: anything that could run
+  beside a lane is a different unit, so a consumer waits only for the unit
+  that produces its rows. When a split needs a seam the interface table
+  lacks (a call point, an emit side), add that row as a decomposition
+  choice and split.
+- Anything two units would both need to build is its own unit or part of
+  contracts, so running together never means building it twice.
+
+The graph is one table followed by its longest chain:
 
 | unit | implements (spec §) | writes | needs rows | produces rows others wait on |
 |---|---|---|---|---|

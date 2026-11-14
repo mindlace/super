@@ -1,42 +1,52 @@
 # Scenario: composer-edges-name-rows
 
-You are the composer session described in your skill, composing the `simstep` package. The
-partner has approved the subsystems and the interface table. You are now writing the package's
-dependency entries and its build units for two of the subsystems.
+You are the composer session described in your skill, composing the `simstep` package. Phase
+C2 is done: the partner approved the subsystems below and the interface table. You are now
+writing the design doc's dependency information and the package's build units.
 
-Subsystems:
-- `world-core`: world state, the event bus, readers, and the funding hook. Its spec has
-  seven sections; the funding hook is section 6 because the model document describes funding
-  last.
-- `world-funding`: grant schedules and payouts that run when the funding hook fires.
+Subsystems, as agreed in the design conversation:
 
-Interface table (excerpt):
+- `world-core`: the simulation core. Holds world state (regions, populations, stocks), runs
+  the tick loop, publishes an event for every state change on its event bus, exposes
+  read-only region readers, and defines the funding hook that lets external rules inject grant
+  money into a region during a tick. Its spec follows the model document's chapter order:
+  state, tick loop, events, readers, persistence, funding hook, replay. About two days of
+  operator work.
+- `world-funding`: grant schedules and payouts. Its rules run inside the tick through the
+  funding hook.
+- `world-score`: scores each region from the events of each tick and keeps a leaderboard.
+- `map-stream`: streams region overlays to the map client, built from the events and the
+  region readers.
+
+Interface table (as approved):
 
 | Row | Owner | Signature | Marking |
 |---|---|---|---|
 | S1 | world-core | `type WorldState = { tick: number; regions: Region[] }` | model commitment |
 | S3 | world-core | `bus.on(kind: EventKind, fn: (e: WorldEvent) => void): Unsub` | model commitment |
+| S4 | world-core | `type WorldEvent = PopChanged \| StockChanged \| TickEnded` | model commitment |
 | S7 | world-core | `readers.region(id: RegionId): RegionView` | decomposition choice |
+| S9 | world-core | `persist.snapshot(state: WorldState): Promise<SnapshotId>` | decomposition choice |
 | S12 | world-core | `onFunding(fn: (ctx: FundingCtx) => FundingResult): void` | model commitment |
+| S14 | world-core | `replay(from: SnapshotId): AsyncIterable<WorldEvent>` | decomposition choice |
+| F1 | world-funding | `type GrantSchedule = { region: RegionId; perTick: number }[]` | decomposition choice |
+| W1 | world-score | `leaderboard(): RegionScore[]` | decomposition choice |
+| M1 | map-stream | `streamOverlays(client: ClientId): Unsub` | decomposition choice |
 
-Facts from your primary reading: the funding hook's real implementation needs world state
-(S1) and the event bus (S3) to exist, and nothing else in `world-core`. `world-funding` calls
-only `onFunding` (S12); it reads no other `world-core` row. `world-core` is about two days of
-operator work; the funding hook is a few hours of it. Files: `world-core` writes
-`src/world/**` and `migrations/0004_world.sql`; `world-funding` writes `src/funding/**` and
-`migrations/0005_funding.sql`.
-
-Write the dependency entries and build units for A (`world-core`) and B (`world-funding`),
-exactly as they will appear in the package. Do not execute anything.
+Write the design doc's dependency information for these four subsystems and the build units an
+operator would be assigned, exactly as they will appear in the package. Do not execute
+anything.
 
 ## Pass
 
-- The edge from `world-funding` names `S12` (the interface row), not the spec `world-core`.
-- `S12` is its own unit or goes into contracts (a typed `onFunding` stub that consumers build
-  against), placed after only what it needs (S1, S3).
-- `world-funding` is not made to wait for all of `world-core`.
+- Every edge names interface rows (for example `world-funding` needs S12; `world-score` needs
+  S3/S4), never a subsystem or spec.
+- `world-funding` does not wait for all of `world-core`: the hook is its own unit (or in
+  contracts) placed after only what it needs.
+- `world-score` and `map-stream` are not ordered behind anything they do not consume (not
+  behind persistence, replay, the hook or `world-funding`).
 
 ## Fail
 
-- "world-funding depends on world-core" or any spec-to-spec edge.
-- `world-funding` placed after `world-core` in an order or wave.
+- Any "X depends on <spec>" edge (for example "world-funding depends on world-core").
+- A linear order or waves of whole subsystems.
