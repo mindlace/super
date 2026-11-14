@@ -80,7 +80,7 @@ drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
 # The live drill checks what beat.sh and the skill assume about real sessions.
 for s in 'fork drill-limit env -C' 'fork drill-normal env -C' 'claude logs "$opid"' 'claude logs "$op2id"' \
          'run_in_background true' 'TaskStop' 'beat.sh changed' 'drill-$pid-nobody' 'sleep-woke.txt' 'msg-read.txt' \
-         '30 s after its last step' 'stopped session transcript' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
+         '30 s after its last step' 'stopped session transcript' 'no-such-model-drill' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
   grep -qF -- "$s" "$drill" || { echo "FAIL: live drill lacks: $s"; exit 1; }
 done
 for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
@@ -226,7 +226,8 @@ need 'stands in it as a whole word'
 # A launch that may never have happened is finished without counting a death (N-3, M-1).
 need 'If `claude agents --json` lists `<design-slug>-<unit-slug>`, start nothing'
 need 'lists its worktree, step 1 is done: go on from step 2'
-need '**Ledger** the unit line (`## Units`) before the launch, with status `launching`'
+need '**Ledger** the unit line (`## Units`) before the launch, then run `sh <skill dir>/beat.sh <ledger dir> launching <unit-slug>`'
+need 'The line has status `launching`'
 need 'This is a first launch, not a restart, and counts no death'
 need 'launch it (Phase 2, Starting an operator, step 4)'
 need 'Restart no member of a family that a ruling still to be routed'
@@ -291,7 +292,7 @@ test -x "$(dirname "$skill")/beat.sh" || { echo "FAIL: beat.sh missing or not ex
 # The beat is one command; its lines are specified here.
 need 'A beat** is one command, `sh <skill dir>/beat.sh <ledger dir>`'
 need 'A beat with nothing to do is two tool calls whatever the number of units'
-need 'unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no'
+need 'unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> investigated yes|no restart pending|none wait none|until-<epoch>|over movable yes|no'
 need 'row <unit-slug> <row id> task <N> head <sha7>'
 need 'fork <fork name> running|gone|unstarted failures <n>'
 need 'beat: sessions ok|unknown watched <n> absent <n> evidence <n> due <n> overdue <n> rows <n> forks running <n> gone <n> fixrounds <n> deferred <n> questions <n> waiting <n> next-reset <epoch>|- movable <n> timer running|none'
@@ -362,11 +363,26 @@ need '**Rung 2: investigate, apply the remedy, restart.**'
 need '**Rung 3: stop.** Do not restart. If its name is listed (a stall), stop it'
 forbid 'claude logs'
 forbid 'busy'
-need 'Read only the last 200 lines of its transcript'
+need 'Read <the report'"'"'s transcript file> (the end of its transcript'
+need 'The copy keeps the investigation inside the project and ledger dirs'
+# R3-1: a session that never appears is a failed start that climbs.
+need 'A session that never appears is a failed start: `launched` ledgers `- launch failed <unit-slug>`'
+forbid 'run it again a few seconds later'
+# R3-3: kill-strays only kills the named command.
+need 'kill-strays <unit-slug> "<the command line it named>"'
+need 'With no command named, it kills nothing: treat the cause as `unknown`'
+need 'found again at the time it runs, never by a remembered pid'
+# R3-8: a usage-limited stall is stopped before it waits.
+need 'If its name is listed (a stall), stop it first (Stopping an operator) and wait until it is no longer listed. Then run `sh <skill dir>/beat.sh <ledger dir> wait'
+# R3-9: the script says whether an investigation for this rung is ledgered.
+need 'If the report shows `investigated yes`'
+forbid 'line with no later `restarted <unit-slug>` line is in the ledger'
+# R3-2: every launch forgets the previous session id.
+need 'relaunched <unit-slug>` (it appends `- relaunched <unit-slug>` under `## Supervision` and forgets the old session id)'
 need 'transcript <unit-slug> <path>|none'
 need 'sh <skill dir>/beat.sh <ledger dir> launched <unit-slug>'
 need 'handled as stalled one beat later: 20 to 30 minutes.'
-need 'cause: denied command <command> | usage limit | hung process <command> | defect <the task and what it keeps hitting> | unknown'
+need 'cause: denied command <command> | usage limit | hung process <the command line it ran, as the transcript shows it> | defect <the task and what it keeps hitting> | unknown'
 need 'It reads only, so a death mid-investigation just dispatches it again'
 need 'the report'"'"'s `rung` field is the rung this one is on'
 need 'so you never count lines or copy a key yourself'
@@ -380,7 +396,6 @@ forbid 'one more than the `- restarted'
 need 'sh <skill dir>/beat.sh <ledger dir> wait <unit-slug> <minutes>'
 need 'At `wait over`, restart it with cause `usage-limit`, which climbs no rung'
 # m3: strays are found again when killed, never by a remembered pid.
-need 'kill-strays <unit-slug>`, which stops every process without a terminal whose working directory is in the unit'"'"'s worktree, found again at the time it runs, never by a remembered pid'
 # m7: the worktree comes from the Units line.
 need 'worktree <absolute path>, start <sha>'
 for s in '- fork <fork name> started <date-time>' '- fork <fork name> exited [<status>]: output | no output | stopped at resume' \

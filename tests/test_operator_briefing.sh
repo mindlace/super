@@ -65,7 +65,7 @@ require 'do not use'
 # P1: stretches of 300 s, so a conductor ask is answered within one beat.
 require 'background `sleep 300`'
 forbid 'sleep 600'
-require 'answered within five minutes'
+require 'answered within one stretch'
 # I5: a leaf's progress is any file written in the worktree, read by beat.sh changed.
 require 'changed <ledger dir>/assignments/<unit-slug>.stretch'
 require 'nothing at the last two sleep exits (ten minutes with no file written)'

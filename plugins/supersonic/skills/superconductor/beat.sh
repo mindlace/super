@@ -7,12 +7,15 @@
 #   beat.sh <dir>                       report: unit, row, transcript, fork, question and timer lines, then "beat:"
 #   beat.sh <dir> seen <unit-slug>      progress seen (a message handled, a restart): rewrite its beat file
 #   beat.sh <dir> asked <unit-slug>     a status ask was sent: record it
-#   beat.sh <dir> launched <unit-slug>  a launch is confirmed: record its session's id
+#   beat.sh <dir> launching <unit-slug> a first launch is ledgered: forget the last session's id
+#   beat.sh <dir> launched <unit-slug>  after a launch: wait for its session and record its id;
+#                                       if it never appears, ledger `launch failed`
+#   beat.sh <dir> relaunched <unit-slug> ledger a relaunch with a longer list
 #   beat.sh <dir> resume                Phase 0: stop the old timer, restart every beat file, drop asks
 #   beat.sh <dir> restart <unit> <cause>  ledger a restart; the script writes its rung and key
 #   beat.sh <dir> wait <unit> <minutes> ledger a unit waiting for a usage reset that far ahead
 #   beat.sh <dir> strays <unit>         list processes left running in the unit's worktree
-#   beat.sh <dir> kill-strays <unit>    stop them (TERM, then KILL)
+#   beat.sh <dir> kill-strays <unit> <command>  stop those whose command line contains <command>
 #   beat.sh <dir> timer <seconds>       the heartbeat timer; run it in the background
 #   beat.sh <dir> stop-timer            stop the timer, if one runs
 #   beat.sh <dir> fork <name> <cmd>     run a fork under FORK_LIMIT in its own process group
@@ -23,6 +26,10 @@ set -u
 BEAT=600
 STALL_BEATS=1
 FORK_LIMIT=2700
+LAUNCH_TRIES=3
+LAUNCH_WAIT=10
+TAIL_LINES=200
+TAIL_BYTES=65536
 
 die() { echo "beat.sh: $*" >&2; exit 2; }
 [ $# -ge 1 ] || die "usage: beat.sh <ledger dir> [command]"
@@ -54,14 +61,26 @@ report)
   if [ -f "$dir/timer" ] && pgrep -F "$dir/timer" -x sleep >/dev/null 2>&1; then
     timer=running; deadline=$(cut -d' ' -f2 "$dir/timer")
   fi
-  AGENTS=$agents SESSIONS=$sessions pl report "$dir" "$BEAT" "$STALL_BEATS" "$timer" "$deadline" ;;
-seen|asked|restart|wait|strays|kill-strays)
+  AGENTS=$agents SESSIONS=$sessions TAIL_LINES=$TAIL_LINES TAIL_BYTES=$TAIL_BYTES \
+    pl report "$dir" "$BEAT" "$STALL_BEATS" "$timer" "$deadline" ;;
+seen|asked|restart|wait|strays|kill-strays|launching|relaunched)
   [ $# -ge 2 ] || die "usage: beat.sh <dir> $1 <unit-slug> ..."
   pl "$@" "$dir" ;;
 launched)
+  # The session must be listed within LAUNCH_TRIES tries LAUNCH_WAIT seconds apart; a launch
+  # whose session never appears is a failed start, ledgered so the ladder climbs.
   [ $# -eq 2 ] || die "usage: beat.sh <dir> launched <unit-slug>"
-  agents=$(claude agents --json 2>/dev/null) || die "the session list is unreadable"
-  AGENTS=$agents pl launched "$2" "$dir" ;;
+  i=1; rc=3
+  while :; do
+    if agents=$(claude agents --json 2>/dev/null); then
+      AGENTS=$agents perl -x -MJSON::PP "$self" launched "$2" "$dir"; rc=$?
+    else rc=2; fi
+    [ "$rc" -eq 0 ] && exit 0
+    [ "$i" -ge "$LAUNCH_TRIES" ] && break
+    i=$((i + 1)); sleep "$LAUNCH_WAIT"
+  done
+  [ "$rc" -eq 2 ] && die "the session list is unreadable; run launched again later"
+  pl launch-failed "$2" "$dir" ;;
 resume)
   [ -f "$dir/timer" ] && pkill -F "$dir/timer" -x sleep 2>/dev/null
   pl resume x "$dir" ;;
@@ -165,8 +184,20 @@ sub key { my $u = shift; my $sha = "start";
 sub rung { my $u = shift; my ($sha, $gen) = key($u);
   1 + scalar grep { /^- restarted \Q$u\E$w: .*, rung \d+, since (\S+) gen (\d+)\s*$/ && $1 eq $sha && $2 == $gen } @sup }
 # A restart or relaunch is seen through once a `resent to <session>` line follows it.
+# A launch that never brought a session up (`launch failed`) is seen through as well: it failed.
 sub pending { my $u = shift; my $s = "$design-$u"; my $p = 0;
-  for (@sup) { $p = 1 if /^- (?:restarted|relaunched) \Q$u\E$w/; $p = 0 if /^- resent to \Q$s\E\s*$/ } $p }
+  for (@sup) { $p = 1 if /^- (?:restarted|relaunched) \Q$u\E$w/;
+    $p = 0 if /^- resent to \Q$s\E\s*$/ || /^- launch failed \Q$u\E$w/ } $p }
+# An investigation for this rung: an `investigated` line with no later `restarted` line.
+sub investigated { my $u = shift; my $i = 0;
+  for (@sup) { $i = 1 if /^- investigated \Q$u\E$w/; $i = 0 if /^- restarted \Q$u\E$w/ } $i }
+# The bounded tail of the transcript, copied into the ledger dir for the investigating agent.
+sub tailfile { my $u = shift; my $t = transcript($u) // return undef;
+  my $sz = -s $t // 0; open(my $T, "<", $t) or return undef;
+  seek($T, $sz > $ENV{TAIL_BYTES} ? $sz - $ENV{TAIL_BYTES} : 0, 0);
+  my @l = <$T>; close $T; shift @l if $sz > $ENV{TAIL_BYTES};
+  @l = @l[-$ENV{TAIL_LINES} .. -1] if @l > $ENV{TAIL_LINES};
+  my $f = "$dir/assignments/$u.tail"; open(my $O, ">", $f) or return undef; print $O @l; close $O; $f }
 # Waiting for a usage reset: the newest `waiting reset` line with no later `restarted` line.
 sub waiting { my $u = shift; my $until;
   for (@sup) { $until = $1 if /^- waiting reset \Q$u\E$w until (\d+)/; undef $until if /^- restarted \Q$u\E$w/ } $until }
@@ -184,7 +215,7 @@ sub append_sup { my $line = shift;
   open(my $O, ">", "$dir/ledger.md.tmp") or die; print $O @l; close $O;
   rename("$dir/ledger.md.tmp", "$dir/ledger.md") or die; print "$line\n" }
 # Processes left in a unit's worktree: cwd inside it and no controlling terminal.
-sub strays { my $wt = shift; my @r; my ($pid, $cwd);
+sub strays { my ($wt, $want) = @_; my @r; my ($pid, $cwd);
   require Cwd; $wt = Cwd::abs_path($wt) // $wt;
   my %cwd; for (run("lsof", "-w", "-a", "-d", "cwd", "-Fpn")) {
     if (/^p(\d+)/) { $pid = $1 } elsif (/^n(.*)/ && $pid) { $cwd{$pid} = $1 } }
@@ -194,6 +225,7 @@ sub strays { my $wt = shift; my @r; my ($pid, $cwd);
     my ($o) = run("ps", "-o", "tty=,command=", "-p", $p); $o //= "";
     my ($tty, $cmd) = $o =~ /^\s*(\S+)\s+(.*)$/ or next;
     next unless $tty eq "??" || $tty eq "?";
+    next if defined $want && index($cmd, $want) < 0;
     push @r, [$p, $cmd] }
   @r }
 
@@ -207,7 +239,7 @@ if ($mode eq "report") {
     my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
     if (ref $list eq "ARRAY") {
       for my $a (@$list) { next unless ref $a eq "HASH" && defined $a->{name};
-        $sess{$a->{name}} = 1 }
+        $sess{$a->{name}} = $a->{sessionId} // 1 }
     } else { $known = 0 }
   }
   my %fixopen; for my $u (@slugs) { my $o = 0;
@@ -268,11 +300,14 @@ if ($mode eq "report") {
     $n{movable}++ if $movable eq "yes";
     my ($sha, $gen) = key($u);
     my $rung = rung($u);
-    printf "unit %s status %s session %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d restart %s wait %s movable %s\n",
+    # A listed session's id is the unit's current one.
+    if ($session eq "alive" && $sess{$name} =~ /^[0-9a-f-]+$/) {
+      open(my $S, ">", "$dir/assignments/$u.session"); print $S "$sess{$name}\n"; close $S }
+    printf "unit %s status %s session %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d investigated %s restart %s wait %s movable %s\n",
       $u, $st, $session, $evidence, $quiet, $ask, $asked, $plan, ($fix ? "open" : "none"),
-      $rung, (pending($u) ? "pending" : "none"), $wait, $movable;
-    # On the investigating rung, where its last session's transcript is.
-    print "transcript $u ", transcript($u) // "none", "\n" if $rung >= 2;
+      $rung, (investigated($u) ? "yes" : "no"), (pending($u) ? "pending" : "none"), $wait, $movable;
+    # On the investigating rung, a bounded copy of its last session's transcript tail.
+    print "transcript $u ", tailfile($u) // "none", "\n" if $rung >= 2;
 
     # Rows the SDD ledger shows passed review that no merge has delivered.
     for my $pp (bsd_glob("$wt/.superpowers/sdd/*/plan-path")) {
@@ -331,14 +366,21 @@ if ($mode eq "restart") {
   die "beat.sh: bad cause: $cause\n" unless $cause =~ /^(death|stall|usage-limit|denied-command|hung-process|defect|unknown)$/;
   my ($sha, $gen) = key($u);
   # A usage-limit restart climbs no rung; every other restart takes the unit's next rung.
+  unlink "$dir/assignments/$u.session";
   append_sup($cause eq "usage-limit" ? "- restarted $u: usage-limit, since $sha gen $gen"
                                      : "- restarted $u: $cause, rung " . rung($u) . ", since $sha gen $gen");
+} elsif ($mode eq "launching") {
+  my ($d) = @ARGV; load($d); unlink "$dir/assignments/$u.session";
+} elsif ($mode eq "relaunched") {
+  my ($d) = @ARGV; load($d); unlink "$dir/assignments/$u.session"; append_sup("- relaunched $u");
+} elsif ($mode eq "launch-failed") {
+  my ($d) = @ARGV; load($d); append_sup("- launch failed $u"); exit 1;
 } elsif ($mode eq "launched") {
   my ($d) = @ARGV; load($d); my $name = "$design-$u";
   my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
-  die "beat.sh: the session list is unreadable\n" unless ref $list eq "ARRAY";
+  unless (ref $list eq "ARRAY") { print STDERR "beat.sh: the session list is unreadable\n"; exit 2 }
   my ($a) = grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name } @$list;
-  die "beat.sh: $name is not listed\n" unless $a && ($a->{sessionId} // "") =~ /^[0-9a-f-]+$/;
+  unless ($a && ($a->{sessionId} // "") =~ /^[0-9a-f-]+$/) { print STDERR "beat.sh: $name is not listed\n"; exit 3 }
   mkdir "$dir/assignments";
   open(my $S, ">", "$dir/assignments/$u.session") or die; print $S "$a->{sessionId}\n"; close $S;
   print "$name $a->{sessionId}\n";
@@ -355,9 +397,12 @@ if ($mode eq "restart") {
     (my $s = $bf) =~ s{.*/}{}; $s =~ s/\.beat$//;
     writebeat($s, head(wt($s))); unlink "$dir/assignments/$s.asked" }
 } elsif ($mode eq "strays" || $mode eq "kill-strays") {
-  my ($d) = @ARGV; load($d); units();
-  my $wt = wt($u); my @s = strays($wt);
-  if ($mode eq "strays") { print "stray $_->[0] $_->[1]\n" for @s; exit 0 }
+  my $d = pop @ARGV; my ($want) = @ARGV; load($d); units();
+  my $wt = wt($u);
+  if ($mode eq "strays") { print "stray $_->[0] $_->[1]\n" for strays($wt); exit 0 }
+  # Only processes whose command line contains the command the investigation named.
+  die "beat.sh: kill-strays needs the hung command\n" unless defined $want && length $want;
+  my @s = strays($wt, $want);
   my @p = map { $_->[0] } @s; kill(TERM => @p) if @p;
   for (1..5) { @p = grep { kill(0, $_) } @p; last unless @p; sleep 1 }
   kill(KILL => @p) if @p;

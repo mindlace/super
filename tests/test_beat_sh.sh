@@ -16,6 +16,9 @@ grep -qx 'FORK_LIMIT=2700' "$src" || fail "FORK_LIMIT=2700 must be set at the to
 sh -n "$src" || fail "sh -n"
 # A copy with a two-second fork limit, for the limit tests only.
 sed 's/^FORK_LIMIT=2700$/FORK_LIMIT=2/' "$src" > "$tmp/beat-fast.sh"
+# A copy with no wait between launch tries.
+sed 's/^LAUNCH_WAIT=10$/LAUNCH_WAIT=0/' "$src" > "$tmp/beat-launch.sh"
+bl() { sh "$tmp/beat-launch.sh" "$@"; }
 b() { sh "$src" "$@"; }
 ago() { perl -e '$t=time-shift; utime $t,$t,@ARGV' "$@"; }
 
@@ -173,16 +176,46 @@ perl -0pi -e 's/(- plan web[^\n]*\n)/$1- relaunched db\n/' "$d/ledger.md"
 out=$(b "$d"); [ "$(field db restart)" = pending ] && [ "$(field db rung)" = 1 ] || fail "relaunch pending: $(line 'unit db')"
 reset_ledger
 
-# 7b. launched records the session id; a unit on rung 2 gets its transcript path.
-r=$(b "$d" launched api); [ "$r" = "des-api aaaa1111-2222-3333-4444-555566667777" ] || fail "launched said: $r"
+# 7b. launched records the session id; a session that never appears is a failed start that
+#     climbs the ladder (R3-1); every launch forgets the last session's id (R3-2).
+r=$(bl "$d" launched api); [ "$r" = "des-api aaaa1111-2222-3333-4444-555566667777" ] || fail "launched said: $r"
 [ "$(cat "$d/assignments/api.session")" = aaaa1111-2222-3333-4444-555566667777 ] || fail "session id not recorded"
-b "$d" launched db && fail "launched must fail for a session that is not listed"
-: > "$tmp/agents.fail"; b "$d" launched api && fail "launched must fail when the session list is unreadable"; rm -f "$tmp/agents.fail"
+: > "$tmp/agents.fail"; bl "$d" launched api && fail "launched must fail when the session list is unreadable"; rm -f "$tmp/agents.fail"
+grep -q '^- launch failed api' "$d/ledger.md" && fail "an unreadable list is no failed start"
+grep -qx 'LAUNCH_TRIES=3' "$src" && grep -qx 'LAUNCH_WAIT=10' "$src" || fail "the launch bound must be LAUNCH_TRIES=3, LAUNCH_WAIT=10"
+echo stale > "$d/assignments/db.session"
+r=$(b "$d" restart db death); [ "$r" = "- restarted db: death, rung 1, since start gen 0" ] || fail "db rung-1: $r"
+[ -e "$d/assignments/db.session" ] && fail "a restart must forget the last session's id"
+out=$(b "$d"); [ "$(field db restart)" = pending ] || fail "db restart should be pending"
+bl "$d" launched db >/dev/null && fail "launched must fail for a session that is never listed"
+grep -qx -- '- launch failed db' "$d/ledger.md" || fail "a session that never appears must ledger launch failed"
+out=$(b "$d"); [ "$(field db restart)" = none ] && [ "$(field db rung)" = 2 ] || fail "a failed start climbs: $(line 'unit db')"
+b "$d" restart db unknown >/dev/null; bl "$d" launched db >/dev/null
+out=$(b "$d"); [ "$(field db rung)" = 3 ] || fail "two failed starts reach rung 3: $(line 'unit db')"
+echo stale > "$d/assignments/web.session"; b "$d" launching web; [ -e "$d/assignments/web.session" ] && fail "launching must forget the id"
+r=$(b "$d" relaunched db); [ "$r" = "- relaunched db" ] || fail "relaunched said: $r"
+out=$(b "$d"); [ "$(field db restart)" = pending ] || fail "a relaunch is pending until seen through"
+reset_ledger
+# The transcript tail: copied, bounded by lines and bytes, only from rung 2 (R3-6).
 out=$(b "$d"); printf '%s\n' "$out" | grep -q '^transcript api' && fail "no transcript line below rung 2"
-tdir="$HOME/.claude/projects/-my proj-x"; mkdir -p "$tdir"; printf '{"a":1}\n' > "$tdir/aaaa1111-2222-3333-4444-555566667777.jsonl"
+tdir="$HOME/.claude/projects/-my proj-x"; mkdir -p "$tdir"; tf="$tdir/aaaa1111-2222-3333-4444-555566667777.jsonl"
+perl -e 'print qq({"n":$_}\n) for 1..300' > "$tf"
 b "$d" restart api death >/dev/null; perl -0pi -e 's/(- restarted api: death[^\n]*\n)/$1- resent to des-api\n/' "$d/ledger.md"
-out=$(b "$d"); printf '%s\n' "$out" | grep -qx "transcript api $tdir/aaaa1111-2222-3333-4444-555566667777.jsonl" || fail "transcript line wrong: $out"
-rm -f "$tdir"/*.jsonl; out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a missing transcript must read none"
+rm -f "$d/assignments/api.session"
+out=$(b "$d"); printf '%s\n' "$out" | grep -qx "transcript api $(cd "$d" && pwd -P)/assignments/api.tail" || fail "transcript line wrong: $out"
+[ "$(wc -l < "$d/assignments/api.tail" | tr -d ' ')" = 200 ] && [ "$(tail -n 1 "$d/assignments/api.tail")" = '{"n":300}' ] || fail "tail must be the last 200 lines"
+perl -e 'print q({"big":"), "x" x 100000, qq("}\n) for 1..3' > "$tf"
+out=$(b "$d"); [ "$(wc -c < "$d/assignments/api.tail" | tr -d ' ')" -le 65536 ] || fail "tail must be bounded by bytes"
+[ "$(field api investigated)" = no ] || fail "no investigation yet"
+perl -0pi -e 's/(- resent to des-api\n)/$1- investigated api: unknown — restart\n/' "$d/ledger.md"
+out=$(b "$d"); [ "$(field api investigated)" = yes ] || fail "a ledgered investigation for this rung (R3-9)"
+b "$d" restart api unknown >/dev/null
+out=$(b "$d"); [ "$(field api investigated)" = no ] || fail "a restart uses the investigation up"
+rm -f "$tf"; out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a missing transcript must read none"
+reset_ledger
+# Whole words in the pending check (R3-5).
+perl -0pi -e 's/(- plan web[^\n]*\n)/$1- restarted api-2: death, rung 1, since start gen 0\n/' "$d/ledger.md"
+out=$(b "$d"); [ "$(field api restart)" = none ] || fail "api-2's restart must not make api pending"
 reset_ledger
 
 # 8. Waiting for a usage reset (N4): not absent, not asked, not movable; then over; restart has no rung.
@@ -256,17 +289,28 @@ pgrep -g "$(cat "$d/prompts/rule-q1.pid")" >/dev/null && fail "stop-fork left th
 [ -e "$lock" ] && fail "stop-fork after KILL must remove the package worktree's index lock"
 r=$(b "$d" stop-fork rule-q1); [ "$r" = "not running rule-q1" ] || fail "second stop-fork said: $r"
 
-# 14. Strays: a terminal-less process left in a unit's worktree is listed and stopped; others are not.
+# 14. Strays: terminal-less, inside the worktree (not a sibling sharing its prefix), and for
+#     kill-strays, matching the named command (R3-3, R3-5).
+mkdir -p "$api-x"
 perl -MPOSIX -e 'fork and exit; POSIX::setsid(); chdir $ARGV[0]; exec "sleep", "61"' "$api"
+perl -MPOSIX -e 'fork and exit; POSIX::setsid(); chdir $ARGV[0]; exec "sleep", "65"' "$api"
 perl -MPOSIX -e 'fork and exit; POSIX::setsid(); chdir $ARGV[0]; exec "sleep", "62"' "$proj/pkg"
-sleep 1
+perl -MPOSIX -e 'fork and exit; POSIX::setsid(); chdir $ARGV[0]; exec "sleep", "63"' "$api-x"
+( cd "$api" && script -q /dev/null sleep 64 >/dev/null 2>&1 & )
+sleep 2
+pgrep -x sleep -f >/dev/null; ps -o tty= -p "$(pgrep -f '^sleep 64$' | head -n 1)" | grep -q '?' && fail "fixture: sleep 64 should have a terminal"
 out=$(b "$d" strays api)
 printf '%s\n' "$out" | grep -q '^stray [0-9]* sleep 61$' || fail "stray in api's worktree not listed: $out"
 printf '%s\n' "$out" | grep -q 'sleep 62' && fail "a process outside the worktree was listed"
-b "$d" kill-strays api >/dev/null; sleep 1
-pgrep -f 'sleep 61' >/dev/null && fail "kill-strays left the stray"
-pgrep -f 'sleep 62' >/dev/null || fail "kill-strays stopped a process outside the worktree"
-pkill -f 'sleep 62'
+printf '%s\n' "$out" | grep -q 'sleep 63' && fail "a process in a sibling sharing the worktree's prefix was listed"
+printf '%s\n' "$out" | grep -q '^stray [0-9]* sleep 64$' && fail "a process with a terminal was listed"
+b "$d" kill-strays api >/dev/null 2>&1 && fail "kill-strays needs the named command"
+pgrep -f '^sleep 61$' >/dev/null || fail "kill-strays with no command must kill nothing"
+b "$d" kill-strays api "sleep 61" >/dev/null; sleep 1
+pgrep -f '^sleep 61$' >/dev/null && fail "kill-strays left the named stray"
+pgrep -f '^sleep 65$' >/dev/null || fail "kill-strays stopped a stray it was not named"
+pgrep -f '^sleep 62$' >/dev/null || fail "kill-strays stopped a process outside the worktree"
+pkill -f '^sleep 6[2-5]$'; pkill -f 'script -q /dev/null sleep 64'
 
 # 15. changed: the operator's evidence between wait stretches.
 cd "$api" || fail "cd"
@@ -277,5 +321,20 @@ sleep 1; echo z >> src.txt
 [ -n "$(sh "$src" changed "$m")" ] || fail "an edit to an already-modified file must show"
 [ -z "$(sh "$src" changed "$m")" ] || fail "changed must reset its marker"
 cd "$root" || exit 1
+
+# 16. The bounds the prose quotes follow from the constants here (R3-7).
+skill_md="$root/plugins/supersonic/skills/superconductor/SKILL.md"
+briefing="$root/plugins/supersonic/skills/superconductor/operator-briefing.md"
+flat=$(tr '\n' ' ' < "$skill_md" | tr -s ' ')
+k() { sed -n "s/^$1=\([0-9]*\)$/\1/p" "$src"; }
+beat_m=$(( $(k BEAT) / 60 )); stall_m=$(( $(k STALL_BEATS) * beat_m ))
+for p in "(${stall_m} minutes)" "asked ${stall_m} to $((stall_m + beat_m)) minutes after its last evidence" \
+         "stalled one beat later: $((stall_m + beat_m)) to $((stall_m + 2 * beat_m)) minutes" \
+         "every \`BEAT\` (${beat_m} minutes)" \
+         "$(k LAUNCH_TRIES) tries over $(( ($(k LAUNCH_TRIES) - 1) * $(k LAUNCH_WAIT) )) seconds"; do
+  printf '%s\n' "$flat" | grep -qF -- "$p" || fail "SKILL.md must quote the bound the constants give: $p"
+done
+stretch=$(sed -n 's/.*background `sleep \([0-9]*\)`.*/\1/p' "$briefing" | head -n 1)
+[ -n "$stretch" ] && [ "$stretch" -lt "$(k BEAT)" ] || fail "the operator's stretch ($stretch s) must be shorter than BEAT"
 
 echo "PASS: beat.sh"

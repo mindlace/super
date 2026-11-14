@@ -365,7 +365,10 @@ is done: go on from step 2.
        - Allowed project commands: <project commands>
        - Allowed for waiting: sleep (run in the background), TaskStop, sh <skill dir>/beat.sh changed
 
-3. **Ledger** the unit line (`## Units`) before the launch, with status
+3. **Ledger** the unit line (`## Units`) before the launch, then run `sh
+   <skill dir>/beat.sh <ledger dir> launching <unit-slug>`, which forgets
+   any earlier operator's session id, so a death before step 5 never
+   reads the wrong transcript. The line has status
    `launching` and `start <sha>`: `git -C <unit worktree> rev-parse HEAD`
    just before the first launch, after any bring-up-to-date merge, so a
    branch that is brought up to date (a hand-back sibling's) is merged
@@ -403,8 +406,9 @@ is done: go on from step 2.
      (`## Supervision`, Stopping an operator), run `claude agents --json`
      until its name is no longer listed, set its assignment's `Plan:` line to
      the plan it already has (as for a restart, `## Supervision`, Operator
-     death), ledger `- relaunched <unit-slug>` under `## Supervision`, and
-     launch it with this step's command and the longer list, same name,
+     death), ledger the relaunch with `sh <skill dir>/beat.sh <ledger dir>
+     relaunched <unit-slug>` (it appends `- relaunched <unit-slug>` under
+     `## Supervision` and forgets the old session id), and launch it with this step's command and the longer list, same name,
      worktree and model. Then record its session (step 5's `launched`), run
      `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it again what it was sent (Heartbeat, Resends),
      which ends with its `resent to` line; until then the report shows it
@@ -418,10 +422,14 @@ is done: go on from step 2.
    assignment says `Admitted: no` and `admitted` otherwise, and its `## Cost`
    start: the timestamp and the `SEVEN_DAY` percentage from the `budget.sh`
    run. Then record its session: `sh <skill dir>/beat.sh <ledger dir>
-   launched <unit-slug>` stores the id of the session `claude agents --json`
-   lists under its name, so its transcript can be found after it dies; if it
-   says the name is not listed yet, run it again a few seconds later. Then
-   start its beat file, `sh <skill dir>/beat.sh <ledger dir> seen
+   launched <unit-slug>` waits for `claude agents --json` to list it
+   (`LAUNCH_TRIES` tries `LAUNCH_WAIT` seconds apart, set at the top of
+   `beat.sh`: 3 tries over 20 seconds) and stores its session id, so its
+   transcript can be found after it dies. A session that never appears is a
+   failed start: `launched` ledgers `- launch failed <unit-slug>`, which
+   ends the launch, and the next beat finds the unit absent and puts it on
+   its next rung (Operator death). If it says the session list is
+   unreadable, run it again later. Then start its beat file, `sh <skill dir>/beat.sh <ledger dir> seen
    <unit-slug>`, and start the heartbeat timer if none is running
    (`## Supervision`, Heartbeat).
 
@@ -485,7 +493,7 @@ yourself for anything it prints.
   ledgers only the lines of what it changed. The report, one line each,
   then a summary line:
 
-      unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no
+      unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> investigated yes|no restart pending|none wait none|until-<epoch>|over movable yes|no
       row <unit-slug> <row id> task <N> head <sha7>
       transcript <unit-slug> <path>|none
       fork <fork name> running|gone|unstarted failures <n>
@@ -525,14 +533,18 @@ yourself for anything it prints.
     does not read them.
   - `rung`: the rung of the ladder its next death or stall is on (Operator
     death).
-  - A `transcript` line, for a unit on rung 2 or higher: the transcript
-    file of its last confirmed session, `~/.claude/projects/<project
-    dir>/<session id>.jsonl`, found by the session id `sh <skill
-    dir>/beat.sh <ledger dir> launched <unit-slug>` recorded; `none` when
-    there is no such file. It exists for a dead session as for a live
-    one.
+  - `investigated yes`: an investigation for this rung is ledgered (an `-
+    investigated <unit-slug>` line with no later `restarted` line).
+  - A `transcript` line, for a unit on rung 2 or higher: a file in the
+    ledger dir, `<ledger dir>/assignments/<unit-slug>.tail`, holding the
+    last `TAIL_LINES` lines, within the last `TAIL_BYTES` bytes, of the
+    transcript of its last confirmed session
+    (`~/.claude/projects/<project dir>/<session id>.jsonl`, by the id
+    `launched` recorded, refreshed on every beat the session is listed).
+    The copy keeps the investigation inside the project and ledger dirs.
+    `none` when there is no recorded id or no such transcript.
   - `restart pending`: its newest `restarted` or `relaunched` line has no
-    `- resent to <session name>` after it. Alive, it is owed its resends
+    `- resent to <session name>` or `- launch failed <unit-slug>` after it. Alive, it is owed its resends
     (below). Absent, the launch was never seen through (Operator death).
   - `wait until-<epoch>`: it waits for a usage reset; it is not asked, not
     dead, and cannot move. `wait over`: the reset has passed; restart it
@@ -699,35 +711,39 @@ authority.
   and note its short id; the operator is stopped in step 1 below.
 
   - **Rung 1: restart**, with cause `death` or `stall`.
-  - **Rung 2: investigate, apply the remedy, restart.** Unless an `-
-    investigated <unit-slug>: …` line with no later `restarted <unit-slug>`
-    line is in the ledger (an investigation the last conductor finished),
-    dispatch one fresh agent and wait for its one-line answer, so the log
-    stays out of your context: `Find why operator <session name> stopped
-    making progress. Read only the last 200 lines of its transcript,
-    <the report's transcript path> (JSON lines: its last tool calls, tool
-    results and errors). If that is none, read git -C <unit worktree>
+  - **Rung 2: investigate, apply the remedy, restart.** If the report shows
+    `investigated yes` (an investigation the last conductor finished), apply
+    the remedy its ledger line names. Otherwise dispatch one fresh agent and
+    wait for its one-line answer, so the transcript stays out of your
+    context: `Find why operator <session name> stopped making progress.
+    Read <the report's transcript file> (the end of its transcript, JSON
+    lines: its last tool calls, tool results and errors). If that is none, read git -C <unit worktree>
     status, git -C <unit worktree> log -5 --stat and the last 40 lines of
     <unit worktree>/.superpowers/sdd/*/progress.md instead. Either way also
     read the output of sh <skill dir>/beat.sh <ledger dir> strays
     <unit-slug>. Change nothing. Reply
     with exactly one line: cause: denied command <command> | usage limit |
-    hung process <command> | defect <the task and what it keeps hitting> |
-    unknown.` It reads only, so a death mid-investigation just dispatches
+    hung process <the command line it ran, as the transcript shows it> |
+    defect <the task and what it keeps hitting> | unknown.` It reads only, so a death mid-investigation just dispatches
     it again. Ledger `- investigated <unit-slug>: <cause> — <remedy>`, then
     apply the remedy, and restart with the cause named:
     - denied command (`denied-command`): add it as Phase 2, Relaunching
       with a longer list, says, and launch with the longer list;
-    - usage limit: not a death, and no restart yet. Run `sh <skill
-      dir>/beat.sh <ledger dir> wait <unit-slug> <minutes>`, with the
+    - usage limit: not a death, and no restart yet. If its name is listed
+      (a stall), stop it first (Stopping an operator) and wait until it is
+      no longer listed. Then run `sh <skill dir>/beat.sh <ledger dir> wait
+      <unit-slug> <minutes>`, with the
       minutes until the reset `budget.sh` reports. The unit then shows
       `wait until-<epoch>`: it is not watched and the summary's
       `next-reset` sets the timer. At `wait over`, restart it with cause
       `usage-limit`, which climbs no rung;
     - hung process (`hung-process`): after step 1, `sh <skill dir>/beat.sh
-      <ledger dir> kill-strays <unit-slug>`, which stops every process
-      without a terminal whose working directory is in the unit's
-      worktree, found again at the time it runs, never by a remembered pid;
+      <ledger dir> kill-strays <unit-slug> "<the command line it named>"`,
+      which stops only processes whose command line contains that text,
+      whose working directory is in the unit's worktree and which have no
+      terminal, found again at the time it runs, never by a remembered pid.
+      With no command named, it kills nothing: treat the cause as
+      `unknown`;
     - defect (`defect`): file it as a question (`## Composer forks`,
       Questions) `from <unit-slug>`, and after the restart send the
       operator the mechanical ruling `Question <id> holds task <N>; work on
@@ -765,7 +781,9 @@ authority.
      and launch it (Phase 2, Starting an operator, step 4), unless its name
      is listed.
   5. Record its session (`sh <skill dir>/beat.sh <ledger dir> launched
-     <unit-slug>`, as Phase 2, Starting an operator, step 5, says), run `sh
+     <unit-slug>`, as Phase 2, Starting an operator, step 5, says; a
+     session that never appears ends here with `launch failed`, and the next
+     beat puts the unit on its next rung), run `sh
      <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it its
      resends (Heartbeat, Resends), which end with its `resent to` line;
      its assignment already carries its admission, and it keeps its status.
@@ -1172,6 +1190,7 @@ still listed (`claude stop <id>`), and stop the heartbeat timer (`sh
     - waiting reset <unit-slug> until <epoch>
     - stopped <unit-slug>: rung 3
     - relaunched <unit-slug>
+    - launch failed <unit-slug>
     - resent to <session name>
 
     ## Questions
