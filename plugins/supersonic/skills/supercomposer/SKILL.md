@@ -200,7 +200,8 @@ indices in traceability-table order.
    `superconductor/<design-slug>` at that commit and one worktree of it, per
    the project's worktree convention. This is the package worktree: the
    checkpoint and every fork run there, and operators read the package from
-   it. Record its path in the ledger.
+   it. Record its path as the ledger's header line
+   `Package worktree: <absolute path>`.
 3. **Checkpoint.** From the package worktree, start a fresh session with
    the `## Checkpoint` prompt and command in `composer-forks.md`; it
    cold-reads the package and stops. Record its session id and model under
@@ -208,7 +209,9 @@ indices in traceability-table order.
    package that cannot be understood cold is a defect to find now.
 4. **Build graph.** Run the `## Build-graph fork` from `composer-forks.md`
    and wait for it to exit with `Build graph @ <sha>` and its
-   `Longest chain:` line.
+   `Longest chain:` line. Record it as the ledger's header line
+   `Build graph: <build-graph path> @ <sha>`, below `Package worktree:`;
+   when a later fix reruns the fork, update the sha.
 5. **Fresh-eyes check of the chain.** One fresh-eyes agent challenges every
    edge on the chain the graph's `Longest chain:` line reports: does the
    consumer need that row, and does the row need everything before it? A

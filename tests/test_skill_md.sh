@@ -83,6 +83,14 @@ for s in 'status: planning | admitted | running | complete | stopped | replaced 
     || { echo "FAIL: ledger format missing: $s"; exit 1; }
 done
 
+# Hand-back siblings keep their rows and their plan, and know each other.
+need '- Plan: none | <plan path> at <sha>, tasks <numbers> (already written)'
+need '- Siblings: <session names, or none>'
+need "only that sibling's merge counts"
+need 'remove them from'
+need 'Sibling notice'
+need '`Produces rows others wait on:` the rows from step 1'
+
 # Every conductor->operator message template ends in an imperative, never a bare pointer.
 need 'Re-read'
 forbid 'ruling ready'

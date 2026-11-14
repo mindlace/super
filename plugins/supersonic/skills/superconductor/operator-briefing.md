@@ -35,7 +35,12 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
 2. **Read the package from `<package worktree>`**, never from the copy on your own branch,
    which may be older. The spec sections your unit implements, the design doc and the
    contracts all come from there.
-3. **Plan.** Invoke `superpowers:writing-plans` against the spec sections your unit
+3. **Plan.** If your assignment's `Plan:` line names a plan, it is already written and
+   committed on your branch: your tasks are exactly the ones that line lists, and they are
+   one lane already. Do not invoke `superpowers:writing-plans` and do not split lanes; skip
+   to step 5, and run SDD on those tasks only. `Siblings:` names the operators running the
+   plan's other lanes; message them by name when your lanes need to coordinate. Otherwise
+   (`Plan: none`), invoke `superpowers:writing-plans` against the spec sections your unit
    implements. The plan's Global Constraints section copies the unit's interface rows and
    the design's global constraints verbatim. Commit the plan.
 4. **Split lanes.** Read the plan as a graph. If it contains task groups with no

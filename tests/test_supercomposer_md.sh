@@ -141,6 +141,10 @@ grep -qF '/add-dir' "$forks" && { echo "FAIL: composer-forks.md must not ask the
 # C5 commits after branching land in the package worktree.
 printf '%s\n' "$flat" | grep -qF 'git -C <package worktree>' \
   || { echo "FAIL: C5 must commit fixes in the package worktree"; exit 1; }
+# C5 writes the ledger header lines the conductor's intake checks.
+for s in '`Package worktree: <absolute path>`' '`Build graph: <build-graph path> @ <sha>`'; do
+  printf '%s\n' "$flat" | grep -qF -- "$s" || { echo "FAIL: C5 must ledger the header line $s"; exit 1; }
+done
 desc_len=$(printf '%s' "$desc" | wc -c | tr -d ' ')
 [ "$desc_len" -le 500 ] || { echo "FAIL: description is $desc_len chars (max 500)"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

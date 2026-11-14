@@ -28,6 +28,11 @@ require 'hand-back'
 require 'plan ready'
 require 'Admitted'
 require 're-read'
+# An assignment that carries an existing plan (a hand-back sibling) skips planning.
+require '`Plan:` line names a plan'
+require 'Do not invoke `superpowers:writing-plans`'
+require '`Plan: none`'
+require '`Siblings:`'
 
 forbid 'message `main`'
 forbid 'to `main`'

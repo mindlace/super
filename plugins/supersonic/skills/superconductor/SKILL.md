@@ -118,7 +118,9 @@ when an operator finishes or stops, and when the band changes.
 - **A row has merged** when the commit that delivers it is on the
   integration branch: the `contracts` unit's merge for contract rows, a row
   report's merge for the row it names, or a unit's `complete` merge for
-  everything it produces. The ledger's `## Integration` lines are the
+  every row its `## Units` line lists under `produces:`. After a hand-back,
+  a row belongs to the sibling that runs the task delivering it, so only
+  that sibling's merge counts. The ledger's `## Integration` lines are the
   record.
 - **A unit is ready** when every row in its build-graph `needs rows` cell
   has merged.
@@ -183,6 +185,8 @@ result.
        - Writes: <the unit's writes cell>
        - Needs rows: <row> (merged at <sha>), <row> (not merged yet), ...
        - Produces rows others wait on: <rows, or none>
+       - Plan: none | <plan path> at <sha>, tasks <numbers> (already written)
+       - Siblings: <session names, or none>
        - Admitted: yes|no
        - Permission mode: acceptEdits
        - Allowed git commands: git add, git commit, git rev-parse, git log, git diff, git status, git show, git merge
@@ -221,9 +225,26 @@ the status ask.
 |---|---|
 | `plan ready: <plan path> at <sha>` | Ledger the plan. Admit the unit when its rows have merged and the band allows. |
 | `row <row id> passed review at <sha> on <branch>` | Merge the branch up to `<sha>` (`## Integration`), start a merge-review fork, then re-derive admission (Phase 2) and admit every unit that was waiting only on rows now merged. The reporting operator keeps building. |
-| `hand-back: tasks <numbers> of <plan path> at <sha>; files <paths>; needs rows <ids>` | Start a sibling operator for those tasks under the band: unit slug `<unit-slug>-<k>`, worktree branched from `<sha>`, `Implements: tasks <numbers> of <plan path> at <sha> (already planned)`, `Writes: <paths>`, `Needs rows: <ids>`. Ledger it as a unit. |
+| `hand-back: tasks <numbers> of <plan path> at <sha>; files <paths>; needs rows <ids>` | Start a sibling operator for those tasks under the band (Hand-back siblings, below). |
 | `question <id>: <path>` | Ledger it under `## Questions`, then handle it per the items below. |
 | `complete: <branch>, ...` | Merge the branch (`## Integration`), start a merge-review fork, ledger `complete` and the `## Cost` finish, then re-derive admission. |
+
+**Hand-back siblings.** For each `hand-back` from unit `<unit-slug>`:
+
+1. Read the handed-back tasks in the plan as it was at `<sha>`
+   (`git -C <unit worktree> show <sha>:<plan path>`) and find which of the
+   unit's `produces:` rows they deliver.
+2. Start the sibling as a unit `<unit-slug>-<k>` (Starting an operator),
+   with its worktree branched from `<sha>` instead of the integration
+   branch, so the plan is already in it. Its assignment: `Implements: tasks
+   <numbers> of <plan path>`, `Writes: <paths>`, `Needs rows: <ids>` from
+   the hand-back, `Produces rows others wait on:` the rows from step 1,
+   `Plan: <plan path> at <sha>, tasks <numbers> (already written)`, and
+   `Siblings:` the session names of `<unit-slug>` and its other siblings.
+3. In the ledger, add the sibling's `## Units` line with those rows under
+   `produces:`, and remove them from `<unit-slug>`'s line.
+4. Send `<unit-slug>`'s operator, and every earlier sibling, the sibling
+   notice (below).
 
 **Mechanical rulings stay with you**: which branch to merge from or rebase
 on, which worktree to use, which test command to run. Answer them by
@@ -234,6 +255,7 @@ message; everything about the design follows the items below.
 | When | Message |
 |---|---|
 | Admitting a planning operator | `You are admitted: rows <ids> merged into superconductor/<design-slug> at <sha>. Merge superconductor/<design-slug> into your branch, then build from step 6 of your briefing.` |
+| Sibling notice (after a hand-back) | `<sibling name> now runs tasks <numbers> of <plan path> and owns rows <ids, or none>; do not report those rows. Message <sibling name> by name when your lanes need to coordinate, and carry on with your own tasks.` |
 | Status ask (resume, or idle without a report) | `Status check from <design-slug>-conductor. Reply to <design-slug>-conductor by name with the last task that passed review, the task in progress, and anything held on a question.` |
 | A ruling that clarifies a running unit | `The spec now says: <the ruling's sentences>. Re-read <file> § <section> in <package worktree>, bring the tasks you have not started into line with it, and carry on.` |
 | A mechanical ruling | `<the answer>. Go on with <task>.` |
