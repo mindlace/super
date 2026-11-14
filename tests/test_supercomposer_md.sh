@@ -42,6 +42,62 @@ for c in 'unit' 'implements (spec §)' 'writes' 'needs rows' 'produces rows othe
   printf '%s\n' "$flat" | grep -qF -- "| $c |" || printf '%s\n' "$flat" | grep -qF -- "| \`$c\` |" \
     || { echo "FAIL: build graph table missing column: $c"; exit 1; }
 done
+# Checkpoint and one-shot forks replace the long-lived reappraisal session.
+for s in 'composer-forks.md' '--fork-session' 'checkpoint' 'current state' 'Disk wins' 'never resumed in place' 'Longest chain:'; do
+  printf '%s\n' "$flat" | grep -qF -- "$s" || { echo "FAIL: supercomposer SKILL.md missing: $s"; exit 1; }
+done
+for s in 'delta section' 'reappraisal session' 'reappraisal'; do
+  if printf '%s\n' "$flat" | grep -qiF -- "$s"; then
+    echo "FAIL: supercomposer SKILL.md still says: $s"; exit 1
+  fi
+done
+grep -q '^## Composer forks' "$skill" || { echo "FAIL: supercomposer SKILL.md missing section: Composer forks"; exit 1; }
+# composer-forks.md: four sections, each with its command line and cwd.
+forks="$(dirname "$skill")/composer-forks.md"
+test -f "$forks" || { echo "FAIL: supercomposer/composer-forks.md missing"; exit 1; }
+section() { awk -v h="## $1" '$0==h{on=1; next} on && /^## /{exit} on{print}' "$forks" | tr '\n' ' ' | tr -s ' '; }
+for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  grep -qx "## $h" "$forks" || { echo "FAIL: composer-forks.md missing heading: ## $h"; exit 1; }
+  body=$(section "$h")
+  printf '%s\n' "$body" | grep -qw 'cwd' || { echo "FAIL: composer-forks.md ## $h never states cwd"; exit 1; }
+  printf '%s\n' "$body" | grep -qF -- '--allowedTools="' \
+    || { echo "FAIL: composer-forks.md ## $h must write --allowedTools=\"...\" (the flag is variadic)"; exit 1; }
+  printf '%s\n' "$body" | grep -qF 'already in the package worktree' \
+    || { echo "FAIL: composer-forks.md ## $h prompt must say it is already in the package worktree"; exit 1; }
+  if [ "$h" = 'Checkpoint' ]; then
+    printf '%s\n' "$body" | grep -qF -- '--fork-session' && { echo "FAIL: the checkpoint is not a fork"; exit 1; }
+    printf '%s\n' "$body" | grep -qF -- '--output-format json' || { echo "FAIL: checkpoint must use --output-format json"; exit 1; }
+    printf '%s\n' "$body" | grep -qF -- '## Checkpoints' || { echo "FAIL: checkpoint id must go to ledger ## Checkpoints"; exit 1; }
+  else
+    printf '%s\n' "$body" | grep -qF -- '--fork-session' || { echo "FAIL: composer-forks.md ## $h lacks --fork-session"; exit 1; }
+    printf '%s\n' "$body" | grep -qF -- '--resume <checkpoint id>' || { echo "FAIL: composer-forks.md ## $h must resume <checkpoint id>"; exit 1; }
+    printf '%s\n' "$body" | grep -qiF 'disk wins' || { echo "FAIL: composer-forks.md ## $h prompt must say disk wins"; exit 1; }
+  fi
+done
+for h in 'Adjudication fork' 'Build-graph fork'; do
+  section "$h" | grep -qF 'No "previously", no "changed from", no changelog' \
+    || { echo "FAIL: composer-forks.md ## $h lacks the current-state phrase"; exit 1; }
+done
+adj=$(section 'Adjudication fork')
+for s in '# Ruling <id>' 'Package commit: <sha|none>' 'Changes design: yes|no' 'Changes contract: yes|no' \
+         '## Ruling' '## Re-read' '## Affected units' ': clarification' 'first task that no longer holds' \
+         'jev ask citation --state <state file>'; do
+  printf '%s\n' "$adj" | grep -qF -- "$s" || { echo "FAIL: adjudication fork missing: $s"; exit 1; }
+done
+qf=$(tr '\n' ' ' < "$forks" | tr -s ' ')
+for s in '# Question <id> — from <name>' '## Question' '## What the package says' '## What I found' '## Options I see' '## Blocking'; do
+  printf '%s\n' "$qf" | grep -qF -- "$s" || { echo "FAIL: composer-forks.md question format missing: $s"; exit 1; }
+done
+mr=$(section 'Merge-review fork')
+for s in 'No drift @ <sha>' 'questions/merge-<unit-slug>-<short-sha>.md'; do
+  printf '%s\n' "$mr" | grep -qF -- "$s" || { echo "FAIL: merge-review fork missing: $s"; exit 1; }
+done
+mr_tools=$(printf '%s\n' "$mr" | sed -n 's/.*--allowedTools="\([^"]*\)".*/\1/p')
+[ -n "$mr_tools" ] || { echo "FAIL: merge-review fork has no --allowedTools list"; exit 1; }
+case ",$mr_tools," in *,Edit,*|*'git commit'*|*'git add'*)
+  echo "FAIL: merge-review fork is read-only on the package; tools were: $mr_tools"; exit 1;; esac
+printf '%s\n' "$(section 'Build-graph fork')" | grep -qF 'Longest chain:' \
+  || { echo "FAIL: build-graph fork must report Longest chain:"; exit 1; }
 desc_len=$(printf '%s' "$desc" | wc -c | tr -d ' ')
 [ "$desc_len" -le 500 ] || { echo "FAIL: description is $desc_len chars (max 500)"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

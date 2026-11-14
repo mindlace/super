@@ -34,10 +34,14 @@ deliberation rides in it.
 
 ## Phase C0 — Mode
 
-If the design slug's ledger exists, this is a **reappraisal**: read the
-ledger, the existing package, and whatever defect record or review reports
-prompted the bounce; the deliverable is an *amended* package plus a delta
-section stating what changed and why. Otherwise this is fresh composition.
+If you were started from one of the prompts in `composer-forks.md` (it names
+a question to rule on, a merge to review, or the build graph to write), you
+are a **composer fork**: follow that prompt and `## Composer forks` below,
+and skip C1–C5. Otherwise this is **fresh composition**: C1 through C5.
+
+Once a package is committed, nobody comes back to this session. Every later
+design question, merge review and graph rewrite runs in a fork of the
+checkpoint made in C5.
 
 ## Phase C1 — Ground truth (before any scoped survey)
 
@@ -138,9 +142,10 @@ each spec, is there a behavioural decision the spec *names* but delegates to
 the implementer whose consequences are visible outside the module? If so,
 the spec must decide it, not name it. This is a reading task for a judging
 agent — do not attempt to score it lexically. The same agent takes the
-longest chain of edges and challenges every edge on it: does the consumer
-need that row, and does the row need everything before it? Fix findings
-inline.
+longest chain of row edges in the specs (the chain the build graph's
+`Longest chain:` line will report) and challenges every edge on it: does the
+consumer need that row, and does the row need everything before it? Fix
+findings inline.
 
 **The build graph.** The specs stay organised the way the system is
 understood; the build graph lists the units operators are assigned, at
@@ -188,12 +193,63 @@ indices in traceability-table order.
 
 ## Phase C5 — Handoff
 
-Commit the package (design doc, specs, tables, survey reports worth keeping).
-Ledger records: package contents and commit, settled decisions, open
-decisions, coverage and traceability pointers. Then **end the session** —
-conduction starts fresh with supersonic:superconductor, which consumes the
-package via its intake phase. Do not begin dispatching operators from this
-session.
+1. **Commit the package** (design doc, specs, tables, survey reports worth
+   keeping). Ledger records: package contents and commit, settled
+   decisions, open decisions, coverage and traceability pointers.
+2. **Integration branch and package worktree.** Create the branch
+   `superconductor/<design-slug>` at that commit and one worktree of it, per
+   the project's worktree convention. This is the package worktree: the
+   checkpoint and every fork run there, and operators read the package from
+   it. Record its path in the ledger.
+3. **Checkpoint.** From the package worktree, start a fresh session with
+   the `## Checkpoint` prompt and command in `composer-forks.md`; it
+   cold-reads the package and stops. Record its session id and model under
+   the ledger's `## Checkpoints`. It is deliberately not this session: a
+   package that cannot be understood cold is a defect to find now.
+4. **Build graph.** Run the `## Build-graph fork` from `composer-forks.md`
+   and wait for it to exit with `Build graph @ <sha>` and its
+   `Longest chain:` line.
+5. **Fresh-eyes check of the chain.** One fresh-eyes agent challenges every
+   edge on the chain the graph's `Longest chain:` line reports: does the
+   consumer need that row, and does the row need everything before it? A
+   chain that differs from the one C4 challenged is itself a finding: the
+   translation added or dropped an edge. Fix findings in the package as
+   current state; if a fix changes a contract row, make a new checkpoint
+   the same way and record it.
+6. **Commit and end the session.** Conduction starts fresh with
+   supersonic:superconductor, which consumes the package via its intake
+   phase. Do not begin dispatching operators from this session.
+
+## Composer forks
+
+A composer fork is a one-shot session: `claude -p --resume <checkpoint id>
+--fork-session`, run from the package worktree. The checkpoint itself is
+frozen: it is never resumed in place and never written to, so every fork
+starts from the same cold read of the package. The prompts and command lines
+are in `composer-forks.md`: `## Checkpoint`, `## Adjudication fork`,
+`## Merge-review fork`, `## Build-graph fork`. As a fork:
+
+- **Disk wins.** Read the package files the job touches as they are on disk
+  before doing anything. Your checkpoint read and the question's quotes may
+  be older; where they disagree with the disk, the disk is the package.
+- **Rule alone, on anything**, including the design's model commitments.
+  Nobody approves a ruling first; drift is corrected after the fact, from
+  `rulings/`.
+- **Write the package as current state.** An amended passage of the design
+  doc, a spec, the contracts or the build graph reads as if it had always
+  said this: no "previously", no "changed from", no changelog section, and
+  no mention of the approach it replaces, of plan tasks or of code already
+  written. Git holds the history. Commit the amendment.
+- **Write the ruling file and end.** The ruling says what the package now
+  says, the sections to re-read, and for each affected running unit either
+  `clarification` or the first task that no longer holds. `rulings/` is the
+  partner's record; no agent loads it as context.
+- **Send no messages.** Whoever started the fork runs it as a background
+  command and reads its output when it exits.
+- **One amending fork at a time.** Adjudication and build-graph forks may
+  amend the package and run one at a time. Merge-review forks are read-only:
+  they write nothing to the package, only a question file when something
+  departs, so they run in parallel.
 
 ## Red flags — stop and re-ground
 
@@ -207,3 +263,7 @@ session.
 - A partner ruling in the design doc without the partner's reasons beside
   it.
 - Two units that can run together with overlapping write sets.
+- "Previously", "changed from", "instead of" or a list of changes in
+  package text. Rewrite the passage as the current state.
+- Resuming the checkpoint without `--fork-session`, or sending it anything.
+  It is never resumed in place.
