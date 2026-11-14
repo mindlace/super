@@ -73,7 +73,7 @@ forbid 'Bash(<test command>:*)'
 # substituted), so the drill's PASS covers the list the skill writes.
 drill="$(dirname "$skill")/../../../../tests/drill_peer_sessions.sh"
 skill_list=$(sed -n 's/.*claude --bg -n <design-slug>-<unit-slug> .*--allowedTools="\([^"]*\)".*/\1/p' "$skill" \
-  | sed -e 's|<sdd scripts dir>|$sdd|g' -e 's|<project command>|true|g')
+  | sed -e 's|<sdd scripts dir>|$sdd|g' -e 's|<project command>|true|g' -e 's|<skill dir>|$skill|g')
 drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
 [ -n "$skill_list" ] && [ "$skill_list" = "$drill_list" ] \
   || { echo "FAIL: drill op_tools does not mirror the skill's launch list"; printf '%s\n%s\n' "$skill_list" "$drill_list"; exit 1; }
@@ -173,7 +173,7 @@ need '- cut <member> to <cut-to sha> for ruling <id>'
 # Routing is write-ahead: a begun line before step 1, a done line after step 5, and every
 # step skips what the ledger shows done, so resume routes an unfinished ruling from the top.
 for s in '- routing <id>: rulings/<id>.md, commit <sha|none>' '- relayed <id> to <session name>' \
-         '- build graph for <id> @ <sha>' '- routed <id>' '[| ruling <id>]'; do
+         '- build graph for <id> @ <sha|none>' '- routed <id>' '[| ruling <id>]'; do
   printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
     || { echo "FAIL: ledger format missing: $s"; exit 1; }
 done
@@ -255,7 +255,7 @@ need 'the unit commit that `## Integration` step 1 merged, never the merge commi
 need 'never the merge commit on the integration branch'
 # No rebase; a dead owner on a failing merge is restarted by the restart rule.
 forbid 'or rebase on'
-need 'restart it as `## Supervision`, Operator death, says, then send it the fix-round'
+need 'handle it as `## Supervision`, Operator death, says; the restart'"'"'s resends carry the fix round'
 forbid 'with the failure output path added'
 forbid "that merge's commit"
 need 'Merge superconductor/<design-slug> into your branch first, then bring the tasks'
@@ -275,67 +275,113 @@ for s in 'Bounce rule' 'jev ask bounce' '**bounce**' 'Adjudicate yourself' 'exac
   forbid "$s"
 done
 
-# Stall detection. Messages are hints; the heartbeat reconciles from state on a bounded timer.
+# Stall detection. Messages are hints; the heartbeat reconciles from state, through beat.sh.
 need 'Messages are hints; state is the truth.'
-once() { n=$(grep -cF -- "$1" "$skill" || true); [ "$n" -eq 1 ] || { echo "FAIL: SKILL.md must set $1 exactly once (found $n)"; exit 1; }; }
-once 'BEAT=600'
-once 'STALL_BEATS=2'
-need "perl -e '(\$f,\$s)=@ARGV; open(T,q(>),\$f); print T \$\$, q( ), time+\$s, qq(\\n); close T; exec(q(sleep),\$s)' <ledger dir>/timer <seconds>"
-need 'pgrep -F <ledger dir>/timer -x sleep'
-need 'pkill -F <ledger dir>/timer -x sleep'
-need 'The exit of a timer you stopped is not a beat'
-need 'Then run one beat (`## Supervision`, Heartbeat), which starts the heartbeat timer'
-need 'Ledger a beat only through the lines of what it changed'
+need '`BEAT=600` seconds, `STALL_BEATS=1`, and the forks'"'"' `FORK_LIMIT=2700`'
+for s in 'BEAT=' 'STALL_BEATS=' 'FORK_LIMIT='; do
+  grep -qE "^ *(- )?$s[0-9]" "$skill" && { echo "FAIL: SKILL.md must not set $s itself; beat.sh holds it"; exit 1; }
+done
+test -x "$(dirname "$skill")/beat.sh" || { echo "FAIL: beat.sh missing or not executable"; exit 1; }
+# The beat is one command; its lines are specified here.
+need 'A beat** is one command, `sh <skill dir>/beat.sh <ledger dir>`'
+need 'A beat with nothing to do is two tool calls whatever the number of units'
+need 'unit <unit-slug> status <status> session alive|absent state <listed status> evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n>'
+need 'row <unit-slug> <row id> task <N> head <sha7>'
+need 'fork <fork name> running|gone failures <n>'
+need 'beat: watched <n> absent <n> evidence <n> due <n> overdue <n> rows <n> forks running <n> gone <n> fixrounds <n> deferred <n> questions <n> resends <n> timer running|none'
+need 'sh <skill dir>/beat.sh <ledger dir> timer <seconds>'
+need 'the exit of a timer you stopped is not a beat'
+need 'Then run one beat (`## Supervision`, Heartbeat), which starts the heartbeat timer if anything can move'
 need 'The heartbeat is not a keep-warm ping: every beat does the whole reconcile'
-# Progress evidence is read mechanically, with commands the conductor is allowed to run.
-need 'git -C <unit worktree> rev-parse HEAD > <ledger dir>/assignments/<unit-slug>.beat'
-need "find <unit worktree> \\( -name .git -o -name node_modules \\) -prune -o -type f -newer <beat file> -print -quit"
-need '(`-mmin +19`)'
-need '(`-mmin +9`)'
-need 'touch <ledger dir>/assignments/<unit-slug>.asked'
-need 'The restart counts as a death'
+forbid 'pgrep -F <ledger dir>/timer'
+forbid '-mmin +'
+# P1: one quiet beat triggers the ask; the bounds are stated.
+need 'no evidence for `STALL_BEATS` × `BEAT` (10 minutes)'
+need 'So a silent operator is asked 10 to 20 minutes after its last evidence'
+# I7: the timer runs only while something can move without the partner.
+need 'Keep exactly one heartbeat timer while something can move without your partner'
+need 'When nothing can move, start no timer'
+need 'start the timer if none is running and something can move'
+need 'Other wakes do not reset a running timer'
+# P4/M10: a handled message rewrites the beat file at once.
+need 'when you handle one, run `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>`'
+need 'when you handle it, run `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>`'
+# I3: Phase 0 restarts beat files and drops old asks before its first beat.
+need 'sh <skill dir>/beat.sh <ledger dir> resume'
+need 'drops every open status ask, so no ask or quiet spell the dead conductor left is acted on'
 need "\`Delivers row <row id>\`"
-need '`Task <N>: complete (commits <base7>..<head7>` line'
-need 'A file in `<ledger dir>/questions/` with no `## Questions` line is a `question` message'
+need '`Task <N>: complete (commits <base7>..<head7>`'
+need 'but only while no amending fork runs and no ruling is being routed'
+need 'A `question` line: a file in `<ledger dir>/questions/` with no `## Questions` line'
+need 'A `resend` line: a `- restarted` or `- relaunched` line'
 need 'append `- resent to <session name>`'
+# I6: fix rounds are watched, restarted and resent.
+need 'and the fix-round message of its open `fix round` line'
+need 'or whose fix round is open'
+need 'the restart'"'"'s resends carry the fix round'
 need 'Your own commands.'
-for c in perl pgrep pkill find touch; do need "\`$c\`"; done
+need '`kill` (a hung process an investigation names)'
 # notify_when_idle is an optimisation, never the only detection.
 need 'It is an optimisation only'
 forbid 'Learn of idle with `notify_when_idle`, never by polling'
-# Forks run under a time limit, are ledgered write-ahead, checked on exit, relaunched once.
+# Forks: limit through beat.sh, write-ahead ledger, stale exits ignored, relaunched once.
 need 'Ledger `- fork <fork name> started <date-time>` under `## Forks`, then run its command line'
 need 'the time limit, `env -C "<package worktree>"`'
-need 'When a fork exits'
 need 'exit status 124'
+need 'this is a stale notice from an earlier attempt: do nothing'
 need 'No output, first time:'
 need 'No output, second time'
 need 'a fork that failed twice'
-need 'pkill -TERM -g <that number>'
+need 'stop-fork <name>`, which sends TERM to its process group, waits, escalates to KILL'
+need 'A read-only fork (`review-…`, `checkpoint-<n>`) writes nothing to the package: leave it running'
 need 'exited: stopped at resume'
-need '`FORK_LIMIT` in `composer-forks.md`'
+need 'holds while the fork'"'"'s watchdog'
+forbid 'holds even when no conductor is running'
 need 'If it failed twice, append `- build graph for <id> @ none`'
 need '`checkpoint-<n>`, whose output is a session id'
-for s in '- fork <fork name> started <date-time>' '- fork <fork name> exited <status>: output | no output | stopped at resume' \
-         '- status asked <unit-slug>' '- stalled <unit-slug>' '- restarted <unit-slug>: death|stall' \
+# P2/P3/I1: the escalation ladder, counted since the newest merge; no stopped on a restart.
+need '**Rung 1: restart.**'
+need '**Rung 2: investigate, apply the remedy, restart.**'
+need '**Rung 3: stop.** Do not restart.'
+need 'claude logs <short id>'
+need 'cause: denied command <command> | usage limit | hung process <pid> <command> | defect <the task and what it keeps hitting> | unknown'
+need 'It reads only, so a death mid-investigation just dispatches it again'
+need 'A merge resets the ladder'
+need 'Ledger the unit `stopped` only when it will not be restarted'
+need 'A restart the last conductor ledgered but never saw through is not a new rung'
+need 'Ledger the restart under `## Supervision` before the launch'
+forbid 'second consecutive'
+forbid 'Ledger it as `stopped`.'
+for s in '- fork <fork name> started <date-time>' '- fork <fork name> exited [<status>]: output | no output | stopped at resume' \
+         '- status asked <unit-slug>' '- stalled <unit-slug>' \
+         '- restarted <unit-slug>: <death|stall|cause>, rung <n>, since <sha|start>' \
+         '- restarted <unit-slug>: usage limit, since <sha|start>' \
+         '- investigated <unit-slug>: <cause> — <remedy>, since <sha|start>' \
+         '- stopped <unit-slug>: rung 3, since <sha|start>' '- plan <unit-slug>: <plan path> at <sha>' \
          '- resent to <session name>' '- notified <session name>: sibling <sibling name>' \
-         '- fix round <unit-slug> @ <sha>: <one line>'; do
+         '- fix round <unit-slug> @ <sha>: <one line>; output <path>' '- build graph for <id> @ <sha|none>'; do
   printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
     || { echo "FAIL: ledger format missing: $s"; exit 1; }
 done
-# Operators wait on leaves in the background, which the launch list must allow.
-need ',TaskStop,Bash(sleep:*),'
-need '- Allowed for waiting: sleep (run in the background), TaskStop'
+# Operators wait on leaves in the background, which the launch list must allow, narrowly.
+need ',TaskStop,Bash(sleep:*),Bash(sh <skill dir>/beat.sh changed:*),'
+need '- Allowed for waiting: sleep (run in the background), TaskStop, sh <skill dir>/beat.sh changed'
 # Messages: status reply, denied command, anything else; repeats are idempotent.
 need '| `status: plan <plan path> at <sha> \| none;'
 need '| `need command: <command> for task <N>` |'
-need '| Anything else | Handled as a `question`.'
+need 'A message that asks nothing (an acknowledgement, a report) is progress evidence only'
+need 'and ledger it `from <unit-slug>`, so its ruling relay goes to that operator'
+# I4: a held, routed question gets its relay again.
+need 'one with a `routed <id>` line gets its ruling relay again'
+# M9: only the resume ask asks for resends.
+need '| Resume status ask (Phase 0) |'
 need 'act on each only for what the ledger does not already show done'
 need 'never hold a task waiting on its reply'
 need 'Siblings may message each other by name, but nothing depends on it'
 # Bands: the heartbeat is the next event; a stopped unit frees its slot.
 need 'the next beat is the next event'
 need 'its slot goes to the next unit'
+need 'A restart or a relaunch keeps the unit'"'"'s status and its slot'
 forbid 'start no wait: run `budget.sh` again at the next event'
 # running was never set: it is not a status.
 forbid 'planning, admitted or running'

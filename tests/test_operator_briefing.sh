@@ -62,10 +62,19 @@ require 'restart you with a longer list'
 require 'run_in_background: true'
 require 'The dispatch result gives its'
 require 'do not use'
-require 'background `sleep 600`'
-require 'has run 60 minutes with no change in your worktree'
+# P1: stretches of 300 s, so a conductor ask is answered within one beat.
+require 'background `sleep 300`'
+forbid 'sleep 600'
+require 'answered within five minutes'
+# I5: a leaf's progress is any file written in the worktree, read by beat.sh changed.
+require 'changed <ledger dir>/assignments/<unit-slug>.stretch'
+require 'nothing at the last two wakes (ten minutes with no file written)'
+forbid 'git status --short'
 require '120 minutes in all'
-require 'Stop a failed leaf with `TaskStop`, dispatch it once'
+require 'Stop a failed leaf with `TaskStop` and dispatch it once more'
+require 'the worktree holds the stopped leaf'"'"'s uncommitted edits'
+# M9: resends only after a conductor restart.
+require 'If the check says the conductor restarted'
 forbid 'Dispatch them foreground'
 # Seven messages: status reply and denied command added; sends are retried; nothing waits on the conductor.
 require 'only with these seven'

@@ -17,6 +17,8 @@ main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
 wt="$main/.claude/worktrees/drill-peer-$pid"
 branch="drill/peer-$pid"
 scratch=$(mktemp -d)
+# the superconductor skill's directory, where beat.sh lives
+skill=$(cd "$(dirname "$0")/../plugins/supersonic/skills/superconductor" && pwd -P)
 
 # ids of every active session whose name starts with this drill's prefix
 drill_ids() {
@@ -52,7 +54,7 @@ for k,v in d.get("plugins",{}).items():
 if [ -n "$sdd" ] && [ -f "$sdd/sdd-workspace" ]; then pass "sdd scripts dir ($sdd)"; else fail "sdd scripts dir ('$sdd')"; fi
 # the operator is launched with the superconductor skill's launch template (project command
 # replaced by the harmless Bash(true:*)); the ledger dir is outside the worktree
-op_tools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,TaskStop,Bash(sleep:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash $sdd/sdd-workspace:*),Bash(bash $sdd/task-brief:*),Bash(bash $sdd/review-package:*),Bash(true:*)"
+op_tools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,TaskStop,Bash(sleep:*),Bash(sh $skill/beat.sh changed:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash $sdd/sdd-workspace:*),Bash(bash $sdd/task-brief:*),Bash(bash $sdd/review-package:*),Bash(true:*)"
 ledger="$scratch/ledger"
 mkdir -p "$ledger"
 ledger=$(cd "$ledger" && pwd -P)

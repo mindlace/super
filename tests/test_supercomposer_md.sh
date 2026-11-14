@@ -149,11 +149,11 @@ for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'
   section "$h" | grep -qF -- 'env -C "<package worktree>" claude -p' \
     || { echo "FAIL: ## $h command must launch with env -C \"<package worktree>\""; exit 1; }
 done
-# Every fork and the checkpoint run under the time limit, set once; output lines go to a file.
-n=$(grep -cF 'FORK_LIMIT=2700' "$forks" || true); [ "$n" -eq 1 ] || { echo "FAIL: FORK_LIMIT=2700 must be set exactly once (found $n)"; exit 1; }
-grep -qF 'setpgrp; exec(@ARGV) or exit 127' "$forks" || { echo "FAIL: time limit must run the fork in its own process group"; exit 1; }
-grep -qF 'kill(TERM=>-$p)' "$forks" || { echo "FAIL: time limit must stop the whole process group"; exit 1; }
-grep -qF '<fork limit> <ledger dir>/prompts/<fork name>.pid' "$forks" || { echo "FAIL: time limit must record the group in <fork name>.pid"; exit 1; }
+# Every fork and the checkpoint run under beat.sh's time limit; output lines go to a file.
+grep -qF 'sh <supersonic plugin dir>/skills/superconductor/beat.sh <ledger dir> fork <fork name>' "$forks" \
+  || { echo "FAIL: <time limit> must be beat.sh's fork command"; exit 1; }
+grep -qF 'stop-fork <fork name>' "$forks" || { echo "FAIL: composer-forks.md must name stop-fork"; exit 1; }
+grep -qF 'perl -e' "$forks" && { echo "FAIL: the time limit lives in beat.sh, not inline perl"; exit 1; }
 for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
   section "$h" | grep -qF -- '<time limit> env -C "<package worktree>" claude -p' \
     || { echo "FAIL: ## $h command must start with <time limit>"; exit 1; }

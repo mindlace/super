@@ -24,20 +24,22 @@ To run one:
    (a plain `Write` allow also wrote outside the cwd in the drill; the flag makes it
    explicit). Forks run as background Bash commands, so whoever started one is told when
    it exits.
-4. Every command line starts with the time limit, `FORK_LIMIT=2700` seconds (45 minutes),
-   which is set here and nowhere else. `<time limit>` in each command below stands for
-   exactly this, with `<fork limit>` replaced by that number:
+4. Every command line starts with the time limit. `<time limit>` in each command below
+   stands for exactly
 
-       perl -e '($t,$f)=splice(@ARGV,0,2); $p=fork; if(!$p){setpgrp; exec(@ARGV) or exit 127} open(P,q(>),$f); print P qq($p\n); close P; $k=sub{kill(TERM=>-$p); sleep 5; kill(KILL=>-$p); exit $_[0]}; $SIG{ALRM}=sub{$k->(124)}; $SIG{$_}=sub{$k->(143)} for qw(TERM HUP INT); alarm $t; waitpid($p,0); exit($?>>8)' <fork limit> <ledger dir>/prompts/<fork name>.pid
+       sh <supersonic plugin dir>/skills/superconductor/beat.sh <ledger dir> fork <fork name>
 
-   It runs the fork in a process group of its own and writes that group's number to
-   `<fork name>.pid`. When `FORK_LIMIT` passes, or when it is itself sent TERM, HUP or INT,
-   it stops the whole group (TERM, then KILL five seconds later) and exits 124 or 143;
-   otherwise it exits with the fork's own status. The group matters: `claude` may be a
-   wrapper script whose child is the real session, and stopping only the wrapper would
-   leave the session running. Stock macOS has no `timeout` command, and it ships `perl`.
-   Whoever resumes a run after its conductor died stops a fork whose group `pgrep -g <the
-   number in its .pid file>` still lists with `pkill -TERM -g <that number>`.
+   where `<supersonic plugin dir>` is this plugin's installed directory. It runs the rest
+   of the line in a process group of its own, writes that group's number to `<ledger
+   dir>/prompts/<fork name>.pid`, and stops the whole group (TERM, then KILL five seconds
+   later) once `FORK_LIMIT` passes, 2700 seconds (45 minutes), set once at the top of
+   `beat.sh`. It exits 124 when the limit stopped the fork, 128 plus the signal when the fork
+   died by a signal, and the fork's own status otherwise. The group matters: `claude` may be
+   a wrapper script whose child is the real session, and stopping only the wrapper would
+   leave the session running. Stock macOS has no `timeout` command. The limit holds while
+   that `beat.sh` process lives; whoever resumes a run after its conductor died stops a
+   leftover amending fork with `sh <supersonic plugin dir>/skills/superconductor/beat.sh
+   <ledger dir> stop-fork <fork name>`.
 5. A fork whose output is a printed line writes it to `<ledger dir>/prompts/<fork
    name>.out`, so the line survives the session that started it.
 

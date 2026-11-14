@@ -27,14 +27,17 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
   end every dispatch prompt with `Your final message is your report; do not use
   SendMessage.` Specify the model explicitly on every dispatch (SDD's own rule).
 - **Wait in bounded stretches.** While a leaf runs and you have no local work, start one
-  background `sleep 600` (Bash, run in the background) unless one is already running, and
-  end your turn. A leaf's completion, a message or the sleep's exit wakes you. On each
-  wake, act on any message first, then check every leaf you have no result for. A leaf
-  has failed when it has run 60 minutes with no change in your worktree over the last
-  stretch (`git status --short` and `git log -1 --format=%H` the same as at the stretch
-  before), or 120 minutes in all. Stop a failed leaf with `TaskStop`, dispatch it once
-  more from the same brief, and if that one fails too, the task is BLOCKED: file a
-  question (`## Questions`).
+  background `sleep 300` (Bash, run in the background) unless one is already running, and
+  end your turn. A leaf's completion, a message or the sleep's exit wakes you, so a
+  message from `<conductor name>` is answered within five minutes. On each wake, act on
+  any message first, then check every leaf you have no result for: run `sh <beat.sh>
+  changed <ledger dir>/assignments/<unit-slug>.stretch` (`<beat.sh>` is the `beat.sh`
+  path your assignment's `Allowed for waiting` line names), which prints a file in your
+  worktree changed since its last run, or nothing. A leaf has failed when it has run 60 minutes and that printed
+  nothing at the last two wakes (ten minutes with no file written), or when it has run
+  120 minutes in all. Stop a failed leaf with `TaskStop` and dispatch it once more from
+  the same brief, telling it that the worktree holds the stopped leaf's uncommitted edits.
+  If that one fails too, the task is BLOCKED: file a question (`## Questions`).
 - **Your permissions are fixed at launch.** The permission mode, git commands, SDD scripts,
   project commands and waiting tools in your assignment are all you have. Run each SDD
   script as `bash <the absolute path your assignment names> <args>`: any other spelling is
@@ -165,7 +168,7 @@ messages, each ending in its ask:
 | A produced row passes review | `row <row id> passed review at <sha> on <branch>. Merge it and admit its consumers.` |
 | A question is filed | `question <id>: <ledger dir>/questions/<id>.md — <one line>. Get it ruled on and send me the ruling.` |
 | Every task passed review | `complete: <branch>, <commit range>; <one-line test summary>; deferred minors: <list or none>; SDD ledger <path>. Merge <name>.` |
-| `<conductor name>` sends a status check | `status: plan <plan path> at <sha> \| none; passed review through task <N> \| none; working on task <N> \| none; held on <question ids, command <command>, admission, or nothing>. Act on what I am held on.` Then send again every hand-back, question and complete you have sent. |
+| `<conductor name>` sends a status check | `status: plan <plan path> at <sha> \| none; passed review through task <N> \| none; working on task <N> \| none; held on <question ids, command <command>, admission, or nothing>. Act on what I am held on.` If the check says the conductor restarted, then also send again every hand-back, question and complete you have sent. |
 | A tool call was denied | `need command: <command> for task <N>. Relaunch <name> with it allowed, or tell me which allowed command does the job.` |
 
 Do not message for routine progress.
