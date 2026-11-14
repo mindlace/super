@@ -307,14 +307,31 @@ while [ $i -lt 15 ]; do
 done
 observed "--bg launch with an invalid model: exit $rc, printed: $(head -c 200 "$scratch/launch-bad.log" | tr '\n' ' '); in the session list: $seen"
 [ "$seen" != never ] && sleep 10 && observed "the invalid-model session 10 s later: $(agent_field "$bad" status)/$(agent_field "$bad" state)"
-# 7. Relaunch under the name of that failed session, as a restart would: what `claude --bg`
-#    does, and what the session list holds for the name afterwards (beat.sh stops a failed
-#    entry before reusing its name, on the assumption that it may block the name).
-env -C "$wtp" claude --bg -n "$bad" --model haiku --permission-mode acceptEdits --allowedTools="Read" "Reply OK, then end your turn." >"$scratch/relaunch-bad.log" 2>&1 </dev/null; rc=$?
-sleep 10
-observed "--bg relaunch under a failed session's name: exit $rc, printed: $(head -c 200 "$scratch/relaunch-bad.log" | tr '\n' ' '); entries now: $(claude agents --json 2>/dev/null | python3 -c '
+# 7. The failed entry under that name: stop it the way the skill does (beat.sh stop, which
+#    stops by short id and looks a bounded number of times), record whether it leaves the
+#    list (an observation only), then relaunch under the same name and check that beat.sh
+#    takes the relaunched session, not the failed entry.
+dl="$scratch/dproj/.superpowers/superconductor/drill-$pid"; mkdir -p "$dl"
+printf '# Superconductor ledger — design: drill\n\n## Units\n- bad: %s — status: admitted (branch x, worktree %s, start 0000000, needs: none, produces: none)\n\n## Supervision\n\n## Questions\n\n## Forks\n\n## Integration\n' "$bad" "$wtp" > "$dl/ledger.md"
+observed "beat.sh stop on the failed entry: $(sh "$skill/beat.sh" "$dl" stop bad failed 2>&1 | tr '\n' ' ')"
+observed "entries under the name after the stop: $(claude agents --json 2>/dev/null | python3 -c '
 import json,sys
 print([(a.get("id"),a.get("status"),a.get("state")) for a in json.load(sys.stdin) if a.get("name")==sys.argv[1]])' "$bad")"
+env -C "$wtp" claude --bg -n "$bad" --model haiku --permission-mode acceptEdits --allowedTools="Read" "Reply OK, then end your turn." >"$scratch/relaunch-bad.log" 2>&1 </dev/null; rc=$?
+lr=$(sh "$skill/beat.sh" "$dl" launched bad 2>&1); lrc=$?
+observed "--bg relaunch under a failed session's name: exit $rc, printed: $(head -c 200 "$scratch/relaunch-bad.log" | tr '\n' ' '); beat.sh launched: exit $lrc, $lr; entries now: $(claude agents --json 2>/dev/null | python3 -c '
+import json,sys
+print([(a.get("id"),a.get("sessionId"),a.get("status"),a.get("state")) for a in json.load(sys.stdin) if a.get("name")==sys.argv[1]])' "$bad")"
+want=$(claude agents --json 2>/dev/null | python3 -c '
+import json,sys
+l=[a for a in json.load(sys.stdin) if a.get("name")==sys.argv[1] and "failed" not in (a.get("state"),a.get("status"))]
+print(l[0].get("sessionId","") if l else "")' "$bad")
+got=$(cat "$dl/assignments/bad.session" 2>/dev/null)
+rep=$(sh "$skill/beat.sh" "$dl" 2>/dev/null | grep '^unit bad ')
+observed "beat.sh report for the relaunched name: $rep"
+if [ -n "$want" ] && [ "$got" = "$want" ] && printf '%s\n' "$rep" | grep -q ' session alive '; then
+  pass "beat.sh takes the relaunched session under a reused name ($got)"
+else fail "beat.sh under a reused name (recorded '$got', live entry '$want', report: $rep)"; fi
 
 # --- stop ---
 claude stop "$op" >"$scratch/stop-op.log" 2>&1; echo "INFO stop by name ($op): exit $? $(head -c 120 "$scratch/stop-op.log")"
