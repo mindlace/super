@@ -9,7 +9,7 @@ export interface GitFileTimes {
 }
 
 /**
- * Per-file times from `git log --format=%x01%ct --name-status -M` output
+ * Per-file times from `git log --format=%x01%at --name-status -M` output
  * (newest commit first). Keys are repo-relative paths as git prints them.
  * Walks oldest-first so each file's first add is `created` and its last
  * touch `updated`; renames carry the origin's creation time; deleted files
@@ -55,7 +55,7 @@ export async function listDocTimes(
     '-c',
     'core.quotePath=false',
     'log',
-    '--format=%x01%ct',
+    '--format=%x01%at',
     '--name-status',
     '-M',
     '--',

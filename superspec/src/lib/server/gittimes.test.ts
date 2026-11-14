@@ -61,10 +61,17 @@ describe('listDocTimes', () => {
         'log',
         '--name-status',
         '-M',
-        '--format=%x01%ct'
+        '--format=%x01%at'
       ])
     );
     expect(args.at(-1)).toBe('docs/x');
+  });
+
+  it('dates by author time (%at), not committer time (%ct), so rebases do not re-date docs', async () => {
+    let args: string[] = [];
+    await listDocTimes('/r', 'docs/x', async (_r, a) => ((args = a), ''));
+    expect(args).toContain('--format=%x01%at');
+    expect(args.join(' ')).not.toContain('%ct');
   });
 
   it('keys by absolute path', async () => {
