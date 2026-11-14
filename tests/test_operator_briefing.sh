@@ -42,7 +42,13 @@ require 'The kept commits stand and are not redone'
 require 'existing code'
 require 'covering only what remains after the kept'
 # ...and then splits lanes and stops at plan ready like any other plan.
-require 'then continue from step 4.'
+require 'Then continue from step 4.'
+# The replacement plan takes a new path, so SDD never adopts the superseded plan's workspace.
+require 'at a new path, never the superseded plan'
+require 'SDD'
+require 'keys its workspace to the plan'
+# Every merge of the integration branch into the operator's branch is --no-ff.
+require 'git merge --no-ff --no-edit <that branch>'
 forbid 'and run SDD on that plan'
 # Waited-on rows are planned early.
 require 'as early as their own dependencies allow'

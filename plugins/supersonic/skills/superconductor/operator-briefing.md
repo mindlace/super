@@ -34,7 +34,9 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
 
 1. **You are already in your worktree** (the assignment's `Your worktree`). That satisfies
    the worktree rule. Do not create another, and do not invoke
-   `superpowers:using-git-worktrees`.
+   `superpowers:using-git-worktrees`. Whenever `<conductor name>` asks you to merge the
+   integration branch into yours, run `git merge --no-ff --no-edit <that branch>`, never a
+   fast-forward: the conductor reads your branch's first-parent line as your own commits.
 2. **Read the package from `<package worktree>`**, never from the copy on your own branch,
    which may be older. The spec sections your unit implements, the design doc and the
    contracts all come from there.
@@ -51,11 +53,14 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
    **If your assignment's `Replaces:` line is not `none`**, you replace an earlier operator
    on this unit, and that line names the kept commits and the superseded plan:
    - Your first commit deletes the superseded plan file (`git rm <plan path>`, then
-     `git commit`). Do not read it for guidance, before or after.
+     `git commit`). Do not read it for guidance, before or after. If your branch no longer
+     has that file, it is already deleted.
    - The kept commits stand and are not redone. Treat them as existing code, like any other
      code in the repo, never as a prior approach to describe, compare against or comment on.
    - Write a new plan from the current spec covering only what remains after the kept
-     commits, the same way as above, then continue from step 4.
+     commits, the same way as above, at a new path, never the superseded plan's path: SDD
+     keys its workspace to the plan's path, and the superseded plan's workspace is still in
+     your worktree. Then continue from step 4.
 4. **Split lanes.** Read the plan as a graph. If it contains task groups with no
    dependency edge between them and no file in common, you are one serial lane: keep the
    group with the lowest-numbered task, and send one `hand-back` per other group (template

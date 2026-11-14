@@ -148,7 +148,23 @@ forbid 'and `## Affected units` lists any unit, run'
 # Restarts keep their plan; branches are brought up to date before a launch.
 need "\`Plan:\` naming the plan it already wrote"
 need 'Bringing a branch up to date'
-need 'merge --no-edit superconductor/<design-slug>'
+need 'merge --no-ff --no-edit superconductor/<design-slug>'
+forbid 'merge --no-edit superconductor/<design-slug>'
+# A unit's start is HEAD after the bring-up merge; every merge into a unit branch is --no-ff,
+# so the revert's --first-parent range never reaches integration-branch commits.
+need 'just before the first launch, after any bring-up-to-date merge'
+need 'Every merge of the integration branch into a unit branch is `--no-ff`'
+forbid 'the commit its worktree was created at'
+# A restart names only a plan present at the branch head, never the superseded one.
+need 'Name only a plan file present at the branch head'
+need 'never the superseded plan its `Replaces:` line names'
+need '`Plan:` stays `none` and `Replaces:` stays as it is'
+forbid 'If no plan was committed yet'
+# Resume reconciles the package worktree before restarting operators, interrupted reverts included.
+need 'Reconcile the package worktree first'
+need 'revert --abort`, which takes out the reverts'
+need 'the untested merge at the branch'"'"'s head that Phase 0 takes out'
+need 'If that line gives no reset time you can read, start no wait'
 need 'Merge superconductor/<design-slug> into your branch first, then bring the tasks'
 # The tally re-checkpoints on the event, not the standing state.
 need "brought a class's frame-defect tally to three"

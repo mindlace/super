@@ -57,8 +57,28 @@ If `.superpowers/superconductor/<design-slug>/ledger.md` exists in the
 target project for this design, reconcile it against reality before
 anything else: `claude agents --json`, `git worktree list`,
 `git branch --list`, the integration branch's log, and each unit's SDD
-ledger under `.superpowers/sdd/` in its worktree. For every unit whose
-ledger status is planning, admitted or running:
+ledger under `.superpowers/sdd/` in its worktree. Reconcile the package
+worktree first: a restart merges the integration branch into the unit's
+branch, so that branch must hold only tested work.
+
+- **Package worktree.** If `git -C <package worktree> status` shows a merge
+  in progress, run `git -C <package worktree> merge --abort`. If it shows a
+  revert in progress, run `git -C <package worktree> revert --abort`, which
+  takes out the reverts that sequence already committed, and do that
+  replacement's revert again (`## Composer forks`, Replacing an operator,
+  step 4). Uncommitted edits there are a dead fork's: discard them (`git -C
+  <package worktree> checkout -- .` and `git -C <package worktree> clean
+  -fd`). Revert commits at the branch's head with no `- reverted` line were
+  never tested: run the suite and ledger the `- reverted` line with its
+  result; a failing suite is a question, as in that step. A merge commit on
+  the integration branch with no `## Integration` line was never tested:
+  run the suite (`## Integration`, step 2) and ledger it if it passes. Such
+  a merge is the branch's head, since each merge is ledgered before the
+  next: if the suite fails, take it out with `git -C <package worktree>
+  reset --hard <merge sha>^1` and send the fix round as `## Integration`,
+  step 4, says.
+
+Then, for every unit whose ledger status is planning, admitted or running:
 
 - **Listed by its name in `claude agents --json`: live.** Keep it. Never
   start a second session under a live name. Send it the status ask
@@ -67,23 +87,14 @@ ledger status is planning, admitted or running:
   saw.
 - **Absent from the list: dead.** Restart it at once, without asking, as
   `## Supervision`, Operator death, says: its assignment's `Plan:` names
-  the plan it already wrote, its branch is brought up to date, and it is
-  launched with the same name in its existing worktree. Its SDD ledger
+  the plan it already wrote, if one qualifies, its branch is brought up to
+  date, and it is launched with the same name in its existing worktree. Its SDD ledger
   makes mid-plan resume cheap. Ledger the restart; a restart counts as a
   death for the second-death rule.
 
-Then reconcile what a conductor that ended mid-run can leave behind:
+Then reconcile the rest of what a conductor that ended mid-run can leave
+behind:
 
-- **Package worktree.** If `git -C <package worktree> status` shows a merge
-  in progress, run `git -C <package worktree> merge --abort`. Uncommitted
-  edits there are a dead fork's: discard them (`git -C <package worktree>
-  checkout -- .` and `git -C <package worktree> clean -fd`). A merge commit
-  on the integration branch with no `## Integration` line was never tested:
-  run the suite (`## Integration`, step 2) and ledger it if it passes. Such
-  a merge is the branch's head, since each merge is ledgered before the
-  next: if the suite fails, take it out with `git -C <package worktree>
-  reset --hard <merge sha>^1` and send the fix round as `## Integration`,
-  step 4, says.
 - **Questions.** For each `## Questions` line with no ruling commit
   recorded: if `rulings/<id>.md` exists, route it now (`## Composer forks`,
   When an adjudication fork exits); otherwise start its adjudication fork
@@ -182,8 +193,12 @@ thresholds are set once, at the top of `budget.sh`: `LOWER=70`, `UPPER=90`,
 **Waiting for the reset.** When the band is `high` and any unit is
 deferred, start one background Bash command that sleeps until the reset
 time `budget.sh` reports for the window at or above `UPPER` (its `resets
-<time>` on that window's line: `sleep <seconds until then>`), unless one is
-already running. When it exits, run `budget.sh` and re-derive admission.
+<time> (in <h>h<mm>m)` on that window's line: `sleep <seconds until
+then>`), unless one is already running. When it exits, run `budget.sh` and
+re-derive admission. If that line gives no reset time you can read, start
+no wait: run `budget.sh` again at the next event (an operator message, an
+idle notice or a fork exit) and apply the `middle` band's rule until a
+reset time is readable.
 This wake has real work behind it, deferred units to start, so it is not a
 keep-warm ping (`## Context economics`).
 
@@ -273,16 +288,22 @@ result.
      keeps the running count.
    - `--add-dir="<ledger dir>"` declares the one directory outside the
      worktree the operator writes: its question files.
-4. **Ledger** the unit line (`## Units`), with `start <sha>`: the commit
-   its worktree was created at (`git -C <unit worktree> rev-parse HEAD`
-   before launch); a restart, relaunch or replacement in an existing
-   worktree keeps the `start` it has. Ledger its `## Cost` start: the timestamp and the
+4. **Ledger** the unit line (`## Units`), with `start <sha>`: `git -C
+   <unit worktree> rev-parse HEAD` just before the first launch, after any
+   bring-up-to-date merge (for a hand-back sibling, that merge's commit); a
+   restart, relaunch or replacement in an existing worktree keeps the
+   `start` it has. Ledger its `## Cost` start: the timestamp and the
    `SEVEN_DAY` percentage from the `budget.sh` run.
 
 **Bringing a branch up to date.** Before you launch a hand-back sibling, a
 replacement or a restart into an existing branch, run `git -C <unit
-worktree> merge --no-edit superconductor/<design-slug>`, so the branch holds
-every row its `Needs rows` line calls merged. If the merge does not complete
+worktree> merge --no-ff --no-edit superconductor/<design-slug>`, so the
+branch holds every row its `Needs rows` line calls merged. Every merge of
+the integration branch into a unit branch is `--no-ff`, yours and the
+operator's (`operator-briefing.md`): a fast-forward would put the
+integration branch's own commits on the unit's first-parent line, and the
+revert of cut work (`## Composer forks`, Replacing an operator, step 4)
+would take them out too. If the merge does not complete
 (a conflict, or uncommitted changes in the way), run `git -C <unit worktree>
 merge --abort` if a merge is in progress, launch anyway, and send the
 operator the mechanical ruling `Merge superconductor/<design-slug> into your
@@ -300,7 +321,7 @@ the status ask.
 
 | Message | You do |
 |---|---|
-| `plan ready: <plan path> at <sha>` | Ledger the plan. Admit the unit when its rows have merged and the band allows. |
+| `plan ready: <plan path> at <sha>` | If `<plan path>` is the superseded plan its assignment's `Replaces:` line names, send the mechanical ruling `Move your plan to a new path and commit it; SDD keys its workspace to the plan's path. Go on by sending plan ready again.` Otherwise ledger the plan. Admit the unit when its rows have merged and the band allows. |
 | `row <row id> passed review at <sha> on <branch>` | Merge the branch up to `<sha>` (`## Integration`). Once the merge passes its tests, start a merge-review fork, then re-derive admission (Phase 2) and admit every unit that was waiting only on rows now merged. The reporting operator keeps building. |
 | `hand-back: tasks <numbers> of <plan path> at <sha>; files <paths>; needs rows <ids>` | Start a sibling operator for those tasks under the band (Hand-back siblings, below). |
 | `question <id>: <path>` | Ledger it under `## Questions` and start an adjudication fork on it (`## Composer forks`). Send the operator nothing about the design until the ruling exists. |
@@ -399,9 +420,12 @@ authority.
      already wrote, `<plan path> at <sha>, tasks <the unit's tasks, minus
      any handed back> (already written)`, with the path and sha from the
      first line of the unit's SDD ledger or from its `plan ready` ledger
-     entry. Once `Plan:` names a plan, set `Replaces: none`: the replacement
-     work is in that plan. If no plan was committed yet, `Plan:` stays
-     `none`.
+     entry. Name only a plan file present at the branch head (`git -C <unit
+     worktree> cat-file -e HEAD:<plan path>`), and never the superseded
+     plan its `Replaces:` line names: a replaced unit's worktree still holds
+     that plan's SDD ledger. Once `Plan:` names a plan, set `Replaces:
+     none`: the replacement work is in that plan. If no plan qualifies,
+     `Plan:` stays `none` and `Replaces:` stays as it is.
   2. Bring its branch up to date (Phase 2, Bringing a branch up to date)
      and launch it (Phase 2, Starting an operator, step 3).
   3. Ledger the restart.
@@ -515,7 +539,8 @@ build-graph row. A unit with no siblings is a family of one.
    <package worktree> revert --no-edit $(git -C <package worktree> rev-list
    --no-merges --first-parent <cut-to sha>..<merged sha>)`. `--first-parent`
    keeps to the member's own commits, leaving out what it merged in from
-   the integration branch; the kept commits stay merged. Then run the full
+   the integration branch, because every such merge is `--no-ff` (Phase 2,
+   Bringing a branch up to date); the kept commits stay merged. Then run the full
    test suite in the package worktree and ledger the revert under
    `## Integration` (`- reverted ...`) with its result. If the revert
    conflicts, run `git -C <package worktree> revert --abort` and file it as
@@ -630,7 +655,8 @@ one merge after another.
 4. On failing tests, take the merge back out with `git -C <package
    worktree> reset --hard ORIG_HEAD`. This is only for the merge commit
    you just made in step 1, while you hold the one-writer slot and before
-   anything else writes to the package worktree; never reset any other
+   anything else writes to the package worktree, and for the untested merge
+   at the branch's head that Phase 0 takes out; never reset any other
    commit there. Then send the owning operator the fix-round message by name. If
    its name is absent from `claude agents --json`, start a fresh operator
    from its assignment file with the failure output path added. Never fix
