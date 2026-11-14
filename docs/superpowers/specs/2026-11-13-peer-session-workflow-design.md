@@ -362,14 +362,16 @@ question files and `claude agents --json`.
   SDD ledger included. A message from an operator counts as progress the moment it is
   handled. An operator with no evidence for one beat (`STALL_BEATS` = 1) gets one status
   request, so it is asked 10 to 20 minutes after its last evidence; with no evidence and no
-  reply a beat later (two if the session list shows it busy) it is stalled. The high-band
+  reply a beat later it is stalled. The session list's status fields read `busy` for idle
+  and working sessions alike (live drill), so nothing reads them. The high-band
   reset wait shares the timer. This is the one piece of code in the workflow, because a
   beat written as separate commands cost several tool calls per unit every ten minutes; as
   one script a quiet beat is two tool calls.
 - **Escalation ladder** (partner's decision). Deaths and stalls of one unit climb one
   ladder, counted from its newest merge, so a merged row resets it. The first is restarted.
   The second is investigated before the restart: a subagent reads the tail of the
-  operator's log (or, if a dead session's log is gone, its worktree and SDD ledger) and
+  operator's session transcript, found by the session id recorded when its launch was
+  confirmed (or, if there is none, its worktree and SDD ledger), and
   names one cause from a fixed list (denied command, usage limit, hung process, a plan or
   spec defect it keeps hitting, unknown); the conductor applies that cause's remedy and
   ledgers both. A usage limit is not a death: the unit waits, unwatched, until the reset,
@@ -404,7 +406,7 @@ Operators are managed background sessions: `claude --bg -n <name> "<assignment>"
 with the unit's worktree as the working directory. Verified 2026-11-13: once the partner has
 accepted the trust prompt in the repo, `--bg` starts in the repo and in its
 `.claude/worktrees/*` children; the session appears in `claude agents --json` with its name
-and idle/busy status; a `SendMessage` to it while idle woke it and it replied by name; and
+and a status field; a `SendMessage` to it while idle woke it and it replied by name; and
 `claude logs`, `attach` and `stop` manage it. It runs the partner's normal session hooks and
 permission mode.
 
