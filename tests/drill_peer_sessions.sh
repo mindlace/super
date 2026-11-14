@@ -41,6 +41,12 @@ cd "$wt" || exit 1
 wtp=$(pwd -P)
 
 tools="Read,Write,SendMessage"
+# the operator is launched with the superconductor skill's launch template
+# (test command replaced by the harmless Bash(true:*)); the ledger dir is outside the worktree
+op_tools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git rm:*),Bash(true:*)"
+ledger="$scratch/ledger"
+mkdir -p "$ledger"
+ledger=$(cd "$ledger" && pwd -P)
 
 # --- spawn ---
 cat > "$scratch/op.txt" <<PROMPT
@@ -48,14 +54,14 @@ You are the session named $op. Your peer is named $cond. You are already in work
 PROMPT
 cat > "$scratch/cond.txt" <<PROMPT
 You are the session named $cond. Your peer is named $op. You are already in worktree $wtp; that satisfies the worktree rule; do not create another. Marker: \`cond\`.
-Do this now: call SendMessage to $op (by name) with notify_when_idle enabled, message text exactly: "Please write the file op-done.txt in $wtp containing the single word PONG, then reply to $cond by name with the single word DONE." Then end your turn.
+Do this now: call SendMessage to $op (by name) with notify_when_idle enabled, message text exactly: "Please write the file op-done.txt in $wtp containing the single word PONG, then write the file $ledger/ledger-done.txt containing the single word LEDGER, then reply to $cond by name with the single word DONE." Then end your turn.
 When the reply from $op arrives, write $wtp/cond-done.txt containing the reply text, and also the token IDLE-NOTIFIED if an idle notification from $op arrived. Then end your turn.
 PROMPT
-for n in "$op" "$cond"; do
-  f=op.txt; [ "$n" = "$cond" ] && f=cond.txt
-  claude --bg -n "$n" --model haiku --permission-mode acceptEdits --allowedTools="$tools" "$(cat "$scratch/$f")" >"$scratch/launch-$n.log" 2>&1 </dev/null
-  sleep 2
-done
+env -C "$wtp" claude --bg -n "$op" --model haiku --permission-mode acceptEdits --allowedTools="$op_tools" --add-dir="$ledger" "$(cat "$scratch/op.txt")" >"$scratch/launch-$op.log" 2>&1 </dev/null
+echo "INFO operator launch: env -C \"$wtp\" claude --bg -n $op --model haiku --permission-mode acceptEdits --allowedTools=\"$op_tools\" --add-dir=\"$ledger\" \"<prompt>\""
+sleep 2
+env -C "$wtp" claude --bg -n "$cond" --model haiku --permission-mode acceptEdits --allowedTools="$tools" "$(cat "$scratch/cond.txt")" >"$scratch/launch-$cond.log" 2>&1 </dev/null
+sleep 2
 agents=$(claude agents --json 2>/dev/null)
 if echo "$agents" | grep -q "\"$op\"" && echo "$agents" | grep -q "\"$cond\""; then pass spawn; else fail spawn; fi
 
@@ -63,14 +69,15 @@ if echo "$agents" | grep -q "\"$op\"" && echo "$agents" | grep -q "\"$cond\""; t
 t0=$(date +%s); opt=""; deadline=$((t0 + 300))
 while [ "$(date +%s)" -lt "$deadline" ]; do
   [ -z "$opt" ] && [ -f op-done.txt ] && opt=$(( $(date +%s) - t0 ))
-  [ -f op-done.txt ] && [ -f cond-done.txt ] && break
+  [ -f op-done.txt ] && [ -f cond-done.txt ] && [ -f "$ledger/ledger-done.txt" ] && break
   sleep 5
 done
 if [ -f op-done.txt ] && grep -q PONG op-done.txt && [ -f cond-done.txt ] && grep -q DONE cond-done.txt \
+   && grep -q LEDGER "$ledger/ledger-done.txt" 2>/dev/null \
    && [ -n "$opt" ] && [ "$opt" -le 120 ]; then
   pass "message (op-done after ${opt}s)"
 else
-  fail "message (op-done after ${opt:-never}s; cond-done: $(cat cond-done.txt 2>/dev/null))"
+  fail "message (op-done after ${opt:-never}s; cond-done: $(cat cond-done.txt 2>/dev/null); ledger-done: $(cat "$ledger/ledger-done.txt" 2>/dev/null))"
 fi
 if [ -f cond-done.txt ] && grep -q IDLE-NOTIFIED cond-done.txt; then echo "INFO: idle notice arrived"; else echo "INFO: no idle notice recorded"; fi
 
