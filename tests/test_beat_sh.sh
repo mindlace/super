@@ -299,6 +299,9 @@ printf '%s' "$agents" | sed "s/]\$/,$failed2,$live2]/" > "$tmp/agents.json"
 out=$(b "$d"); [ "$(field db session)" = alive ] || fail "launching with a live entry: $(line 'unit db')"
 printf '%s' "$agents" | sed "s/]\$/,$failed2]/" > "$tmp/agents.json"
 out=$(b "$d"); [ "$(field db session)" = failed ] || fail "launching with only a failed entry: $(line 'unit db')"
+# A launching unit is never asked, so a stale ask from an earlier operator never reads overdue (N7-1).
+ago 3000 "$d/assignments/db.beat"; b "$d" asked db; ago 1200 "$d/assignments/db.asked"
+out=$(b "$d"); [ "$(field db ask)" = none ] || fail "a launching unit must read ask none: $(line 'unit db')"
 printf '%s' "$agents" > "$tmp/agents.json"
 # A probe that sees failed stops at once, even if the session is up again later (N5-4).
 mkdir -p "$tmp/agents.seq"; printf '[%s]' "$dbup" > "$tmp/agents.seq/1"; printf '[%s]' "$dbfail" > "$tmp/agents.seq/2"; printf '[%s]' "$dbup" > "$tmp/agents.seq/3"

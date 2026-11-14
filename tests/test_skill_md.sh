@@ -225,6 +225,17 @@ need 'uses only `[a-z0-9-]`'
 need 'stands in it as a whole word'
 # A launch that may never have happened is finished without counting a death (N-3, M-1).
 need '`alive`, start nothing (never a second session under a live name)'
+# N7-3: no report line reads absent.
+need 'A unit with no line on the report (no `## Units` line yet, or a status the report does not print, such as `deferred` or `replaced`) reads `absent`'
+forbid 'A unit with one is on the report'
+# N7-2: the heartbeat finishes launching units; Phase 0 and Replacing step 6 point at it.
+need 'On every beat, finish it by its `session` field, exactly as Phase 0'"'"'s `launching` paragraph says'
+need 'The report decides afresh each time, so this is safe to run again after a death'
+need 'its `ask` is always `none`'
+need 'heartbeat'"'"'s `launching` rule (`## Supervision`, Heartbeat) finishes it on a later beat'
+need 'ledger its `launching` line (Phase 2, Starting an operator, step 3), append step 6'"'"'s done line, and launch nothing'
+forbid 'routing again finishes this step'
+forbid 'the next beat decides.'
 # N5-1: stops are bounded, by short id; a failed entry left listed blocks nothing.
 need 'sh <skill dir>/beat.sh <ledger dir> stop <unit-slug>`, or with `failed` after it'
 need 'by that entry'"'"'s own short `id` (never the name or the full `sessionId`; neither works)'
@@ -234,8 +245,7 @@ need 'unless step 1'"'"'s stop left a `:live` entry listed or could not read the
 # Round 7: one definition of alive, asked through beat.sh, everywhere.
 need '- `alive` (a live entry is listed under its name): it launched. Launch nothing; record it and go on with step 5.'
 need '- `failed` (only failed entries are listed): stop them'
-need '- `unknown` (the session list is unreadable): launch nothing now; the next beat decides.'
-need 'A unit with no `## Units` line was never launched, because step 3 ledgers the line before the launch'
+need 'Step 3 ledgers the `launching` line before the launch, so a launch a dead conductor made shows as a `launching` line on the report'
 need 'If the report shows its session `alive`, Phase 0 already launched it from its `launching` line: launch nothing. If it shows `failed`, stop the failed entries first'
 need 'Start a fresh one from its assignment file only when the report shows its session `absent` or `failed`'
 need 'still listed: <id>:live|<id>:failed,…|none`, every entry still under the name with its state'

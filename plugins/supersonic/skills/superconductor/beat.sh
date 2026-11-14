@@ -317,7 +317,8 @@ if ($mode eq "report") {
     my ($bm, $am) = (mtime($bf), mtime($af));
     my $quiet = int(($now - $bm) / 60);
     my $ask = "none"; my $asked = "-";
-    if (defined $am && $am > $bm && $wait eq "none") {
+    # A `launching` unit is never asked, so it is never `ask open` or `ask overdue`.
+    if (defined $am && $am > $bm && $wait eq "none" && $st ne "launching") {
       my $age = $now - $am; $asked = int($age / 60);
       $ask = $age >= $beat ? "overdue" : "open";
     } elsif ($progress && $evidence eq "no" && $now - $bm >= $stall * $beat) { $ask = "due" }

@@ -120,8 +120,9 @@ The report prints a line for it, and its `session` field decides
 - `failed` (only failed entries are listed): stop them (`## Supervision`,
   Stopping an operator, with `failed`), then launch it with steps 4-5.
 - `absent`: launch it with steps 4-5.
-- `unknown` (the session list is unreadable): launch nothing now; the next
-  beat decides.
+- `unknown` (the session list is unreadable): launch nothing now; the
+  heartbeat's `launching` rule (`## Supervision`, Heartbeat) finishes it on
+  a later beat.
 
 When you launch it, keep its assignment as written,
 except that `Plan:` names a plan its own SDD workspace already holds
@@ -348,10 +349,12 @@ result.
 > more than the tokens saved.
 
 **Starting an operator.** First check what a conductor that died may
-already have done. A unit with no `## Units` line was never launched,
-because step 3 ledgers the line before the launch. A unit with one is on
-the report, and its `session` field decides, as for a `launching` unit in
-Phase 0: `alive`, start nothing (never a second session under a live
+already have done. Step 3 ledgers the `launching` line before the launch,
+so a launch a dead conductor made shows as a `launching` line on the
+report. A unit with no line on the report (no `## Units` line yet, or a
+status the report does not print, such as `deferred` or `replaced`) reads
+`absent`. Otherwise its `session` field decides, as for a `launching` unit
+in Phase 0: `alive`, start nothing (never a second session under a live
 name); `failed`, stop the failed entries (`## Supervision`, Stopping an
 operator, with `failed`), which then block nothing; `absent`, go on;
 `unknown`, start nothing this time. If `git -C <project> worktree list` lists its worktree, step 1
@@ -537,8 +540,14 @@ yourself for anything it prints.
     or with an open fix round (a `- fix round <unit-slug>` line under
     `## Integration` with no later `merged <unit-slug>` line). A
     `launching` unit is printed too, so its session is judged by the same
-    definition of alive; it is never asked and never counted absent (Phase
-    0 and Starting an operator act on it). Its worktree
+    definition of alive; it is never asked (its `ask` is always `none`)
+    and never counted absent. On every beat, finish it by its `session`
+    field, exactly as Phase 0's `launching` paragraph says: `absent`,
+    launch it (Phase 2, Starting an operator, steps 4-5); `failed`, stop the
+    failed entries (Stopping an operator, with `failed`), then launch it;
+    `alive`, launch nothing and record it (step 5); `unknown`, act on the
+    next beat. The report decides afresh each time, so this is safe to run
+    again after a death. Its worktree
     is the one its `## Units` line names (`worktree <path>, start`), else
     `<project>/.claude/worktrees/<design-slug>-<unit-slug>`.
   - `sessions unknown` in the summary, and `session unknown` on every unit
@@ -1090,8 +1099,10 @@ restarts like any other if it dies.
    Phase 0 already launched it from its `launching` line: launch nothing.
    If it shows `failed`, stop the failed entries first (`## Supervision`,
    Stopping an operator, with `failed`); a failed entry blocks nothing. If
-   it shows `unknown`, launch nothing this time; routing again finishes
-   this step. Otherwise bring its branch up to date (Phase 2, Bringing a branch up to
+   it shows `unknown`, ledger its `launching` line (Phase 2, Starting an
+   operator, step 3), append step 6's done line, and launch nothing: the
+   heartbeat's `launching` rule (`## Supervision`, Heartbeat) launches it on
+   a later beat. Otherwise bring its branch up to date (Phase 2, Bringing a branch up to
    date), set its assignment's `Plan:` as `## Supervision`, Operator death,
    step 1, says (it stays `none` unless an earlier fresh operator wrote a
    plan), and start it with the same name, worktree and model (Phase 2,
