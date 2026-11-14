@@ -412,7 +412,7 @@ expect(scrollTopFor(0.7, { scrollTop: 0, scrollHeight: 80, clientHeight: 100 }))
 
 - [ ] **Step 6: Verify** — `npm test`; `npm run check` — Expected: PASS.
 
-- [ ] **Step 7: Manual check** — copy `superspec/src/lib/fixtures/sample-spec.html` to `../docs/superpowers/specs/2026-11-13-sample-spec.html` (run from `superspec/`) in this worktree; `npm run dev`. The spec is listed with title "Worktree→main path fallback, with main as read-only"; it renders with the diagram painted in text colours, the table copies cleanly into a spreadsheet, no notice. Toggle to Source: HTML highlighting; edit and wait 1s: saved; toggle back: re-rendered at the same relative scroll. Add `<span>x</span>` to a `p` in source: the notice appears. A `.md` spec also toggles. Delete the copied file before committing.
+- [ ] **Step 7: Manual check** — copy `src/lib/fixtures/sample-spec.html` to `../docs/superpowers/specs/2026-11-13-sample-spec.html` (run from `superspec/`) in this worktree; `npm run dev`. The spec is listed with title "Worktree→main path fallback, with main as read-only"; it renders with the diagram painted in text colours, the table copies cleanly into a spreadsheet, no notice. Toggle to Source: HTML highlighting; edit and wait 1s: saved; toggle back: re-rendered at the same relative scroll. Add `<span>x</span>` to a `p` in source: the notice appears. A `.md` spec also toggles. Delete the copied file before committing.
 
 - [ ] **Step 8: Commit** — `git commit -m "feat: single rendered pane with a source toggle and html source mode"`
 
@@ -541,7 +541,7 @@ expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toB
 
 - [ ] **Step 5: Verify** — `npm test`; `npm run check` — Expected: PASS.
 
-- [ ] **Step 6: Manual check** — copy `sample-spec.html` to `../docs/superpowers/specs/2026-11-13-sample-spec.html` and `sample-plan.html` to `../docs/superpowers/plans/2026-11-13-sample-spec.html` (run from `superspec/`) in this worktree (same slug, so the plan nests under the spec). Edit one word in a paragraph; after save, `git diff --no-index src/lib/fixtures/sample-spec.html ../docs/superpowers/specs/2026-11-13-sample-spec.html` shows one hunk inside that paragraph only. In the plan, edit the text of `t1-s3`: the diff against `sample-plan.html` leaves its `<input type="checkbox">` untouched; clicking any checkbox does nothing. Enter does nothing; pasting rich text inserts plain text. Open a main-checkout file: no caret, checkboxes disabled. Edit the file externally: it reloads with the toast. Delete both copies.
+- [ ] **Step 6: Manual check** — copy `src/lib/fixtures/sample-spec.html` to `../docs/superpowers/specs/2026-11-13-sample-spec.html` and `src/lib/fixtures/sample-plan.html` to `../docs/superpowers/plans/2026-11-13-sample-spec.html` (run from `superspec/`) in this worktree (same slug, so the plan nests under the spec). Edit one word in a paragraph; after save, `git diff --no-index src/lib/fixtures/sample-spec.html ../docs/superpowers/specs/2026-11-13-sample-spec.html` shows one hunk inside that paragraph only. In the plan, edit the text of `t1-s3`: the diff against `src/lib/fixtures/sample-plan.html` leaves its `<input type="checkbox">` untouched; clicking any checkbox does nothing. Enter does nothing; pasting rich text inserts plain text. Open a main-checkout file: no caret, checkboxes disabled. Edit the file externally: it reloads with the toast. Delete both copies.
 
 - [ ] **Step 7: Commit** — `git commit -m "feat: edit html spec text in place"`
 
