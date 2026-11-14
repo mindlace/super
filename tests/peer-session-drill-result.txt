@@ -1,0 +1,19 @@
+Peer-session mechanism drill — 2026-11-13
+claude --version: 2.1.325 (Claude Code)
+Script: SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh
+Result: PASS spawn, PASS message (op-done after 5s; no idle notice recorded), PASS checkpoint, PASS fork, PASS stop
+Step 5 (interactive claude -n drill-cond-i receives a --bg SendMessage by name): not run — controller to fill
+Info: ttl-report ephemeral_5m_input_tokens=0 ephemeral_1h_input_tokens=58626 (fork 1 transcript)
+Info: claude agents --json keys: cwd id kind name pid sessionId startedAt state status — no usage/token field
+Info: claude stop takes the short "id" from agents --json (e.g. 70e94778), NOT the name and NOT the full sessionId
+
+Exact command forms (run from the directory that should be the session cwd; there is no cwd flag):
+  Operator launch: claude --bg -n <name> --model <model> --permission-mode acceptEdits --allowedTools="Read,Write,SendMessage" "<prompt>"
+    NOTE: --allowedTools is variadic; use the --allowedTools=... form (or put the prompt first), or the prompt is swallowed as a tool name and the session starts empty and blocked.
+  Checkpoint: claude -p --model haiku --output-format json --allowedTools="Read" "<cold-read prompt>"   # session id: python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])'
+  Fork (amending): claude -p --resume <id> --fork-session --model haiku --output-format json --permission-mode acceptEdits --allowedTools="Read,Write,Edit,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "<prompt>"
+  Fork (read-only): claude -p --resume <id> --fork-session --model haiku --output-format json --allowedTools="Read" "<prompt>"
+  Stop: claude stop <short-id>     # short id = "id" field of claude agents --json; names do not work
+  Agents query: claude agents --json [--cwd <path>]   # fields: id, sessionId, name, status, state, cwd, kind, pid
+  Transcript path: ~/.claude/projects/<cwd with every / and . replaced by ->/<session-id>.jsonl   (cwd via pwd -P)
+  No-tools run: claude -p --tools "" --append-system-prompt "<ctx>" "<prompt>"
