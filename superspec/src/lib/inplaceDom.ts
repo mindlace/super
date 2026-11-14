@@ -1,7 +1,13 @@
 // The browser side of in-place editing: find the editable elements in the rendered
 // DOM with the same rule the source side uses, and read back what an edit produced.
 
-import { collectEditables, cleanInline, type Editable, type TreeAdapter } from './inplace';
+import {
+  collectEditables,
+  cleanInline,
+  isEmptyInner,
+  type Editable,
+  type TreeAdapter
+} from './inplace';
 
 const domAdapter: TreeAdapter<Node> = {
   tag: (n) => {
@@ -61,9 +67,67 @@ export function pastedText(text: string): string {
 
 const BLOCKED_INPUT = new Set(['insertParagraph', 'insertLineBreak', 'insertFromDrop']);
 
-/** `beforeinput` types an editable refuses: new lines and dropped content. */
+/**
+ * `beforeinput` types an editable refuses: new lines, dropped content and the
+ * browser's own formatting (it writes `b`, `u` and styled spans; bold and italic
+ * go through `toggleInline` instead).
+ */
 export function blocksInput(inputType: string): boolean {
-  return BLOCKED_INPUT.has(inputType);
+  return BLOCKED_INPUT.has(inputType) || inputType.startsWith('format');
+}
+
+const SAME_INLINE: Record<'strong' | 'em', string[]> = { strong: ['strong', 'b'], em: ['em', 'i'] };
+
+/**
+ * Bold or italic for a selection inside `el`: inside a `tag` (or its `b`/`i`
+ * twin) already, unwrap that element; otherwise wrap a non-empty selection in a
+ * new `tag` and select its contents. Anything else is left alone.
+ */
+export function toggleInline(el: HTMLElement, range: Range, tag: 'strong' | 'em'): void {
+  if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) return;
+  let n: Node | null = range.commonAncestorContainer;
+  for (; n && n !== el; n = n.parentNode) {
+    if (n.nodeType === Node.ELEMENT_NODE && SAME_INLINE[tag].includes((n as Element).localName)) {
+      const kids = [...n.childNodes];
+      (n as Element).replaceWith(...kids);
+      if (kids.length) {
+        range.setStartBefore(kids[0]);
+        range.setEndAfter(kids[kids.length - 1]);
+      }
+      return;
+    }
+  }
+  if (range.collapsed) return;
+  const wrap = el.ownerDocument.createElement(tag);
+  wrap.append(range.extractContents());
+  range.insertNode(wrap);
+  range.selectNodeContents(wrap);
+}
+
+/** The caret sits at the end of `el`'s text: only whitespace follows it. */
+export function caretAtEnd(el: HTMLElement, node: Node, offset: number): boolean {
+  if (!el.contains(node)) return false;
+  const r = el.ownerDocument.createRange();
+  r.selectNodeContents(el);
+  r.setStart(node, offset);
+  return r.toString().trim() === '';
+}
+
+/** Focus `el` and put a collapsed caret at the end of its contents. */
+export function caretToEnd(el: HTMLElement): void {
+  el.focus();
+  const sel = el.ownerDocument.getSelection();
+  if (!sel) return;
+  const r = el.ownerDocument.createRange();
+  r.selectNodeContents(el);
+  r.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+/** A list item showing nothing but its checkbox, whitespace and line breaks. */
+export function isEmptyItem(el: HTMLElement): boolean {
+  return isEmptyInner(editedInner(el));
 }
 
 export interface ArmState {

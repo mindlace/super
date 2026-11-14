@@ -5,14 +5,24 @@
   import { specKind, type SpecKind } from '$lib/specfile';
   import { scrollRatio, scrollTopFor } from '$lib/scrollratio';
   import { renderViewFor, type RenderOutcome } from '$lib/renderview';
-  import { locateEditables, spliceRange } from '$lib/inplace';
+  import {
+    addListItemAfter,
+    locateEditables,
+    removeEmptyListItem,
+    spliceRange,
+    type Editable
+  } from '$lib/inplace';
   import {
     blocksInput,
     canArm,
+    caretAtEnd,
+    caretToEnd,
     collectRenderedEditables,
     editedInner,
     editingAligned,
-    pastedText
+    isEmptyItem,
+    pastedText,
+    toggleInline
   } from '$lib/inplaceDom';
 
   let {
@@ -74,6 +84,9 @@
   let editables: HTMLElement[] = [];
   // The path whose in-place editing is off (removed markup or a misaligned DOM).
   let editingOffFor = $state<string | null>(null);
+  // After a list item is added or removed: the editable (by index) that gets the
+  // caret once the re-render lands and editing re-arms.
+  let pendingCaret: { path: string; index: number } | null = null;
 
   let renderedEl = $state<HTMLDivElement>();
   // Relative scroll position carried between the two panes and across reloads.
@@ -173,6 +186,8 @@
     if (!armable) return;
     const source = locateEditables(content);
     const found = collectRenderedEditables(root);
+    const caret = pendingCaret;
+    pendingCaret = null;
     if (r.removed.length || !editingAligned(found, source)) {
       editingOffFor = path;
       return;
@@ -188,6 +203,8 @@
     for (const el of root.querySelectorAll('[data-sr-added]')) {
       el.setAttribute('contenteditable', 'false');
     }
+    const target = caret?.path === path ? found[caret.index] : undefined;
+    if (target?.isContentEditable) caretToEnd(target);
   }
 
   function editableAt(target: EventTarget | null): number {
@@ -195,39 +212,119 @@
     return editables.findIndex((el) => el.contains(target));
   }
 
-  function onEditInput(e: Event) {
-    const i = editableAt(e.target);
-    if (i < 0 || readOnly || kind !== 'html' || renderPending) return;
+  // The current source's editables, when editable `i` may be edited now: the DOM
+  // shows the current content and lines up with the source. Null otherwise; a
+  // misaligned DOM also stops editing and re-renders from the content, which
+  // re-arms editing only if the two line up again.
+  function editSource(i: number): Editable[] | null {
+    if (i < 0 || readOnly || kind !== 'html' || renderPending) return null;
     // Belt and braces: arming already guarantees the DOM shows the current content.
-    if (!domSource || domSource.path !== path || domSource.text !== content) return;
+    if (!domSource || domSource.path !== path || domSource.text !== content) return null;
     // Re-locate against the current source every time, so earlier splices never
     // leave stale offsets.
     const source = locateEditables(content);
-    const range = source[i]?.range;
-    if (!range || !editingAligned(editables, source)) {
-      // The edit changed the file's structure: stop editing and re-render from
-      // the content, which re-arms editing only if the two line up again.
+    if (!source[i]?.range || !editingAligned(editables, source)) {
       disarm();
       domSource = null;
       editingOffFor = path;
       renderNonce++;
-      return;
+      return null;
     }
-    const next = spliceRange(content, range, editedInner(editables[i]));
+    return source;
+  }
+
+  // Splice editable `i`'s edited text into the source.
+  function commitEdit(i: number) {
+    const source = editSource(i);
+    if (!source) return;
+    const next = spliceRange(content, source[i].range!, editedInner(editables[i]));
     if (next === content) return;
     domSource = { path, text: next };
     onInput(next);
   }
 
-  function onEditKeydown(e: KeyboardEvent) {
-    // Enter that commits an IME composition is not a new line.
-    if (e.key === 'Enter' && !e.isComposing && editableAt(e.target) >= 0) e.preventDefault();
+  function onEditInput(e: Event) {
+    commitEdit(editableAt(e.target));
   }
 
-  // New lines and dropped content, however they arrive (Enter, Shift+Enter, the
-  // edit menu, drag and drop), never reach an editable element.
+  // A list item added or removed: the DOM no longer matches, so emit the new
+  // source and re-render it (`domSource` cleared so the render is not skipped),
+  // then put the caret at the end of editable `caretIndex` once it lands.
+  function structuralEdit(next: string, caretIndex: number): boolean {
+    if (next === content) return false;
+    disarm();
+    domSource = null;
+    pendingCaret = { path, index: caretIndex };
+    onInput(next);
+    renderNonce++;
+    return true;
+  }
+
+  // Enter at the end of a list item adds an empty item after it.
+  function addItemAt(i: number) {
+    const el = editables[i];
+    const sel = window.getSelection();
+    if (el?.localName !== 'li' || !sel?.isCollapsed || !sel.focusNode) return;
+    if (!caretAtEnd(el, sel.focusNode, sel.focusOffset)) return;
+    const source = editSource(i);
+    if (source) structuralEdit(addListItemAfter(content, source[i]), i + 1);
+  }
+
+  // Backspace in an empty list item removes it, when the item before it is an
+  // editable that can take the caret. True when the item was removed.
+  function removeItemAt(i: number): boolean {
+    const el = editables[i];
+    if (el?.localName !== 'li' || !isEmptyItem(el)) return false;
+    const prev = el.previousElementSibling;
+    if (!prev || editables[i - 1] !== prev) return false;
+    const source = editSource(i);
+    return !!source && structuralEdit(removeEmptyListItem(content, source[i]), i - 1);
+  }
+
+  // Bold and italic wrap or unwrap the selection, then go through the normal
+  // splice path; cleanInline keeps the result to strong and em.
+  function toggleFormat(i: number, tag: 'strong' | 'em') {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    toggleInline(editables[i], range, tag);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    commitEdit(i);
+  }
+
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+
+  function onEditKeydown(e: KeyboardEvent) {
+    const i = editableAt(e.target);
+    if (i < 0) return;
+    // Cmd on macOS (where Ctrl-B/Ctrl-I move the caret), Ctrl elsewhere.
+    const mod = (isMac ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey;
+    const key = e.key.toLowerCase();
+    if (mod && (key === 'b' || key === 'i')) {
+      e.preventDefault();
+      toggleFormat(i, key === 'b' ? 'strong' : 'em');
+    } else if (mod && key === 'u') {
+      // No underline in a spec.
+      e.preventDefault();
+    } else if (e.key === 'Enter' && !e.isComposing) {
+      // Enter that commits an IME composition is not a new line. Any other Enter
+      // is refused, except plain Enter at the end of a list item.
+      e.preventDefault();
+      if (!e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) addItemAt(i);
+    } else if (e.key === 'Backspace' && !e.altKey && !e.metaKey && !e.ctrlKey) {
+      if (removeItemAt(i)) e.preventDefault();
+    }
+  }
+
+  // New lines, dropped content and the browser's own formatting, however they
+  // arrive (Enter, Shift+Enter, the edit menu, drag and drop), never reach an
+  // editable element. A new paragraph at the end of a list item adds an item.
   function onEditBeforeInput(e: InputEvent) {
-    if (blocksInput(e.inputType) && editableAt(e.target) >= 0) e.preventDefault();
+    const i = editableAt(e.target);
+    if (i < 0 || !blocksInput(e.inputType)) return;
+    e.preventDefault();
+    if (e.inputType === 'insertParagraph') addItemAt(i);
   }
 
   function onEditDrop(e: DragEvent) {

@@ -3,14 +3,18 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderSpecHtml } from './render';
-import { locateEditables, spliceRange } from './inplace';
+import { addListItemAfter, locateEditables, spliceRange } from './inplace';
 import {
   blocksInput,
   canArm,
+  caretAtEnd,
+  caretToEnd,
   collectRenderedEditables,
   editedInner,
   editingAligned,
-  pastedText
+  isEmptyItem,
+  pastedText,
+  toggleInline
 } from './inplaceDom';
 
 const fixture = (name: string) => readFileSync(join(__dirname, 'fixtures', name), 'utf8');
@@ -118,13 +122,122 @@ describe('pastedText', () => {
 });
 
 describe('blocksInput', () => {
-  it('blocks new lines and drops, nothing else', () => {
+  it('blocks new lines, drops and the browser own formatting, nothing else', () => {
     expect(blocksInput('insertParagraph')).toBe(true);
     expect(blocksInput('insertLineBreak')).toBe(true);
     expect(blocksInput('insertFromDrop')).toBe(true);
+    expect(blocksInput('formatBold')).toBe(true);
+    expect(blocksInput('formatItalic')).toBe(true);
+    expect(blocksInput('formatUnderline')).toBe(true);
     expect(blocksInput('insertText')).toBe(false);
     expect(blocksInput('deleteContentBackward')).toBe(false);
-    expect(blocksInput('formatBold')).toBe(false);
+  });
+});
+
+describe('toggleInline', () => {
+  const p = (html: string) => container(`<p>${html}</p>`).firstElementChild as HTMLElement;
+  const select = (node: Node, start: number, endNode: Node = node, end = start) => {
+    const r = document.createRange();
+    r.setStart(node, start);
+    r.setEnd(endNode, end);
+    return r;
+  };
+
+  it('wraps the selection in strong or em', () => {
+    const el = p('one two three');
+    const text = el.firstChild!;
+    toggleInline(el, select(text, 4, text, 7), 'strong');
+    expect(editedInner(el)).toBe('one <strong>two</strong> three');
+    const el2 = p('one two');
+    toggleInline(el2, select(el2.firstChild!, 0, el2.firstChild!, 3), 'em');
+    expect(editedInner(el2)).toBe('<em>one</em> two');
+  });
+
+  it('unwraps when the selection is inside one already, b and i included', () => {
+    const el = p('one <strong>two</strong> three');
+    const inner = el.querySelector('strong')!.firstChild!;
+    const caret = select(inner, 1);
+    toggleInline(el, caret, 'strong');
+    expect(editedInner(el)).toBe('one two three');
+    // The unwrapped text ends up selected.
+    expect(caret.toString()).toBe('two');
+    const el2 = p('<i>x</i>y');
+    const x = el2.querySelector('i')!.firstChild!;
+    toggleInline(el2, select(x, 0, x, 1), 'em');
+    expect(editedInner(el2)).toBe('xy');
+  });
+
+  it('does nothing for a collapsed caret outside one, or outside the element', () => {
+    const el = p('one');
+    toggleInline(el, select(el.firstChild!, 1), 'strong');
+    expect(el.innerHTML).toBe('one');
+    const other = p('two');
+    toggleInline(el, select(other.firstChild!, 0, other.firstChild!, 2), 'strong');
+    expect(el.innerHTML).toBe('one');
+    expect(other.innerHTML).toBe('two');
+  });
+
+  it('never produces u, b or i', () => {
+    const el = p('a b');
+    toggleInline(el, select(el.firstChild!, 0, el.firstChild!, 1), 'strong');
+    toggleInline(el, select(el.lastChild!, 1, el.lastChild!, 2), 'em');
+    expect(editedInner(el)).toBe('<strong>a</strong> <em>b</em>');
+  });
+});
+
+describe('caretAtEnd', () => {
+  it('is true only when nothing but whitespace follows the caret in the element', () => {
+    const li = container('<ul><li>one <code>two</code>\n  </li></ul>').querySelector('li')!;
+    const code = li.querySelector('code')!.firstChild!;
+    expect(caretAtEnd(li, code, 3)).toBe(true);
+    expect(caretAtEnd(li, code, 1)).toBe(false);
+    expect(caretAtEnd(li, li.firstChild!, 4)).toBe(false);
+    expect(caretAtEnd(li, li, li.childNodes.length)).toBe(true);
+  });
+});
+
+describe('caretToEnd', () => {
+  it('puts a collapsed caret at the end of the element', () => {
+    const root = container('<ul><li contenteditable="true">one <code>two</code></li></ul>');
+    document.body.append(root);
+    const li = root.querySelector('li')!;
+    caretToEnd(li);
+    const sel = document.getSelection()!;
+    expect(sel.isCollapsed).toBe(true);
+    expect(caretAtEnd(li, sel.focusNode!, sel.focusOffset)).toBe(true);
+    expect(li.contains(sel.focusNode)).toBe(true);
+    root.remove();
+  });
+});
+
+describe('isEmptyItem', () => {
+  it('ignores a leading checkbox, whitespace and line breaks', () => {
+    const root = container(
+      '<ul><li></li><li><input type="checkbox" disabled> </li><li><br></li><li>x</li></ul>'
+    );
+    expect([...root.querySelectorAll('li')].map((li) => isEmptyItem(li))).toEqual([
+      true,
+      true,
+      true,
+      false
+    ]);
+  });
+});
+
+describe('list item flow', () => {
+  it('a new item renders as an editable aligned with the source', async () => {
+    const src = fixture('sample-plan.html');
+    const source = locateEditables(src);
+    const i = source.findIndex((e) =>
+      src.slice(e.range?.start ?? 0, e.range?.end ?? 0).includes('Commit with')
+    );
+    const s3 = source[i];
+    const next = addListItemAfter(src, s3);
+    const root = container((await renderSpecHtml(next, SPEC)).html);
+    const eds = collectRenderedEditables(root);
+    expect(editingAligned(eds, locateEditables(next))).toBe(true);
+    expect(eds[i + 1].id).toBe('t1-s3-n');
+    expect(isEmptyItem(eds[i + 1])).toBe(true);
   });
 });
 

@@ -152,3 +152,98 @@ export function cleanInline(html: string): string {
 export function spliceRange(source: string, range: Range, replacement: string): string {
   return source.slice(0, range.start) + replacement + source.slice(range.end);
 }
+
+/** Inner html with nothing in it but whitespace and line breaks. */
+export function isEmptyInner(html: string): boolean {
+  return html.replace(/<br\s*\/?>/gi, '').trim() === '';
+}
+
+interface ListItem {
+  root: Node;
+  li: Element;
+  list: Element;
+}
+
+/** The li element an editable stands for (matched by its end tag), with its parent list. */
+function findListItem(source: string, ed: Editable): ListItem | null {
+  if (ed.tag !== 'li' || !ed.range) return null;
+  const end = ed.range.end;
+  const root = parseFragment(source, { sourceCodeLocationInfo: true });
+  const find = (n: Node): Element | null => {
+    if (n.nodeName === 'li' && (n as Element).sourceCodeLocation?.endTag?.startOffset === end) {
+      return n as Element;
+    }
+    for (const c of 'childNodes' in n ? n.childNodes : []) {
+      const hit = find(c);
+      if (hit) return hit;
+    }
+    return null;
+  };
+  const li = find(root);
+  const list = li?.parentNode as Element | undefined;
+  if (!li || !list || (list.nodeName !== 'ul' && list.nodeName !== 'ol')) return null;
+  return { root, li, list };
+}
+
+const isWhitespace = (n: Node | undefined): boolean =>
+  n?.nodeName === '#text' && (n as { value: string }).value.trim() === '';
+
+/** The whitespace text between an li and whatever precedes it in its list ('' if none). */
+function leadingSpace({ li, list }: ListItem): Range | null {
+  const i = list.childNodes.indexOf(li);
+  const prev = list.childNodes[i - 1];
+  const at = li.sourceCodeLocation!.startOffset;
+  if (!isWhitespace(prev)) return { start: at, end: at };
+  const start = prev.sourceCodeLocation?.startOffset;
+  return start === undefined ? null : { start, end: at };
+}
+
+function allIds(n: Node, out = new Set<string>()): Set<string> {
+  if ('attrs' in n) for (const a of n.attrs) if (a.name === 'id') out.add(a.value);
+  for (const c of 'childNodes' in n ? n.childNodes : []) allIds(c, out);
+  return out;
+}
+
+/** Inner range of the li's parent ul/ol; null when it has none or no end tag. */
+export function locateListInner(source: string, li: Editable): Range | null {
+  const found = findListItem(source, li);
+  const loc = found?.list.sourceCodeLocation;
+  if (!loc?.startTag || !loc.endTag) return null;
+  return { start: loc.startTag.endOffset, end: loc.endTag.startOffset };
+}
+
+/**
+ * A new empty sibling right after the li, on its own line with the li's own
+ * indentation. After a checklist item the new item is an unchecked checklist
+ * item whose id is the previous id plus `-n`, grown until it is unique.
+ */
+export function addListItemAfter(source: string, li: Editable): string {
+  const found = findListItem(source, li);
+  const end = found?.li.sourceCodeLocation?.endTag?.endOffset;
+  const lead = found && leadingSpace(found);
+  if (!found || end === undefined || !lead) return source;
+  const first = found.li.childNodes.find((c) => c.nodeName !== '#text');
+  let item = '<li></li>';
+  if (first?.nodeName === 'input') {
+    const prevId = found.li.attrs.find((a) => a.name === 'id')?.value;
+    let idAttr = '';
+    if (prevId !== undefined) {
+      const ids = allIds(found.root);
+      let id = `${prevId}-n`;
+      while (ids.has(id)) id += '-n';
+      idAttr = ` id="${escAttr(id)}"`;
+    }
+    item = `<li${idAttr}><input type="checkbox"> </li>`;
+  }
+  return spliceRange(source, { start: end, end }, source.slice(lead.start, lead.end) + item);
+}
+
+/** Remove an li holding nothing but whitespace, with the whitespace before it. */
+export function removeEmptyListItem(source: string, li: Editable): string {
+  const found = findListItem(source, li);
+  const end = found?.li.sourceCodeLocation?.endTag?.endOffset;
+  const lead = found && leadingSpace(found);
+  if (!found || end === undefined || !lead || !li.range) return source;
+  if (!isEmptyInner(source.slice(li.range.start, li.range.end))) return source;
+  return spliceRange(source, { start: lead.start, end }, '');
+}
