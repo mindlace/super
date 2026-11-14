@@ -135,7 +135,10 @@ subagent cache.
   **(call)** It keeps purely mechanical rulings, such as "which branch do I rebase on".
 - **Operator.** A full session, one per spec, in that spec's worktree, named
   `<design-slug>-<spec-slug>`. Runs writing-plans then subagent-driven-development exactly as
-  written. Its implementers and reviewers are its direct subagents.
+  written. Its implementers and reviewers are its direct subagents, dispatched in the
+  background and waited on in bounded stretches, as SDD's own waiting rule asks, so that
+  conductor messages reach the operator while a leaf works and a hung leaf is stopped after
+  a stated bound.
 
 ### Adjudication
 
@@ -150,8 +153,10 @@ subagent cache.
 5. The fork writes its ruling to `rulings/<n>.md` beside the question and ends. The ruling
    gives the commit, the sections to re-read, and, for each running spec whose approach or
    interface changed, the first task that no longer holds.
-6. The conductor started the fork as a background command, so it is told when the fork exits.
-   It relays a pointer to the ruling to each affected operator. **(call)** Forks do not send
+6. The conductor started the fork as a background command under a time limit, so it is told
+   when the fork exits or the limit stops it. A fork that exits without its ruling file is
+   started once more, then surfaced to the partner. The conductor relays a pointer to the
+   ruling to each affected operator. **(call)** Forks do not send
    messages themselves; messaging from a one-shot fork was not verified.
 
 Mechanics **(call)**:
@@ -215,7 +220,10 @@ two thresholds:
 | above the upper threshold | starts no operators; running ones finish their unit; resumes after the reset |
 
 **(call)** Defaults: lower 70%, upper 90%, N = 2, set in one place in the skill. An unreadable
-or stale figure counts as the middle band. Composer forks are exempt: a ruling or merge review
+or stale figure counts as the middle band. In the upper band the conductor's heartbeat timer
+sleeps until the nearer of the reset and the next beat; with no readable reset time, each beat
+reads the figure again. In the middle band an operator stopped after a second death or stall
+gives its slot to the next unit. Composer forks are exempt: a ruling or merge review
 is small, and withholding it would stall operators that are already paid for. The HOLD / STOP
 recommendations, the per-wave partner decision and the scope gate are removed. The conductor
 states the band in its merge summaries.
@@ -320,14 +328,46 @@ toward N.
 
 ### Why sessions stay warm
 
-- The conductor is woken by operator messages and merge events; with several operators those
-  arrive well inside an hour.
-- An operator is a main session with the 1-hour cache, so a long implementer no longer costs
-  it a cold read.
+- The conductor is woken by operator messages, fork exits and its heartbeat, which beats every
+  ten minutes while the run is unfinished.
+- An operator is a main session with the 1-hour cache, and it waits on its leaves in
+  ten-minute background stretches, so a long implementer does not cost it a cold read.
 - The checkpoint is read by every fork, and each read resets its timer.
 - Implementers, reviewers and forks get the 1-hour cache from the one setting.
 
-Nothing here is a keep-warm ping. A session with nothing to do is allowed to go cold.
+Nothing here is a keep-warm ping: every beat does the whole reconcile, and the heartbeat stops
+when the run is finished. A session with nothing to do is allowed to go cold.
+
+### Supervision: messages are hints, state is the truth
+
+Every wait in the workflow has a bound, and nothing depends on a message arriving. A message
+names a session that may be gone, and a conductor may die before acting on one, so each
+message only speeds up something the conductor also finds from state: git, its ledger, the
+question files and `claude agents --json`.
+
+- **Heartbeat.** While the run is unfinished, the conductor keeps one background timer
+  (`BEAT` = 10 minutes) and reconciles on each beat: sessions that are gone are restarted;
+  question files with no ledger line are filed; rows an operator's SDD ledger shows passed but
+  never reported are merged; relays and sibling notices are sent again to a restarted
+  operator; and each working operator's progress is read mechanically, from its branch head
+  and the files in its worktree changed since the last evidence. An operator with no evidence
+  for two beats gets one status request; with no evidence and no reply a beat later it is
+  stopped and restarted, which counts as a death. So a silent operator is restarted within
+  about forty minutes. The high-band reset wait shares the timer.
+- **Forks are bounded.** Every fork and the checkpoint run in the background under a 45-minute
+  limit that stops the fork's whole process group, even when no conductor is running. On exit
+  the conductor checks for the fork's output; with none it starts the fork once more, then
+  surfaces it. A conductor that resumes stops any fork its predecessor left running, because
+  an amending fork still writing the package worktree would break the one-writer rule.
+- **Operators.** Leaves run in the background with bounded waits; a leaf with no result and no
+  worktree change for an hour, or two hours in all, is stopped and dispatched once more, then
+  becomes a question. A send to the conductor that fails is retried three times; after that
+  the operator works on what is not blocked. A denied command is its own message, and
+  anything outside the message forms is handled as a question. Siblings may message each
+  other, but nothing waits on it.
+- `notify_when_idle` stays as an optimisation: an idle notice with no report behind it gets
+  the status request early. The live drill recorded no idle notice from a `--bg` session, so
+  nothing depends on one.
 
 ### How sessions are started
 
@@ -341,13 +381,13 @@ permission mode.
 
 - The repo must be trusted once, by the partner, before a first run. The conductor checks
   this at intake by starting one operator and says so plainly if it is refused.
-- The conductor learns an operator is idle with `SendMessage`'s `notify_when_idle`, not by
-  polling.
+- The conductor learns an operator's state from its heartbeat (Supervision, above);
+  `SendMessage`'s `notify_when_idle` only brings a status request forward.
 - Headless `claude -p` with a held-open input stream also works without trust, but it is not
   managed by `claude logs` / `claude stop`. Not used.
 
 Composer forks are one-shot (`claude -p --resume <checkpoint> --fork-session`), run by the
-conductor as a background command.
+conductor as a background command under a time limit.
 
 Every spawned session's prompt must carry: its name, the names of the conductor and the
 ledger path, the instruction to address peers by explicit name, the worktree it is already in,
