@@ -60,6 +60,7 @@ My call is **B**. Builders may split large repeated parts, such as prompt-route'
     2. `CLAUDE_CODE_SESSION_ID`, which Claude Code exports to Bash;
     3. null.
   - `transcript_path` comes from the hook input. Without one it is derived as `~/.claude/projects/<munged cwd>/<session_id>.jsonl` only if that file exists.
+  - **Logged paths go stale.** In the jev-1.14.0 sample, 51 of 75 logged paths no longer existed. In every case the session had run inside a `.claude/worktrees/<name>` checkout, and its transcript later lived under the main project's directory. Every reader therefore resolves transcripts through a `transcript.locate(session_id, hint)` helper: try the hint first, then glob `~/.claude/projects/*/<session_id>.jsonl`. `jev label` and `jev adjudicate export` emit the resolved path. This covers `recover-states` and anything else that opens a transcript later.
 - **`record`** gains:
   - `source`: `in_session` (CLI `jev record`), `blind_label` (`jev label --apply`), `auto_hook` (prompt-route's Stop auto-record), or `import`.
   - `rule_version`: required for `blind_label`.
@@ -108,6 +109,7 @@ The first log write in a log dir appends its path to `~/.superpowers/jev/registr
   - `*.md` under `docs/`, `notes/`, `handoff*`, `*ledger*`, `*progress*`;
   - and `JEV_VERIFY_STOP_IGNORE`, which takes extra globs.
 - **Window cap.** The window cap goes from 10 to 20 commands, so a long verification run is still in the window.
+- **Evidence that isn't a Bash command.** Today the window holds only Bash calls. That leaves out the two kinds of evidence orchestrators actually use: subagent results (the implementer's or reviewer's hand-back, an Agent tool result) and reads of artifacts (Read of a review file). Rule v2 counts reading a review as verifying "passed review", so Jev can never see that evidence. Add `evidence_since_last_edit`: Agent/Task tool results, subagent hand-back messages, and Read results, each truncated to about 1.5 KB, with a 20 KB cap overall. It sits alongside `commands_since_last_edit`, which is unchanged for compatibility.
 - **Version bump.** `questions/verify-stop.json` `version` goes to 2, because the state shape changes. `jev recover-states` uses the same function, so recovered states get the fix too.
 
 ### Rule v2
