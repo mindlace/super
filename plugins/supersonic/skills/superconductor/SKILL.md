@@ -31,6 +31,12 @@ re-reads.
   this session at any moment; the ledger plus git is the only memory that
   survives. On resume, trust the ledger, git and `claude agents --json` over
   recollection.
+- **Messages are hints; state is the truth.** Every wait has a bound. An
+  operator message, an idle notice or a fork's exit tells you to look
+  sooner, but nothing waits on one arriving: the heartbeat (`## Supervision`)
+  finds from git, the ledger, the question files and `claude agents --json`
+  whatever a lost message would have said, and every fork runs under a time
+  limit (`## Composer forks`).
 - **Keep the spine lean — cold resume is the normal path.** Full reports,
   survey output, and review evidence live in files; the ledger carries a
   ≤1-paragraph summary plus the path. Never paste a report body into this
@@ -61,6 +67,28 @@ ledger under `.superpowers/sdd/` in its worktree. Reconcile the package
 worktree first: a restart merges the integration branch into the unit's
 branch, so that branch must hold only tested work.
 
+- **What the last conductor left running.** Run `sh <skill dir>/beat.sh
+  <ledger dir> resume`: it stops the last conductor's heartbeat timer,
+  whose exit would wake no one, and restarts every unit's beat file from
+  its branch head and drops every open status ask, so no ask or quiet spell
+  the dead conductor left is acted on. (`<skill dir>` is this skill's
+  directory, where `beat.sh` and `budget.sh` live.) Then run its report
+  once, `sh <skill dir>/beat.sh <ledger dir>`: its lines give each unit's
+  session, rung and pending restart, and each fork's state, for the steps
+  below. Then take each fork
+  with a `- fork <name> started` line and no later `- fork <name> exited`
+  line:
+  - An amending fork (`rule-<id>`, `graph-<id>`) would race the package
+    worktree cleanup below and every merge, so stop it: `sh <skill
+    dir>/beat.sh <ledger dir> stop-fork <name>`, which sends TERM to its
+    process group, waits, escalates to KILL and clears a lock a killed
+    `git commit` left. Ledger `- fork <name> exited: stopped at resume`. A
+    fork stopped here counts as no attempt: the bullets below start it
+    again from what it left.
+  - A read-only fork (`review-…`, `checkpoint-<n>`) writes nothing to the
+    package: leave it running. If its output already exists, handle it as
+    When a fork exits (`## Composer forks`) now; otherwise the heartbeat
+    handles its exit.
 - **Package worktree.** If `git -C <package worktree> status` shows a merge
   in progress, run `git -C <package worktree> merge --abort`. If it shows a
   revert in progress, run `git -C <package worktree> revert --abort`, which
@@ -69,7 +97,9 @@ branch, so that branch must hold only tested work.
   does that revert again. Uncommitted edits there are
   a dead fork's: discard them (`git -C <package worktree> checkout -- .` and `git
   -C <package worktree> clean -fd`). Revert commits of cut work at the
-  branch's head with no `- reverted` line were never tested (a
+  branch's head (subject `Revert "…"`, which Replacing an operator, step 4,
+  guarantees by running with `revert.reference` off) with no `- reverted`
+  line were never tested (a
   `docs(<design-slug>): unrule <id>` commit is not one: the Questions
   bullet ledgers it): run the suite and ledger the
   `- reverted` line with its result; a failing suite is a question
@@ -83,24 +113,46 @@ branch, so that branch must hold only tested work.
 
 A unit whose newest `## Units` line reads `launching` was ledgered by Phase
 2, Starting an operator, step 3, and its launch may never have happened.
-If its name is listed in `claude agents --json`, it launched: do step 5.
-Otherwise launch it now with steps 4-5, its assignment's `Plan:` set as
-`## Supervision`, Operator death, step 1, says. This is a first launch,
-not a restart, and counts no death.
+The report prints a line for it, and its `session` field decides
+(`## Supervision`, Heartbeat):
+- `alive` (a live entry is listed under its name): it launched. Launch
+  nothing; record it and go on with step 5.
+- `failed` (only failed entries are listed): stop them (`## Supervision`,
+  Stopping an operator, with `failed`), then launch it with steps 4-5.
+- `absent`: launch it with steps 4-5.
+- `unknown` (the session list is unreadable): launch nothing now; the
+  heartbeat's `launching` rule (`## Supervision`, Heartbeat) finishes it on
+  a later beat.
 
-Then, for every unit whose ledger status is planning, admitted or running:
+When you launch it, keep its assignment as written,
+except that `Plan:` names a plan its own SDD workspace already holds
+(`## Supervision`, Operator death, step 1); step 5 takes its status from
+the assignment's `Admitted:` line. This is a first launch, not a restart,
+and counts no death. Launch no member of a family that a ruling still to
+be routed replaces (below): routing stops and cuts it. For a hand-back
+sibling `<unit-slug>-<k>`, also finish Hand-back siblings, steps 3-4
+(`## Supervision`), unless `<unit-slug>`'s line no longer lists the
+sibling's rows under `produces:`; step 4 skips each notice a `notified`
+line records.
 
-- **Listed by its name in `claude agents --json`: live.** Keep it. Never
-  start a second session under a live name. Send it the status ask
-  (`## Supervision`) with `notify_when_idle` set; its reply may carry a
-  `plan ready`, row report, question or `complete` the last conductor never
-  saw.
-- **Absent from the list: dead.** Restart it at once, without asking, as
-  `## Supervision`, Operator death, says: its assignment's `Plan:` names
-  the plan it already wrote, if one qualifies, its branch is brought up to
-  date, and it is launched with the same name in its existing worktree. Its SDD ledger
-  makes mid-plan resume cheap. Ledger the restart; a restart counts as a
-  death for the second-death rule. Restart no member of a family that a
+Then, for every unit whose ledger status is planning or admitted, or
+whose fix round is open (`## Integration`, step 4):
+
+- **The report shows its session alive** (listed under its name and not
+  `failed`; Phase 0's first report): live. Keep it. Never
+  start a second session under a live name. Send it the resume status ask
+  (`## Supervision`) and record it (`sh <skill dir>/beat.sh <ledger dir> asked
+  <unit-slug>`); its reply and the messages it sends again may carry a
+  `plan ready`, hand-back, question or `complete` the last conductor never
+  saw, and the heartbeat finds its unreported rows.
+- **The report shows it `absent` or `failed`: dead.** Handle it at once, without asking, as
+  `## Supervision`, Operator death, says, on the rung that report prints
+  for it, so a death the last conductor was already handling resumes on
+  the same rung. A restart refreshes its assignment's
+  `Plan:` from the plan it already wrote, brings its branch up to date,
+  launches it with the same name in its existing worktree, and sends it
+  again the relays, notices and fix round it was sent. Its SDD ledger
+  makes mid-plan resume cheap. Restart no member of a family that a
   ruling still to be routed (Routing, below) replaces, until the ledger
   holds that replacement's `- replacing <unit-slug> for <id>: step 6 done`
   line: its `## Affected units` names a member's `first task that no longer
@@ -132,20 +184,28 @@ package worktree, and before it merges anything, a row report or
   --grep='^docs(<design-slug>): rule <id>$'` prints (the subject the
   adjudication fork commits with, matched whole), unless `git -C <package
   worktree> log --format=%H --grep='^docs(<design-slug>): unrule <id>$'
-  <that sha>..HEAD` prints a commit that already undid it. Otherwise undo it
-  with `git -C <package worktree> revert --no-commit <that sha>`, then `git
-  -C <package worktree> commit -m "docs(<design-slug>): unrule <id>"`.
-  Either way, ledger `- unruled <that sha> for <id>: no ruling file` unless
-  that line is there. If the revert conflicts, run `git -C <package worktree> revert
-  --abort`, file question `unrule-<id>` (unless `## Questions` lists it),
-  and start that fork first; `<id>`'s fork waits until its ruling is
-  routed. Then start `<id>`'s adjudication fork again.
+  <that sha>..HEAD` prints a commit that already undid it, or the ledger
+  has a `routed unrule-<id>` line: that ruling took the amendment out.
+  Otherwise undo it, before anything else merges in Phase 0, with `git -C
+  <package worktree> revert --no-commit <that sha>`, then `git -C <package
+  worktree> commit -m "docs(<design-slug>): unrule <id>"`, and ledger `-
+  unruled <that sha> for <id>: no ruling file` unless that line is there.
+  If the revert conflicts, run `git -C <package worktree> revert --abort`.
+  If `## Questions` lists `unrule-<id>`, it is queued like any question.
+  Otherwise write `<ledger dir>/questions/unrule-<id>.md` in the question
+  form, its `## Question` reading "Commit `<that sha>` amended the package
+  for question `<id>` and has no ruling; take its amendment out as
+  current-state text.", file it, and start that fork first. `<id>`'s fork
+  waits until `unrule-<id>` is routed. Then start `<id>`'s adjudication
+  fork again.
 - **Merge reviews.** For each `## Integration` merge line with neither a
   `No drift @ <sha>` line nor a `merge-<unit-slug>-<short-sha>` question,
   start its merge-review fork.
 
-Then post your partner one summary of the true state (not a question) and
-continue from whichever phase the ledger shows incomplete.
+Then run one beat (`## Supervision`, Heartbeat), which starts the
+heartbeat timer if anything can move, post your partner one summary of the
+true state (not a question), and continue from whichever phase the ledger
+shows incomplete.
 
 ## Phase 1 — Package intake
 
@@ -188,6 +248,14 @@ as header lines below `Build graph:`:
 - `Project commands: <commands>`: the project's own test, build, lint and
   install commands, taken from its CLAUDE.md and its package scripts (for
   example `npm test`, `npx vitest`, `npm install`), never from a plan.
+
+**Your own commands.** A permission prompt in this session waits on your
+partner and so unbounds every wait in this skill. Everything the heartbeat
+and the fork time limit do runs through `sh <skill dir>/beat.sh`, and the
+budget through `sh <skill dir>/budget.sh`; the rest is `git`, `claude
+agents`, `claude stop`, `env -C` (operator launches),
+and `python3` (the checkpoint id). If a prompt appears for one of these, ask your partner once
+to allow them for this project; the plugin README gives the entries.
 
 **Comprehension gate — once, before the first admission** (and again before
 any cutover-class step): dispatch a fresh agent to write an "explain the
@@ -239,20 +307,24 @@ thresholds are set once, at the top of `budget.sh`: `LOWER=70`, `UPPER=90`,
 | `high` | `UPPER` (90%) or above | Start no operator and admit no planning operator. Running ones finish their unit. Wait for the reset (below). |
 
 **Waiting for the reset.** When the band is `high` and any unit is
-deferred, start one background Bash command that sleeps until the reset
-time `budget.sh` reports for the window at or above `UPPER` (its `resets
-<time> (in <h>h<mm>m)` on that window's line: `sleep <seconds until
-then>`), unless one is already running. When it exits, run `budget.sh` and
-re-derive admission. If that line gives no reset time you can read, start
-no wait: run `budget.sh` again at the next event (an operator message, an
-idle notice or a fork exit) and apply the `middle` band's rule until a
-reset time is readable.
+deferred, the reset is a deadline for the one heartbeat timer
+(`## Supervision`, Heartbeat): the reset time `budget.sh` reports for the
+window at or above `UPPER` (its `resets <time> (in <h>h<mm>m)` on that
+window's line). The timer sleeps until the nearer of the reset and the next
+beat, or until the reset alone when nothing else can move (Heartbeat);
+when it exits, the beat runs `budget.sh` and re-derives admission. If
+that line gives no reset time you can read, the next beat is the next
+event: each beat runs `budget.sh` again, and until a reset time is readable
+apply the `middle` band's rule.
 This wake has real work behind it, deferred units to start, so it is not a
 keep-warm ping (`## Context economics`).
 
 - An operator counts as running from its start until its unit is
-  `complete`; a planning-only operator counts too. A completed operator
-  that stays warm for fix rounds does not count.
+  `complete` or `stopped`; a planning-only operator counts too. A completed
+  operator that stays warm for fix rounds does not count. A restart or a
+  relaunch keeps the unit's status and its slot. A unit stopped on the
+  third rung of the ladder (`## Supervision`, Operator death) no longer
+  counts, so in the `middle` band its slot goes to the next unit.
 - Composer forks are exempt: a ruling or merge review is small, and
   withholding it stalls operators already paid for.
 - Restarting a dead operator, or replacing a stopped one under the same
@@ -277,9 +349,15 @@ result.
 > more than the tokens saved.
 
 **Starting an operator.** First check what a conductor that died may
-already have done. If `claude agents --json` lists
-`<design-slug>-<unit-slug>`, start nothing: never a second session under a
-live name. If `git -C <project> worktree list` lists its worktree, step 1
+already have done. Step 3 ledgers the `launching` line before the launch,
+so a launch a dead conductor made shows as a `launching` line on the
+report. A unit with no line on the report (no `## Units` line yet, or a
+status the report does not print, such as `deferred` or `replaced`) reads
+`absent`. Otherwise its `session` field decides, as for a `launching` unit
+in Phase 0: `alive`, start nothing (never a second session under a live
+name); `failed`, stop the failed entries (`## Supervision`, Stopping an
+operator, with `failed`), which then block nothing; `absent`, go on;
+`unknown`, start nothing this time. If `git -C <project> worktree list` lists its worktree, step 1
 is done: go on from step 2.
 
 1. **Worktree.** `git -C <project> worktree add
@@ -309,13 +387,17 @@ is done: go on from step 2.
        - Allowed git commands: git add, git commit, git rev-parse, git log, git diff, git status, git show, git merge, git merge-base, git branch, git rm
        - Allowed SDD scripts: bash <sdd scripts dir>/sdd-workspace, bash <sdd scripts dir>/task-brief, bash <sdd scripts dir>/review-package
        - Allowed project commands: <project commands>
+       - Allowed for waiting: sleep (run in the background), TaskStop, sh <skill dir>/beat.sh changed
 
    If `superpowers-html:html-docs` is among your available skills, also add
    the line `- Before superpowers:writing-plans, load superpowers-html:html-docs.`
    and add `bash <html scripts dir>/task-brief, python3 <html scripts dir>/superpowers-html`
    to `Allowed SDD scripts:`. Otherwise the assignment is unchanged.
 
-3. **Ledger** the unit line (`## Units`) before the launch, with status
+3. **Ledger** the unit line (`## Units`) before the launch, then run `sh
+   <skill dir>/beat.sh <ledger dir> launching <unit-slug>`, which forgets
+   any earlier operator's session id, so a death before step 5 never
+   reads the wrong transcript. The line has status
    `launching` and `start <sha>`: `git -C <unit worktree> rev-parse HEAD`
    just before the first launch, after any bring-up-to-date merge, so a
    branch that is brought up to date (a hand-back sibling's) is merged
@@ -323,7 +405,7 @@ is done: go on from step 2.
    `start` it has.
 4. **Launch**, as one Bash call:
 
-       env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <sdd scripts dir>/sdd-workspace:*),Bash(bash <sdd scripts dir>/task-brief:*),Bash(bash <sdd scripts dir>/review-package:*),Bash(<project command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
+       env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,TaskStop,Bash(sleep:*),Bash(sh <skill dir>/beat.sh changed:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <sdd scripts dir>/sdd-workspace:*),Bash(bash <sdd scripts dir>/task-brief:*),Bash(bash <sdd scripts dir>/review-package:*),Bash(<project command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
 
    - `env -C` sets the session's cwd for that one command. A `cd` in a
      separate call persists only inside this session's working
@@ -339,24 +421,52 @@ is done: go on from step 2.
      `Project commands:` line. Add `Bash(jev:*)` when `superpowers-jev` is
      installed. Add `Bash(bash <html scripts dir>/task-brief:*)` and
      `Bash(python3 <html scripts dir>/superpowers-html:*)` when the ledger has
-     an `HTML scripts:` line; `<html scripts dir>` is that path. A tool call outside the list stalls about two minutes and
-     then fails: the operator asks you for the command, and you relaunch it
-     with a longer list (below) when the command belongs to its unit's work.
+     an `HTML scripts:` line; `<html scripts dir>` is that path. A tool call
+     outside the list stalls about two minutes and then fails: the operator
+     sends `need command` (`## Supervision`), and you relaunch it with a
+     longer list (below) when the command belongs to its unit's work.
+   - `TaskStop`, `Bash(sleep:*)` and `Bash(sh <skill dir>/beat.sh
+     changed:*)` are how the operator waits on its own implementers and
+     reviewers: it dispatches them in the background, waits in bounded
+     stretches of background `sleep`, asks `beat.sh changed` whether
+     anything in its worktree changed during a stretch, and stops a leaf
+     that outlives its bound (`operator-briefing.md`). The entry admits
+     only the `changed` command.
    - **Relaunching with a longer list.** Add the command to the ledger's
-     `Project commands:` line. Stop the operator by its short id
-     (`## Supervision`, Stopping an operator), run `claude agents --json`
-     until its name is no longer listed, set its assignment's `Plan:` line to
+     `Project commands:` line. Stop the operator (`## Supervision`,
+     Stopping an operator), set its assignment's `Plan:` line to
      the plan it already has (as for a restart, `## Supervision`, Operator
-     death), and launch it with this step's command and the longer list,
-     same name, worktree and model. Ledger it as `relaunched`. A relaunch is
-     not a death: it does not count toward the second-death rule, and it
-     keeps the running count.
+     death), ledger the relaunch with `sh <skill dir>/beat.sh <ledger dir>
+     relaunched <unit-slug>` (it appends `- relaunched <unit-slug>` under
+     `## Supervision` and forgets the old session id), and launch it with
+     this step's command and the longer list, same name, worktree and
+     model, unless the stop left a live entry listed or could not read the
+     list (Stopping an operator): then launch nothing this time, and the
+     next beat finds the unit `restart pending` and launches it then. Then record its session (step 5's `launched`), run
+     `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it again what it was sent (Heartbeat, Resends),
+     which ends with its `resent to` line; until then the report shows it
+     `restart pending`, and a death in between launches it again with no
+     rung. A relaunch
+     is not a death: it is no rung of the ladder, the unit keeps its
+     status, and it keeps the running count.
    - `--add-dir="<ledger dir>"` declares the one directory outside the
      worktree the operator writes: its question files.
 5. **Ledger** the unit line again with its status, `planning` when its
    assignment says `Admitted: no` and `admitted` otherwise, and its `## Cost`
    start: the timestamp and the `SEVEN_DAY` percentage from the `budget.sh`
-   run.
+   run. Then record its session: `sh <skill dir>/beat.sh <ledger dir>
+   launched <unit-slug>` looks at `claude agents --json` `LAUNCH_TRIES`
+   times `LAUNCH_WAIT` seconds apart (set at the top of `beat.sh`: 3 tries
+   over 20 seconds) and stores the session id only if the session is alive
+   at the last look and never failed in between: a session that cannot
+   start is listed at once and then turns `failed`. A session that never
+   appears or fails is a failed start: `launched` ledgers `- launch failed
+   <unit-slug>`, which ends the launch, and the next beat finds the unit
+   dead and puts it on its next rung (Operator death). A session that comes
+   up after that line is owed its resends like any restart. If it says the session list is
+   unreadable, run it again later. Then start its beat file, `sh <skill dir>/beat.sh <ledger dir> seen
+   <unit-slug>`, and start the heartbeat timer if none is running
+   (`## Supervision`, Heartbeat).
 
 **Bringing a branch up to date.** Before you ledger and launch a hand-back
 sibling (Starting an operator, step 3), and before you launch a
@@ -376,20 +486,169 @@ next task.`
 
 ## Supervision
 
-**Learn of idle with `notify_when_idle`, never by polling.** Set it on every
-message you send an operator. An idle notice with none of the five operator
-messages behind it means the operator stopped without reporting: send it
-the status ask.
+**Messages are hints; the heartbeat reads state.** A message can be lost:
+its sender may have named a session that is gone, or you may have died
+before acting on it. So every message speeds up something the heartbeat
+also finds. Set `notify_when_idle` on every message you send an operator:
+an idle notice with no operator message behind it gets the status ask at
+once, rather than at the next beat. It is an optimisation only; the live
+drill recorded no idle notice from a `--bg` session, so nothing waits on
+one.
 
-**Messages operators send you** (`operator-briefing.md`, `## Progress`):
+**Heartbeat.** `sh <skill dir>/beat.sh` holds the heartbeat's constants,
+set once at its top: `BEAT=600` seconds, `STALL_BEATS=1`, and the forks'
+`FORK_LIMIT=2700`. It reads state and prints facts; it sends nothing and
+decides nothing. You act on its lines, and you never count ledger lines
+yourself for anything it prints.
+
+- **When it runs.** Keep exactly one heartbeat timer while something can
+  move without your partner: a unit the report shows `movable yes` that is
+  not held entirely on a question that waits for your partner, or a fork
+  that is running. Then the timer sleeps `BEAT` seconds, or until the
+  summary's `next-reset` or a high-band reset (Phase 2, Waiting for the
+  reset) when that is nearer. When the only thing left is units waiting on
+  a reset (`next-reset`) or deferred units waiting on a readable band
+  reset, it sleeps until the nearer reset; when the band's reset is
+  unreadable, `BEAT`. When nothing can move, start no timer: your
+  partner's next message is the next event. Whenever you start an
+  operator or a fork, send a fix round, or wake to a message, start the
+  timer if none is running and something can move. Other wakes do not
+  reset a running timer.
+- **The timer** is one background Bash command whose exit wakes you: `sh
+  <skill dir>/beat.sh <ledger dir> timer <seconds>`. Its pid and deadline
+  are in `<ledger dir>/timer`, and the report's `timer` line says whether
+  it runs. For a nearer deadline, `sh <skill dir>/beat.sh <ledger dir>
+  stop-timer` and start the shorter one; the exit of a timer you stopped is
+  not a beat. Phase 0's `resume` stops the last conductor's timer.
+- **A beat** is one command, `sh <skill dir>/beat.sh <ledger dir>`, then
+  the actions its lines call for, then the next timer. A beat with nothing
+  to do is two tool calls whatever the number of units; each finding adds
+  the calls its action takes. Each action checks the ledger or git before
+  it acts, so a beat cut short by a death is simply run again, and a beat
+  ledgers only the lines of what it changed. The report, one line each,
+  then a summary line:
+
+      unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> investigated yes|no restart pending|none wait none|until-<epoch>|over movable yes|no
+      row <unit-slug> <row id> task <N> head <sha7>
+      transcript <unit-slug> <path>|none
+      fork <fork name> running|gone|unstarted failures <n>
+      question <id>
+      timer running|none deadline <epoch>|-
+      beat: sessions ok|unknown watched <n> absent <n> evidence <n> due <n> overdue <n> rows <n> forks running <n> gone <n> fixrounds <n> deferred <n> questions <n> waiting <n> next-reset <epoch>|- movable <n> timer running|none
+
+  - A `unit` line is printed for every watched unit: planning, admitted,
+    or with an open fix round (a `- fix round <unit-slug>` line under
+    `## Integration` with no later `merged <unit-slug>` line). A
+    `launching` unit is printed too, so its session is judged by the same
+    definition of alive; it is never asked (its `ask` is always `none`)
+    and never counted absent. On every beat, finish it by its `session`
+    field, exactly as Phase 0's `launching` paragraph says: `absent`,
+    launch it (Phase 2, Starting an operator, steps 4-5); `failed`, stop the
+    failed entries (Stopping an operator, with `failed`), then launch it;
+    `alive`, launch nothing and record it (step 5); `unknown`, act on the
+    next beat. The report decides afresh each time, so this is safe to run
+    again after a death. Its worktree
+    is the one its `## Units` line names (`worktree <path>, start`), else
+    `<project>/.claude/worktrees/<design-slug>-<unit-slug>`.
+  - `sessions unknown` in the summary, and `session unknown` on every unit
+    line: `claude agents --json` failed or printed no list. Handle no death
+    and no stall on this beat; everything else on the report stands.
+  - Alive means listed under its name and not in state `failed`; `beat.sh`
+    uses that one definition everywhere. `session absent`: its name is not
+    in the session list. `session failed`: it is listed in state `failed`,
+    which is how a session that could not start stays listed. Either way it
+    is dead (Operator death, below), unless it is waiting for a reset.
+  - `evidence`: progress since its beat file,
+    `<ledger dir>/assignments/<unit-slug>.beat`, was last written: its
+    branch head moved, or a file in its worktree outside `.git` and
+    `node_modules` changed (an edit, an SDD ledger line, a report). On
+    evidence the report rewrites the beat file; `new` means it had none.
+    A message from the operator is evidence too: when you handle one, run
+    `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>`, which rewrites
+    the beat file at once.
+  - `quiet`: minutes since the beat file was written.
+  - `ask due`: no evidence for `STALL_BEATS` × `BEAT` (10 minutes), no ask
+    open, and progress is expected (not a planning unit whose plan is
+    ledgered, not waiting for a reset). Send the status ask, then `sh
+    <skill dir>/beat.sh <ledger dir> asked <unit-slug>`, and ledger `-
+    status asked <unit-slug>`. Skip a unit every one of whose unfinished
+    tasks is held by a question with no `routed <id>` line. An ask is open
+    until the next evidence.
+  - `ask overdue`: the ask is a beat old with no evidence and no reply. It
+    is stalled (Operator death, below). The session list's own status
+    fields do not tell a working session from an idle one, so the report
+    does not read them.
+  - `rung`: the rung of the ladder its next death or stall is on (Operator
+    death).
+  - `investigated yes`: an investigation for this rung is ledgered (an `-
+    investigated <unit-slug>` line with no later `restarted` line).
+  - A `transcript` line, for a unit on rung 2 or higher: a file in the
+    ledger dir, `<ledger dir>/assignments/<unit-slug>.tail`, holding the
+    last `TAIL_LINES` lines, within the last `TAIL_BYTES` bytes, of the
+    transcript of its last confirmed session
+    (`~/.claude/projects/<project dir>/<session id>.jsonl`, by the id
+    `launched` recorded, refreshed on every beat the session is listed).
+    The copy keeps the investigation inside the project and ledger dirs.
+    `none` when there is no recorded id or no such transcript.
+  - `restart pending`: its newest `restarted` or `relaunched` line has no
+    `- resent to <session name>` after it, and no `- launch failed
+    <unit-slug>` (or there is one but the session is alive after all).
+    Alive, it is owed its resends (below). Dead, the launch was never seen
+    through (Operator death).
+  - `wait until-<epoch>`: it waits for a usage reset; it is not asked, not
+    dead, and cannot move. `wait over`: the reset has passed; restart it
+    (Operator death, usage limit).
+  - `movable no`: it waits for a reset, or it is a planning unit with its
+    plan ledgered whose needed rows no planning or admitted unit produces.
+  - A `row` line: the unit's SDD ledger,
+    `<unit worktree>/.superpowers/sdd/*/progress.md`, has `Task <N>:
+    complete (commits <base7>..<head7>` for the plan task whose text says
+    `Delivers row <row id>` (`operator-briefing.md`, step 3), and no merge
+    has delivered that row. Handle it as the message `row <row id> passed
+    review at <head7> on <branch>`, with the full sha from `git -C <unit
+    worktree> rev-parse <head7>`, but only while no amending fork runs and
+    no ruling is being routed (`## Composer forks`, One writer); otherwise
+    the next beat finds it again.
+  - A `fork … gone` line: a fork attempt with a `started` line and no
+    `exited` line whose process group is no longer listed. Handle it as
+    When a fork exits (`## Composer forks`). `fork … unstarted`: its
+    `started` line was ledgered but the attempt never ran (no `.pid`
+    file); start it, as Starting a fork says, under the same name; it is
+    no failure. `failures` counts the `no output` exits of all attempts of
+    that fork.
+  - A `question` line: a file in `<ledger dir>/questions/` with no
+    `## Questions` line. Handle it as the `question` message.
+  - `deferred` in the summary: if any unit is deferred and the band was
+    `high`, run `budget.sh` and re-derive admission (Phase 2).
+- **Resends.** Send the session again, in ledger order, every ruling
+  relay (`relayed <id> to <session name>`) and sibling notice (`notified
+  <session name>: ...`) the ledger records for it, and the fix-round
+  message of its open `fix round` line, then append `- resent to <session
+  name>`, also when there was nothing to send: that line is what marks the
+  restart seen through. All are current-state text, so a second copy
+  changes nothing.
+
+So a silent operator is asked 10 to 20 minutes after its last evidence and
+handled as stalled one beat later: 20 to 30 minutes.
+
+**Messages operators send you** (`operator-briefing.md`, `## Progress`).
+Every message from an operator is progress evidence: when you handle it,
+run `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>`. An operator sends a message
+again when a send fails and when the resume status ask asks it to, so act
+on each only for what the ledger does not already show done: a row whose
+`merged` line exists, a question `## Questions` lists, a hand-back whose
+sibling is on `## Units`, a `complete` already ledgered.
 
 | Message | You do |
 |---|---|
-| `plan ready: <plan path> at <sha>` | If `<plan path>` is the superseded plan its assignment's `Replaces:` line names, send the mechanical ruling `Write your plan at a new path, git add it, git rm the old path and commit; SDD keys its workspace to the plan's path. Go on by sending plan ready again.` Otherwise ledger the plan. Admit the unit when its rows have merged and the band allows. |
+| `plan ready: <plan path> at <sha>` | If `<plan path>` is the superseded plan its assignment's `Replaces:` line names, send the mechanical ruling `Write your plan at a new path, git add it, git rm the old path and commit; SDD keys its workspace to the plan's path. Go on by sending plan ready again.` Otherwise ledger `- plan <unit-slug>: <plan path> at <sha>` under `## Supervision`. Admit the unit when its rows have merged and the band allows. |
 | `row <row id> passed review at <sha> on <branch>` | Merge the branch up to `<sha>` (`## Integration`). Once the merge passes its tests, start a merge-review fork, then re-derive admission (Phase 2) and admit every unit that was waiting only on rows now merged. The reporting operator keeps building. |
 | `hand-back: tasks <numbers> of <plan path> at <sha>; files <paths>; needs rows <ids>` | Start a sibling operator for those tasks under the band (Hand-back siblings, below). |
 | `question <id>: <path>` | Ledger it under `## Questions` and start an adjudication fork on it (`## Composer forks`). Send the operator nothing about the design until the ruling exists. |
 | `complete: <branch>, ...` | Merge the branch (`## Integration`). Once the merge passes its tests, start a merge-review fork, ledger `complete` and the `## Cost` finish, then re-derive admission. |
+| `status: plan <plan path> at <sha> \| none; passed review through task <N> \| none; working on task <N> \| none; held on <question ids, command <command>, admission, or nothing>` | The reply to a status ask. Ledger a plan not yet ledgered, as for `plan ready`. A held question with no `## Questions` line is a `question` message, from its file; one with a `routed <id>` line gets its ruling relay again. A held command is a `need command`. Admission: admit the unit when its rows have merged and the band allows. |
+| `need command: <command> for task <N>` | A permission denial. If the command belongs to the unit's work (a project test, build, lint or install command, or a git command), relaunch the operator with it (Phase 2, Relaunching with a longer list). Otherwise send the mechanical ruling naming the allowed command that does the job, or file a question `from <unit-slug>` if none does. |
+| Anything else | A message that asks nothing (an acknowledgement, a report) is progress evidence only. A mechanical ask (which branch, which worktree, which test command) gets the mechanical ruling. Any other ask is handled as a `question`: if it names a question file, that is the question; if not, write `<ledger dir>/questions/conductor-<k>.md` from it, quoting the message under `## Question` and its sender under `## Blocking`, and ledger it `from <unit-slug>`, so its ruling relay goes to that operator. |
 
 **Hand-back siblings.** For each `hand-back` from unit `<unit-slug>`:
 
@@ -408,7 +667,13 @@ the status ask.
 3. In the ledger, add the sibling's `## Units` line with those rows under
    `produces:`, and remove them from `<unit-slug>`'s line.
 4. Send `<unit-slug>`'s operator, and every earlier sibling, the sibling
-   notice (below).
+   notice (below), and ledger each under `## Supervision` as `- notified
+   <session name>: sibling <sibling name>`; skip a send that line records.
+
+Siblings may message each other by name, but nothing depends on it: their
+lanes share no dependency edge and no file, rows reach them only through
+you, and the heartbeat reads each sibling's progress from its own branch
+and SDD ledger.
 
 **Mechanical rulings stay with you**: which branch to merge from (always
 with `--no-ff`, never a rebase), which worktree to use, which test command
@@ -419,8 +684,9 @@ to run. Answer them by message. Everything about the design goes to a composer f
 | When | Message |
 |---|---|
 | Admitting a planning operator | `You are admitted: rows <ids> merged into superconductor/<design-slug> at <sha>. Merge superconductor/<design-slug> into your branch, then build from step 6 of your briefing.` |
-| Sibling notice (after a hand-back) | `<sibling name> now runs tasks <numbers> of <plan path> and owns rows <ids, or none>; do not report those rows. Message <sibling name> by name when your lanes need to coordinate, and carry on with your own tasks.` |
-| Status ask (resume, or idle without a report) | `Status check from <design-slug>-conductor. Reply to <design-slug>-conductor by name with the last task that passed review, the task in progress, and anything held on a question.` |
+| Sibling notice (after a hand-back) | `<sibling name> now runs tasks <numbers> of <plan path> and owns rows <ids, or none>; do not report those rows. Message <sibling name> by name when your lanes need to coordinate, never hold a task waiting on its reply, and carry on with your own tasks.` |
+| Status ask (a quiet unit, or idle without a report) | `Status check from <design-slug>-conductor. Reply to <design-slug>-conductor by name with your status line.` |
+| Resume status ask (Phase 0) | `Status check from <design-slug>-conductor after a restart of the conductor. Reply to <design-slug>-conductor by name with your status line, then send again every hand-back, question and complete you have sent; I skip what I already have.` |
 | Ruling relay (a unit listed as `clarification`, or the operator that asked), when the ruling's `Package commit` is `none` | `Ruling <id>: the spec now says <the ruling's ## Ruling sentences>. Re-read <file> § <section> in <package worktree>; the spec states the answer, so do not open the ruling file. Bring the tasks you have not started into line with it, release any task question <id> held, and carry on.` |
 | Ruling relay, when the ruling's `Package commit` is not `none` | `Ruling <id>: the spec now says <the ruling's ## Ruling sentences>. Re-read <file> § <section> in <package worktree>; the spec states the answer, so do not open the ruling file. Merge superconductor/<design-slug> into your branch first, then bring the tasks you have not started into line with it, release any task question <id> held, and carry on.` |
 | A mechanical ruling | `<the answer>. Go on with <task>.` |
@@ -464,22 +730,102 @@ authority.
 - **Operators stay warm through review.** A completed operator is not
   stopped: fix rounds, review findings, and integration breakage on its
   unit go to it by name first (a cold fix round costs ~3.7× per line).
-  Start a fresh one from its assignment file only when its name is absent
-  from `claude agents --json`, or when a ruling changes its approach.
-- **Stopping an operator.** `claude stop <id>`, where `<id>` is the short
-  `id` field of its entry in `claude agents --json`, found by name. Never
-  pass the name or the full `sessionId`; neither works. Ledger it as
-  `stopped`.
-- **Surface to your partner** only a refused trust check and a second
-  consecutive operator death on one unit: those wait on them. Post a
-  one-line notice that asks nothing when a tripped tally re-checkpoints.
-  Rulings need no notice: your partner reads `rulings/` afterwards.
+  Start a fresh one from its assignment file only when the report shows
+  its session `absent` or `failed` (Operator death), or when a ruling
+  changes its approach.
+- **Stopping an operator.** `sh <skill dir>/beat.sh <ledger dir> stop
+  <unit-slug>`, or with `failed` after it to stop only entries in state
+  `failed`. It runs `claude stop <id>` for each entry listed under the
+  unit's name, by that entry's own short `id` (never the name or the full
+  `sessionId`; neither works), then looks `LAUNCH_TRIES` times
+  `LAUNCH_WAIT` seconds apart and prints `stop <unit-slug>: stopped <ids>;
+  still listed: <id>:live|<id>:failed,…|none`, every entry still under
+  the name with its state. It never waits longer. If the session list is
+  unreadable it exits non-zero and prints `still listed: unknown`: treat
+  the name as taken and launch nothing this time; the next beat retries. Several entries can
+  share a name: a `failed` one can stay listed after the stop, and a
+  relaunch under the name succeeds beside it (live drill), so a `failed`
+  entry still listed blocks nothing, and the report takes the entry that
+  is not `failed`. If a `:live` entry is still listed, launch nothing under
+  that name this time: the next beat finds the unit again. Run again after
+  a death, it stops whatever is still listed and nothing else. Ledger the unit
+  `stopped` only when it will not be restarted: the ladder's third rung
+  and the end of the run. A stop for a restart or a relaunch is recorded by
+  that `restarted` or `relaunched` line, and the unit keeps its status; a
+  replacement ledgers `replaced (ruling <id>)`.
+- **Surface to your partner** only a refused trust check, a unit stopped on
+  the ladder's third rung (with the investigation's finding), and a fork
+  that failed twice (`## Composer forks`, When a fork exits): those wait on
+  them. Post a one-line notice that asks nothing when a tripped tally
+  re-checkpoints, and when an investigation found no cause. Rulings need no
+  notice: your partner reads `rulings/` afterwards.
 - **Routine progress** reaches your partner as merge summaries
   (`## Integration`), not as questions.
-- **Operator death.** An operator whose ledger status is planning, admitted
-  or running and whose name is absent from `claude agents --json` is dead.
-  Ledger it, then restart it with the same name, worktree and model:
-  1. Refresh its assignment file: `Needs rows` with current merge shas,
+- **Operator death.** A unit the report shows `session absent` or
+  `session failed` (and not waiting for a reset) is dead; one it shows `ask overdue` is stalled. On a
+  beat whose summary says `sessions unknown`, handle neither. If the unit
+  also shows `restart pending`, its last restart or relaunch was ledgered
+  but never seen through: launch it again from step 4 below, with no new
+  rung. Otherwise deaths and stalls climb one ladder, and the report's
+  `rung` field is the rung this one is on. The ladder starts again at each
+  merge from the unit and at each replacement of its operator; `beat.sh`
+  keys every restart line it writes to both, so you never count lines or
+  copy a key yourself. For a stall, first ledger `- stalled <unit-slug>`
+  and note its short id; the operator is stopped in step 1 below.
+
+  - **Rung 1: restart**, with cause `death` or `stall`.
+  - **Rung 2: investigate, apply the remedy, restart.** If the report shows
+    `investigated yes` (an investigation the last conductor finished), apply
+    the remedy its ledger line names. Otherwise dispatch one fresh agent and
+    wait for its one-line answer, so the transcript stays out of your
+    context: `Find why operator <session name> stopped making progress.
+    Read <the report's transcript file> (the end of its transcript, JSON
+    lines: its last tool calls, tool results and errors). If that is none, read git -C <unit worktree>
+    status, git -C <unit worktree> log -5 --stat and the last 40 lines of
+    <unit worktree>/.superpowers/sdd/*/progress.md instead. Either way also
+    read the output of sh <skill dir>/beat.sh <ledger dir> strays
+    <unit-slug>. Change nothing. Reply
+    with exactly one line: cause: denied command <command> | usage limit |
+    hung process <the command line it ran, as the transcript shows it> |
+    defect <the task and what it keeps hitting> | unknown.` It reads only, so a death mid-investigation just dispatches
+    it again. Write its answer, as given, to `<ledger dir>/assignments/<unit-slug>.cause`
+    with the Write tool, ledger `- investigated <unit-slug>: <cause> —
+    <remedy>`, then apply the remedy, and restart with the cause named:
+    - denied command (`denied-command`): add it as Phase 2, Relaunching
+      with a longer list, says, and launch with the longer list;
+    - usage limit: not a death, and no restart yet. First stop whatever
+      is listed under its name, a stalled session or a `failed` entry
+      (Stopping an operator). Then run `sh <skill dir>/beat.sh <ledger dir> wait
+      <unit-slug> <minutes>`, with the
+      minutes until the reset `budget.sh` reports. The unit then shows
+      `wait until-<epoch>`: it is not watched and the summary's
+      `next-reset` sets the timer. At `wait over`, restart it with cause
+      `usage-limit`, which climbs no rung;
+    - hung process (`hung-process`): after step 1, `sh <skill dir>/beat.sh
+      <ledger dir> kill-strays <unit-slug>`, which reads the command line
+      from the `.cause` file (never through a shell) and stops only
+      processes whose command line contains that text,
+      whose working directory is in the unit's worktree and which have no
+      terminal, found again at the time it runs, never by a remembered pid.
+      With no command named, it kills nothing: treat the cause as
+      `unknown`;
+    - defect (`defect`): file it as a question (`## Composer forks`,
+      Questions) `from <unit-slug>`, and after the restart send the
+      operator the mechanical ruling `Question <id> holds task <N>; work on
+      your other tasks until its ruling reaches you.`;
+    - unknown (`unknown`): post your partner a one-line notice that asks
+      nothing.
+  - **Rung 3: stop.** Do not restart. Stop whatever is listed under its
+    name, a stalled session or a `failed` entry (Stopping an operator).
+    Ledger
+    `- stopped <unit-slug>: rung 3` under `## Supervision` and the unit
+    `stopped` under `## Units`, and surface it to your partner with the
+    rung-2 finding.
+
+  To restart, with the same name, worktree and model:
+  1. Stop whatever is listed under its name, a stalled session or a
+     `failed` entry (Stopping an operator).
+  2. Refresh its assignment file: `Needs rows` with current merge shas,
      `Admitted` as the ledger has it, and `Plan:` naming the plan it
      already wrote, `<plan path> at <sha>, tasks <the unit's tasks, minus
      any handed back> (already written)`. Take the repo-relative path from
@@ -493,13 +839,24 @@ authority.
      deletes it. Once `Plan:` names a plan, set `Replaces: none`: the
      replacement work is in that plan. If no plan qualifies,
      `Plan:` stays `none` and `Replaces:` stays as it is.
-  2. Bring its branch up to date (Phase 2, Bringing a branch up to date)
-     and launch it (Phase 2, Starting an operator, step 4).
-  3. Ledger the restart.
+  3. Ledger the restart before the launch: `sh <skill dir>/beat.sh <ledger
+     dir> restart <unit-slug> <cause>`, which appends `- restarted
+     <unit-slug>: <cause>, rung <n>, since <key>` under `## Supervision`
+     and prints it.
+  4. Bring its branch up to date (Phase 2, Bringing a branch up to date)
+     and launch it (Phase 2, Starting an operator, step 4), unless step 1's
+     stop left a `:live` entry listed or could not read the list (Stopping
+     an operator).
+  5. Record its session (`sh <skill dir>/beat.sh <ledger dir> launched
+     <unit-slug>`, as Phase 2, Starting an operator, step 5, says; a
+     session that never appears ends here with `launch failed`, and the next
+     beat puts the unit on its next rung), run `sh
+     <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it its
+     resends (Heartbeat, Resends), which end with its `resent to` line;
+     its assignment already carries its admission, and it keeps its status.
 
   SDD's ledger makes mid-plan resume cheap. A restart keeps the running
-  count, so it goes ahead in every band. A second consecutive death on one
-  unit: do not restart; surface to your partner.
+  count, so it goes ahead in every band.
 
 ## Composer forks
 
@@ -510,13 +867,60 @@ outcome. The prompts and command lines are in this plugin's
 `skills/supercomposer/composer-forks.md`, under `## Checkpoint`,
 `## Adjudication fork`, `## Merge-review fork` and `## Build-graph fork`.
 
-**Starting a fork.** Copy the section's prompt into
-`<ledger dir>/prompts/`, fill every placeholder, and run its command line
-exactly as written there, `env -C "<package worktree>"` and the equals
-signs included: `claude -p --resume <checkpoint id> --fork-session ...`.
-Run it as a background Bash command, so you are told when it exits; never
-wait on it in the foreground. `<checkpoint id>` and `<model>` come from the
-last line under `## Checkpoints`. Forks are exempt from the budget band.
+**Starting a fork.** Copy the section's prompt into `<ledger
+dir>/prompts/<fork name>.md` and fill every placeholder. The fork name is
+`rule-<id>` for an adjudication fork, `review-<unit-slug>-<short sha>` for
+a merge review, `graph-<id>` for a build graph a ruling needs, and
+`checkpoint-<n>` for a checkpoint. Each attempt after the first appends
+`@<k>` (`rule-q7@2`), so its `.pid` and `.out` files and its exit notice
+never mix with an earlier attempt's. Ledger `- fork <fork name> started
+<date-time>` under `## Forks`, then run its command line (`claude -p --resume <checkpoint id>
+--fork-session ...`) exactly as written there: the time limit, `env -C "<package worktree>"`, the equals
+signs and the output file included. Run it as a background Bash command, so
+you are told when it exits; never wait on it in the foreground. Start the
+heartbeat timer if none is running. `<checkpoint id>` and `<model>` come
+from the last line under `## Checkpoints`. Forks are exempt from the
+budget band.
+
+**When a fork exits**, whether it finished, hit its time limit (exit
+status 124), or a beat found its process group gone, first make sure the
+exit is new: if the newest line for that attempt's name is already an
+`exited` line, this is a stale notice: do nothing. (The fork's exit is
+decided by the fork process; the time limit stops anything it left in its
+process group as it exits.) Otherwise check for the output it exists to
+make:
+
+| Fork | Its output |
+|---|---|
+| `rule-<id>` | `<ledger dir>/rulings/<id>.md` |
+| `review-<unit-slug>-<short sha>` | a `No drift @ <sha>` line in `<ledger dir>/prompts/<fork name>.out`, or `<ledger dir>/questions/merge-<unit-slug>-<short sha>.md` |
+| `graph-<id>` | a commit `git -C <package worktree> log -1 --format=%h --grep='^docs(<design-slug>): build graph$' <package commit>..HEAD` prints |
+| `checkpoint-<n>` | a session id in `<ledger dir>/checkpoint-<n>.json` |
+
+Ledger `- fork <fork name> exited [<status>]: output` or `- fork <fork
+name> exited [<status>]: no output` (the status when you have it), then:
+
+- **Output:** go on as its own paragraph below says.
+- **No output, first time:** start it once more, as above, as attempt
+  `@2`. For `rule-<id>`,
+  first take out any rule commit it made, as Phase 0, Questions, says, so
+  the second fork does not rule on its own half-made amendment. For
+  `graph-<id>`, first discard uncommitted edits in the package worktree as
+  Phase 0, Package worktree, says.
+- **No output, second time** (the report's `failures` is 2; a fork stopped
+  at resume counts as no attempt): surface it to your partner
+  and free what it held. A question whose fork failed twice waits for your
+  partner, and its operator holds the tasks it blocks; the next queued
+  amending fork starts. A failed checkpoint leaves forks on the current one.
+  A failed build graph leaves `Build graph:` as it is. A failed merge review
+  leaves the merge in place, unreviewed.
+
+The time limit, `FORK_LIMIT` in `beat.sh`, holds while the fork's
+watchdog (the `beat.sh … fork` process) lives, whether or not a conductor
+is running. If the watchdog itself is killed with KILL, the fork runs on
+without a limit until the next Phase 0, which stops every amending fork a
+dead conductor left running and lets a read-only one finish (Phase 0, What
+the last conductor left running).
 
 **Questions.** A question is a file `<ledger dir>/questions/<id>.md` in the
 form `composer-forks.md` gives. Operators write theirs. Write your own, id
@@ -533,7 +937,7 @@ no `[a-z0-9-]` character on either side (`routed api-2` is not a line for
 way. For each one, ledger
 it under `## Questions` with its defect class, then run `## Adjudication
 fork` on it. In that prompt's list of plans, name every live operator's
-unit and plan path (planning, admitted or running).
+unit and plan path (planning or admitted).
 
 **One writer.** Adjudication and build-graph forks amend the package, so at
 most one of them runs at a time, and you merge nothing while one runs: the
@@ -545,11 +949,11 @@ fork.
 
 **Merge review.** After every merge that passes its tests (a row report's,
 a sibling's or a `complete`'s), run `## Merge-review fork` with the unit,
-the merged sha, and its needs and produces rows. When it exits: `No drift @
-<sha>` is one ledger line under `## Integration`; a question file path is a
-question like any other.
+the merged sha, and its needs and produces rows. When it exits with its
+output: `No drift @ <sha>` is one ledger line under `## Integration`; a
+question file is a question like any other.
 
-**When an adjudication fork exits**, read `rulings/<id>.md` once, to route
+**When an adjudication fork exits** with its ruling file, read `rulings/<id>.md` once, to route
 it: `Package commit`, `Changes design`, `Changes contract`, `## Ruling`,
 `## Re-read`, `## Affected units` and `## Build graph`. Before step 1, append
 `- routing <id>: rulings/<id>.md, commit <sha|none>` under `## Questions`,
@@ -573,9 +977,10 @@ contract`. Then, in order:
    `## Build graph` lines: the unit slugs whose rows to rewrite, and each `new: <what>` the specs now need that no row
    implements; `none named` when the section lists nothing. A hand-back
    sibling `<unit-slug>-<k>` has no row of its own: pass `<unit-slug>`.
-   When it exits, update the ledger's `Build graph:` line and append `-
-   build graph for <id> @ <sha>`; a row it added is a unit like any other,
-   started when step 5 re-derives admission.
+   When it exits with its commit, update the ledger's `Build graph:` line
+   and append `- build graph for <id> @ <sha>`; a row it added is a unit
+   like any other, started when step 5 re-derives admission. If it failed
+   twice, append `- build graph for <id> @ none` and go on.
 4. Re-checkpoint if one is due (below), unless a `## Checkpoints` line
    names `ruling <id>`.
 5. Start the fresh operators from step 2 (Replacing an operator, steps
@@ -617,11 +1022,11 @@ stopped: once step 6 is done, it is an ordinary unit, which Phase 0
 restarts like any other if it dies.
 
 1. Ledger every member `replaced (ruling <id>)` in one append, then stop
-   each member still listed in `claude agents --json`: `claude stop <id>`
-   (`## Supervision`, Stopping an operator). When routing again, skip the
-   append if the ledger already holds it.
-2. Run `claude agents --json` again; start nothing under any member's name
-   while it is still listed.
+   each member (`## Supervision`, Stopping an operator, which stops
+   whatever is listed under the name and nothing else). When routing again, skip the append if the
+   ledger already holds it.
+2. Start nothing under any member's name while a live entry is still
+   listed under it (Stopping an operator says what that blocks).
 3. Cut each member's branch. Skip a member that has a `- cut <member> to
    <cut-to sha> for ruling <id>` line. Every sibling is cut whole, the
    named one included: remove its worktree if `git -C <project> worktree
@@ -657,9 +1062,12 @@ restarts like any other if it dies.
    integration branch; it comes after the commit the member was cut back
    to, `<cut-to sha>`, which for a whole sibling is its `start` commit. While
    you hold the one-writer slot (no amending fork running, no merge under
-   way), revert those commits, not the merge commits, with `git -C
-   <package worktree> revert --no-edit $(git -C <package worktree> rev-list
-   --no-merges --first-parent <cut-to sha>..<merged sha>)`. `--first-parent`
+   way), revert those commits, not the merge commits, with `git -c
+   revert.reference=false -C <package worktree> revert --no-edit $(git -C
+   <package worktree> rev-list --no-merges --first-parent <cut-to
+   sha>..<merged sha>)`. `revert.reference=false` gives each revert git's
+   `Revert "…"` subject whatever the repo's configuration, which is how
+   Phase 0 recognises it. `--first-parent`
    keeps to the member's own commits, leaving out what it merged in from
    the integration branch, because every such merge is `--no-ff` (Phase 2,
    Bringing a branch up to date); the kept commits stay merged. Then run the full
@@ -687,9 +1095,14 @@ restarts like any other if it dies.
    plan <plan path>`. Write nothing else about the old approach in the
    assignment: the fresh operator learns the unit from the spec and the
    kept code, never from a summary of what was dropped.
-6. Start the fresh operator. If `claude agents --json` lists its name,
+6. Start the fresh operator. If the report shows its session `alive`,
    Phase 0 already launched it from its `launching` line: launch nothing.
-   Otherwise bring its branch up to date (Phase 2, Bringing a branch up to
+   If it shows `failed`, stop the failed entries first (`## Supervision`,
+   Stopping an operator, with `failed`); a failed entry blocks nothing. If
+   it shows `unknown`, ledger its `launching` line (Phase 2, Starting an
+   operator, step 3), append step 6's done line, and launch nothing: the
+   heartbeat's `launching` rule (`## Supervision`, Heartbeat) launches it on
+   a later beat. Otherwise bring its branch up to date (Phase 2, Bringing a branch up to
    date), set its assignment's `Plan:` as `## Supervision`, Operator death,
    step 1, says (it stays `none` unless an earlier fresh operator wrote a
    plan), and start it with the same name, worktree and model (Phase 2,
@@ -716,7 +1129,9 @@ these holds:
   before this question triggers nothing.
 
 Build it after any build-graph fork that is due, and before the next
-amending fork starts. Append its id under `## Checkpoints`, ending the line
+amending fork starts. It is a fork for the time limit, the background run
+and the exit check (Starting a fork, When a fork exits): `checkpoint-<n>`,
+whose output is a session id. Append its id under `## Checkpoints`, ending the line
 with `| ruling <id>` for the ruling whose routing built it; every fork
 started after that resumes it. Forks already running finish on the old
 one: never stop or restart them.
@@ -756,15 +1171,19 @@ adjudication fork (its prompt in `composer-forks.md`), not here.
 The spine and its operators outlive any one cache window; engineer for
 cheap cold resume rather than warm waiting.
 
-- **Why sessions stay warm.** You are woken by operator messages, idle
-  notices and fork exits; with several operators those arrive well inside
-  an hour. Each operator is a main session with the 1-hour cache, so a long
-  implementer run does not cost it a cold re-read. Its implementers and
-  reviewers, and the composer forks, get the 1-hour cache from the
-  `subagentPromptCacheTtl: "1h"` setting. The checkpoint is read by every
-  fork, and each read resets its timer.
+- **Why sessions stay warm.** You are woken by operator messages, fork
+  exits and the heartbeat, which beats every `BEAT` (10 minutes) while
+  something can move without your partner. Each operator is a main session
+  with the 1-hour cache, and it waits on its implementers and reviewers in
+  bounded background stretches, so a long implementer run does not cost it a cold re-read. Its
+  implementers and reviewers, and the composer forks, get the 1-hour cache
+  from the `subagentPromptCacheTtl: "1h"` setting. The checkpoint is read by
+  every fork, and each read resets its timer.
 - Never send a message or schedule a wakeup solely to keep a cache warm. A
-  session with nothing to do is allowed to go cold.
+  session with nothing to do is allowed to go cold. The heartbeat is not a
+  keep-warm ping: every beat does the whole reconcile, in one command whose
+  output is a few short lines, and no timer runs while nothing it watches
+  can move.
 - Fill waits with real work — read SDD ledgers, write the assignment files
   of units about to become ready, tend the ledger.
 - For mechanical phases (rename sweeps, ordinal conversions, vocabulary
@@ -793,10 +1212,12 @@ one merge after another.
    you just made in step 1, while you hold the one-writer slot and before
    anything else writes to the package worktree, and for the untested merge
    at the branch's head that Phase 0 takes out; never reset any other
-   commit there. Then send the owning operator the fix-round message by
-   name. If its name is absent from `claude agents --json`, restart it as
-   `## Supervision`, Operator death, says, then send it the fix-round
-   message. Never fix
+   commit there. Then ledger `- fix round <unit-slug> @ <sha>: <one line>;
+   output <path>` under `## Integration`, send the owning operator the
+   fix-round message by name, and start the heartbeat timer if none is
+   running. If the report shows its session `absent` or `failed`, handle it
+   as `## Supervision`, Operator death, says; the restart's resends carry
+   the fix round. The heartbeat watches the unit until the fix merges. Never fix
    it yourself. A merge that fails its tests has not merged: its rows do
    not count, its consumers are not admitted, and no merge review runs.
 5. Once the tests pass, ledger the merge under `## Integration`, start the
@@ -807,8 +1228,9 @@ one merge after another.
    Admitted now: <names>. Waiting: <unit: rows>.`
 
 When every unit has merged: present the integration branch to your partner,
-follow superpowers:finishing-a-development-branch, and stop every operator
-still listed (`claude stop <id>`).
+follow superpowers:finishing-a-development-branch, stop every operator
+still listed (`## Supervision`, Stopping an operator), and stop the heartbeat timer (`sh
+<skill dir>/beat.sh <ledger dir> stop-timer`).
 
 ## Ledger format
 
@@ -826,19 +1248,37 @@ still listed (`claude stop <id>`).
 
     ## Units
     - <unit-slug>: <session name> — status: launching | planning | admitted |
-      running | complete | stopped | replaced (ruling <id>) | deferred (+ branch,
-      worktree, start
-      <sha>, model — rationale: <signal>, needs: <rows>, produces: <rows>)
+      complete | stopped | replaced (ruling <id>) | deferred (branch
+      <branch>, worktree <absolute path>, start <sha>, model <model> —
+      rationale: <signal>, needs: <rows>, produces: <rows>)
+
+    ## Supervision
+    - plan <unit-slug>: <plan path> at <sha>
+    - notified <session name>: sibling <sibling name>
+    - status asked <unit-slug>
+    - stalled <unit-slug>
+    - investigated <unit-slug>: <cause> — <remedy>
+    - restarted <unit-slug>: <cause>, rung <n>, since <sha|start> gen <k>
+    - restarted <unit-slug>: usage-limit, since <sha|start> gen <k>
+    - waiting reset <unit-slug> until <epoch>
+    - stopped <unit-slug>: rung 3
+    - relaunched <unit-slug>
+    - launch failed <unit-slug>
+    - resent to <session name>
 
     ## Questions
     - <date> <id> from <unit-slug> [defect-class: <slug>]: <question> →
       rulings/<id>.md (commit <sha|none>, changes contract: yes|no)
     - routing <id>: rulings/<id>.md, commit <sha|none>
     - relayed <id> to <session name>
-    - build graph for <id> @ <sha>
+    - build graph for <id> @ <sha|none>
     - replacing <unit-slug> for <id>: step <n> done
     - routed <id>
     - unruled <sha> for <id>: no ruling file
+
+    ## Forks
+    - fork <fork name> started <date-time>
+    - fork <fork name> exited [<status>]: output | no output | stopped at resume
 
     ## Frame-defect tally
     - <class-slug>: <count> — instances: <one line each, dated>
@@ -850,6 +1290,7 @@ still listed (`claude stop <id>`).
       <result>
     - cut <member> to <cut-to sha> for ruling <id>
     - unmerged row <row id>: cut by ruling <id>
+    - fix round <unit-slug> @ <sha>: <one line>; output <path>
 
     ## Cost
     - <unit-slug>: admitted <ts> seven_day <pct> | finished <ts> seven_day
@@ -865,6 +1306,21 @@ operator started / admitted / complete / died / restarted / relaunched /
 stopped,
 question filed, fork started / exited, routing begun, ruling relayed,
 build graph rewritten, replacement step done, routing done, rule commit
-with no ruling file undone, operator launching, operator replaced,
+with no ruling file undone, operator launching, launch failed, operator replaced,
 branch cut, cut commits reverted, checkpoint built, merge done, merge
-aborted or taken back, deferral recorded.
+aborted or taken back, fix round sent, deferral recorded, sibling notice
+sent, plan ledgered, status asked, operator stalled, operator
+investigated, relays and notices resent. A beat that changed none of these
+appends nothing. The heartbeat's `<ledger dir>/timer` and the `<ledger
+dir>/assignments/<unit-slug>.beat`, `.asked`, `.session`, `.tail` and
+`.cause` files are working state, not ledger: losing a `.beat` or
+`.asked` file costs one beat of detection, and `beat.sh` rewrites it from
+git; losing a `.session` file leaves a rung-2 investigation the worktree
+fallback; a `.tail` is copied again on every beat that prints it; losing a
+`.cause` file leaves `kill-strays` no named command, so the cause is
+treated as `unknown`. `beat.sh` writes the
+`restarted` and `waiting reset` lines itself (`restart`, `wait`): the
+cause names one of `death`, `stall`, `denied-command`, `hung-process`,
+`defect`, `unknown` or `usage-limit`; `<key>` is the `@ <sha>` of the
+unit's newest `merged` line exactly as written there (`start` before its
+first) and `gen <k>`, the number of times the unit has been replaced.

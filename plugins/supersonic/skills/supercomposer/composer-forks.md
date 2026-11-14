@@ -7,9 +7,13 @@ supercomposer SKILL.md.
 
 To run one:
 
-1. Copy the prompt text below into a prompt file under `<ledger dir>/prompts/`, filling every
-   `<placeholder>`. Paths are absolute.
-2. Run the command line exactly as written, starting with `env -C "<package worktree>"`.
+1. Copy the prompt text below into the prompt file `<ledger dir>/prompts/<fork name>.md`,
+   filling every `<placeholder>`. Paths are absolute. The fork name is `checkpoint-<n>`,
+   `rule-<id>`, `review-<unit-slug>-<short sha>`, or `graph-<id>` (`graph-all` for the
+   composer's first build graph); an attempt after the first appends `@<k>` (`rule-q7@2`),
+   so its files never mix with an earlier attempt's.
+2. Run the command line exactly as written, starting with the time limit below, then
+   `env -C "<package worktree>"`.
    Every one of these runs with cwd = the package worktree: `claude` has no cwd flag, and
    `--resume` looks up sessions per project directory. `env -C` sets the launch directory
    for that one command; a `cd` in a separate call persists only inside the session's
@@ -21,6 +25,25 @@ To run one:
    (a plain `Write` allow also wrote outside the cwd in the drill; the flag makes it
    explicit). Forks run as background Bash commands, so whoever started one is told when
    it exits.
+4. Every command line starts with the time limit. `<time limit>` in each command below
+   stands for exactly
+
+       sh <supersonic plugin dir>/skills/superconductor/beat.sh <ledger dir> fork <fork name>
+
+   where `<supersonic plugin dir>` is this plugin's installed directory. It runs the rest
+   of the line in a process group of its own, writes that group's number to `<ledger
+   dir>/prompts/<fork name>.pid`, and stops the whole group (TERM, then KILL five seconds
+   later) once `FORK_LIMIT` passes, 2700 seconds (45 minutes), set once at the top of
+   `beat.sh`. It exits 124 when the limit stopped the fork, 128 plus the signal when the fork
+   died by a signal, and the fork's own status otherwise; when the fork itself exits, it stops
+   anything the fork left running in its group. The group matters: `claude` may be
+   a wrapper script whose child is the real session, and stopping only the wrapper would
+   leave the session running. Stock macOS has no `timeout` command. The limit holds while
+   that `beat.sh` process lives; whoever resumes a run after its conductor died stops a
+   leftover amending fork with `sh <supersonic plugin dir>/skills/superconductor/beat.sh
+   <ledger dir> stop-fork <fork name>`.
+5. A fork whose output is a printed line writes it to `<ledger dir>/prompts/<fork
+   name>.out`, so the line survives the session that started it.
 
 The checkpoint runs on the most capable model available to the session that creates it:
 every ruling is made on it, and budget is not an input. That model is recorded beside the
@@ -33,9 +56,10 @@ A fresh session that cold-reads the committed package and stops. Its id is what 
 resumes. It is never resumed in place and never receives a result: only the forks below
 touch it, each as a new session.
 
-Command, with cwd = `<package worktree>`:
+Command, with cwd = `<package worktree>`, as a background Bash command; when it exits,
+the second line prints the id, or fails if there is none:
 
-    env -C "<package worktree>" claude -p --model <model> --output-format json --allowedTools="Read,Grep,Glob" "$(cat <prompt file>)" > <ledger dir>/checkpoint-<n>.json
+    <time limit> env -C "<package worktree>" claude -p --model <model> --output-format json --allowedTools="Read,Grep,Glob" "$(cat <prompt file>)" > <ledger dir>/checkpoint-<n>.json
     python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])' < <ledger dir>/checkpoint-<n>.json
 
 Append the id under the ledger's `## Checkpoints` heading as
@@ -78,7 +102,7 @@ The question file it reads, `<ledger dir>/questions/<id>.md`, has this form:
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Bash(jev:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
+    <time limit> env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Bash(jev:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)" > <ledger dir>/prompts/<fork name>.out 2>&1
 
 Prompt:
 
@@ -148,7 +172,7 @@ package, so any number run at once, beside an amending fork.
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
+    <time limit> env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)" > <ledger dir>/prompts/<fork name>.out 2>&1
 
 Prompt:
 
@@ -185,7 +209,7 @@ package, so it runs alone. It writes only inside the package worktree, so it tak
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "$(cat <prompt file>)"
+    <time limit> env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "$(cat <prompt file>)" > <ledger dir>/prompts/<fork name>.out 2>&1
 
 Prompt:
 

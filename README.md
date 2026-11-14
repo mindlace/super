@@ -40,6 +40,15 @@ For local development, add the checkout as a directory marketplace instead:
 - A trusted repo. `claude --bg` refuses to start in a directory whose workspace trust prompt has never been accepted, so open `claude` in the repo once, accept the prompt and exit before the first run.
 - A named conductor. Operators message the conductor by name, so start it as an interactive session with `claude -n <design-slug>-conductor`, then invoke `supersonic:superconductor` in it. Under any other name, operator messages do not reach it.
 - On machines where `claude` adds a permission hook, launch lines carry `--permission-mode` and `--allowedTools`. The skills' launch lines already include both; keep them when you edit a line.
+- Conductor commands allowed without a prompt. A permission prompt in the conductor waits on you and holds every bound in the run, so allow its commands in the project's `.claude/settings.json`. With `<dir>` the installed `supersonic` plugin's `skills/superconductor` directory, the entries and what each one really admits:
+  - `"Bash(sh <dir>/beat.sh:*)"`: the heartbeat, the timer and the fork time limit. Its `fork` subcommand runs whatever command follows it, so this entry admits any command.
+  - `"Bash(sh <dir>/budget.sh:*)"`: reads the usage figures; nothing else.
+  - `"Bash(claude agents:*)"`, `"Bash(claude stop:*)"`: list and stop sessions.
+  - `"Bash(git:*)"`: every git command, and through aliases and `-c` options, any command.
+  - `"Bash(env -C:*)"`: operator launches; it admits any command run with `env -C`.
+  - `"Bash(python3 -c:*)"`: the checkpoint id; it admits any Python.
+
+  Four of these are as wide as a general shell allow; the narrow ones do not narrow the set. `<dir>` contains the plugin's version, so after a plugin update allow the new path too: operators launched before the update keep the old one in their launch line and assignment.
 
 ## Jev modes
 

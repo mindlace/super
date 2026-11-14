@@ -34,7 +34,8 @@ the build took.
    planning and review. The partner wants this done more intelligently than the April fork,
    which means parallel work is always separated by construction (dependency edges, disjoint
    files), every review is kept, and the workers can talk.
-5. No code we maintain. Skill text and settings only, on Claude Code's own primitives.
+5. As little code we maintain as possible: skill text and settings on Claude Code's own
+   primitives, plus two small conductor scripts, `budget.sh` and `beat.sh` (partner's decision).
 
 ## Non-goals
 
@@ -75,7 +76,7 @@ Observed on Claude Code 2.1.325 (spike, 2026-11-13) unless marked as from the do
 | A fork's first call reads the original's cached prefix (about 39k tokens read, under 300 written). | spike |
 | A forked or spawned session obeys the global "all work in a worktree" rule and may refuse to write otherwise. | spike |
 | `claude --bg` refuses to start in a directory that has not accepted the workspace trust prompt interactively, including `~/Projects/super`. A prior `-p` run does not grant trust. | spike |
-| Headless `-p` sessions skip the trust prompt, appear in `claude agents --json`, and can be messaged while their stdin is held open, but `claude logs` / `claude stop` do not manage them. | spike |
+| Headless `-p` sessions skip the trust prompt, appear in `claude agents --json`, and can be messaged while their stdin is held open, but `claude stop` does not manage them. | spike |
 | On this machine `claude` is a cmux shim that adds a permission-request hook; an unapproved tool call in a headless session is denied only after about 2 minutes. `--permission-mode acceptEdits` plus explicit `--allowedTools` runs unattended. | spike |
 | Main sessions get a 1-hour cache on a subscription. Subagents, forks and teammates get 5 minutes unless `subagentPromptCacheTtl` is set to `1h`. | docs |
 | A peer message never counts as the partner's consent and cannot answer a permission prompt. | docs |
@@ -135,7 +136,10 @@ subagent cache.
   **(call)** It keeps purely mechanical rulings, such as "which branch do I rebase on".
 - **Operator.** A full session, one per spec, in that spec's worktree, named
   `<design-slug>-<spec-slug>`. Runs writing-plans then subagent-driven-development exactly as
-  written. Its implementers and reviewers are its direct subagents.
+  written. Its implementers and reviewers are its direct subagents, dispatched in the
+  background and waited on in bounded stretches, as SDD's own waiting rule asks, so that
+  conductor messages reach the operator while a leaf works and a hung leaf is stopped after
+  a stated bound.
 
 ### Adjudication
 
@@ -150,8 +154,10 @@ subagent cache.
 5. The fork writes its ruling to `rulings/<n>.md` beside the question and ends. The ruling
    gives the commit, the sections to re-read, and, for each running spec whose approach or
    interface changed, the first task that no longer holds.
-6. The conductor started the fork as a background command, so it is told when the fork exits.
-   It relays a pointer to the ruling to each affected operator. **(call)** Forks do not send
+6. The conductor started the fork as a background command under a time limit, so it is told
+   when the fork exits or the limit stops it. A fork that exits without its ruling file is
+   started once more, then surfaced to the partner. The conductor relays a pointer to the
+   ruling to each affected operator. **(call)** Forks do not send
    messages themselves; messaging from a one-shot fork was not verified.
 
 Mechanics **(call)**:
@@ -215,7 +221,11 @@ two thresholds:
 | above the upper threshold | starts no operators; running ones finish their unit; resumes after the reset |
 
 **(call)** Defaults: lower 70%, upper 90%, N = 2, set in one place in the skill. An unreadable
-or stale figure counts as the middle band. Composer forks are exempt: a ruling or merge review
+or stale figure counts as the middle band. In the upper band the conductor's heartbeat timer
+sleeps until the nearer of the reset and the next beat, or to the reset alone when nothing else
+can move; with no readable reset time, each beat reads the figure again. In the middle band a
+restarted operator keeps its slot, and a unit stopped on the third rung of the escalation
+ladder gives its slot to the next unit. Composer forks are exempt: a ruling or merge review
 is small, and withholding it would stall operators that are already paid for. The HOLD / STOP
 recommendations, the per-wave partner decision and the scope gate are removed. The conductor
 states the band in its merge summaries.
@@ -320,14 +330,79 @@ toward N.
 
 ### Why sessions stay warm
 
-- The conductor is woken by operator messages and merge events; with several operators those
-  arrive well inside an hour.
-- An operator is a main session with the 1-hour cache, so a long implementer no longer costs
-  it a cold read.
+- The conductor is woken by operator messages, fork exits and its heartbeat, which beats every
+  ten minutes while something can move without the partner.
+- An operator is a main session with the 1-hour cache, and it waits on its leaves in
+  five-minute background stretches, so a long implementer does not cost it a cold read.
 - The checkpoint is read by every fork, and each read resets its timer.
 - Implementers, reviewers and forks get the 1-hour cache from the one setting.
 
-Nothing here is a keep-warm ping. A session with nothing to do is allowed to go cold.
+Nothing here is a keep-warm ping: every beat does the whole reconcile, in one script run whose
+output is a few short lines, and no timer runs while nothing it watches can move (every
+remaining unit waits on the partner, or only a readable budget reset is left, which the timer
+sleeps to). A session with nothing to do is allowed to go cold.
+
+### Supervision: messages are hints, state is the truth
+
+Every wait in the workflow has a bound, and nothing depends on a message arriving. A message
+names a session that may be gone, and a conductor may die before acting on one, so each
+message only speeds up something the conductor also finds from state: git, its ledger, the
+question files and `claude agents --json`.
+
+- **Heartbeat.** While something can move without the partner (a working unit, an open fix
+  round, a running fork), the conductor keeps one background timer (`BEAT` = 10 minutes). On
+  each beat it runs one read-mostly script, `beat.sh`, beside `budget.sh`: it reads the
+  session list, the ledger, fork process groups and each unit's worktree and SDD ledger, and
+  prints one line per watched unit and per open fork and a summary. The script decides
+  nothing and sends nothing; the conductor acts on its lines. Sessions that are gone are
+  restarted; question files with no ledger line are filed; rows an operator's SDD ledger shows
+  passed but never reported are merged (outside the one-writer slot only); relays, sibling
+  notices and an open fix round are sent again to a restarted operator; and each working
+  operator's progress is read from its branch head and any file written in its worktree,
+  SDD ledger included. A message from an operator counts as progress the moment it is
+  handled. An operator with no evidence for one beat (`STALL_BEATS` = 1) gets one status
+  request, so it is asked 10 to 20 minutes after its last evidence; with no evidence and no
+  reply a beat later it is stalled. The session list's status field does tell idle from
+  busy (live drill: `busy`/`working` in 28 of 29 samples while an operator worked,
+  `idle`/`done` in 5 of 5 after it finished), but an operator that ended its turn to wait
+  on a background child also reads idle, so neither value means stuck or healthy, and
+  nothing reads it. The high-band
+  reset wait shares the timer. This is the one piece of code in the workflow, because a
+  beat written as separate commands cost several tool calls per unit every ten minutes; as
+  one script a quiet beat is two tool calls.
+- **Escalation ladder** (partner's decision). Deaths and stalls of one unit climb one
+  ladder, counted from its newest merge, so a merged row resets it. The first is restarted.
+  The second is investigated before the restart: a subagent reads the tail of the
+  operator's session transcript, found by the session id recorded when its launch was
+  confirmed and copied, bounded, into the ledger dir (or, if there is none, its worktree
+  and SDD ledger), and
+  names one cause from a fixed list (denied command, usage limit, hung process, a plan or
+  spec defect it keeps hitting, unknown); the conductor applies that cause's remedy and
+  ledgers both. A usage limit is not a death: the unit waits, unwatched, until the reset,
+  and is then restarted without climbing. The third rung stops the unit and surfaces it to
+  the partner with the finding. A replacement operator starts the ladder again. `beat.sh` is
+  the one place the rung is computed: it writes every restart line with its rung and key
+  and prints the rung each unit is on, and a restart is seen through only once its resends
+  are ledgered, so a death between the restart line and the launch is relaunched without
+  climbing. If the session list cannot be read, that beat handles no death at all.
+- **Forks are bounded.** Every fork and the checkpoint run in the background under a 45-minute
+  limit that stops the fork's whole process group while the limit's watchdog process lives.
+  When the fork exits, the limit's watchdog also stops anything it left in its group. On exit
+  the conductor checks for the fork's output; each attempt has its own name, so a stale exit
+  notice from an earlier attempt is recognised from the ledger. With no output it starts the
+  fork once more, then surfaces it. A conductor that
+  resumes stops any amending fork its predecessor left running, because one still writing the
+  package worktree would break the one-writer rule; a read-only one is left to finish.
+- **Operators.** Leaves run in the background with five-minute waits, so a status request is
+  answered inside one beat; a leaf with no result and no file written in the worktree for ten
+  minutes after its first hour, or two hours in all, is stopped and dispatched once more,
+  then becomes a question. A send to the conductor that fails is retried three times; after
+  that the operator works on what is not blocked. A denied command is its own message, a
+  message that asks nothing is progress only, and any other message outside the forms is
+  handled as a question. Siblings may message each other, but nothing waits on it.
+- `notify_when_idle` stays as an optimisation: an idle notice with no report behind it gets
+  the status request early. The live drill recorded no idle notice from a `--bg` session, so
+  nothing depends on one.
 
 ### How sessions are started
 
@@ -335,19 +410,30 @@ Operators are managed background sessions: `claude --bg -n <name> "<assignment>"
 with the unit's worktree as the working directory. Verified 2026-11-13: once the partner has
 accepted the trust prompt in the repo, `--bg` starts in the repo and in its
 `.claude/worktrees/*` children; the session appears in `claude agents --json` with its name
-and idle/busy status; a `SendMessage` to it while idle woke it and it replied by name; and
-`claude logs`, `attach` and `stop` manage it. It runs the partner's normal session hooks and
+and a status field; a `SendMessage` to it while idle woke it and it replied by name; and
+`attach` and `stop` manage it. Its transcript is
+`~/.claude/projects/<project dir>/<sessionId>.jsonl` and stays there after the session is
+stopped, its tail readable JSON lines (live drill, round 3 rerun). A launch whose session
+never comes up within the bound in `beat.sh` is a failed start. A session that cannot
+start (for example with an invalid model) is listed at once and turns `idle`/`failed`
+within seconds, and stays listed (live drill, round 4); stopped sessions are not listed. So
+alive means listed and not `failed`, and a launch is confirmed only if the session is still
+alive at the end of the bound. A relaunch under a failed session's name succeeds beside the
+failed entry, leaving two entries with that name (live drill, round 5), so the conductor
+stops entries by their own short ids, looks a bounded number of times for them to leave,
+and launches even if a failed one stays; `beat.sh` takes the entry that is not `failed`.
+It runs the partner's normal session hooks and
 permission mode.
 
 - The repo must be trusted once, by the partner, before a first run. The conductor checks
   this at intake by starting one operator and says so plainly if it is refused.
-- The conductor learns an operator is idle with `SendMessage`'s `notify_when_idle`, not by
-  polling.
+- The conductor learns an operator's state from its heartbeat (Supervision, above);
+  `SendMessage`'s `notify_when_idle` only brings a status request forward.
 - Headless `claude -p` with a held-open input stream also works without trust, but it is not
-  managed by `claude logs` / `claude stop`. Not used.
+  managed by `claude stop`. Not used.
 
 Composer forks are one-shot (`claude -p --resume <checkpoint> --fork-session`), run by the
-conductor as a background command.
+conductor as a background command under a time limit.
 
 Every spawned session's prompt must carry: its name, the names of the conductor and the
 ledger path, the instruction to address peers by explicit name, the worktree it is already in,
@@ -358,8 +444,10 @@ and an explicit permission mode with the git commands it may run.
 | File | Change |
 |---|---|
 | `supercomposer/SKILL.md` | Contracts-first and write-set cutting; record checkpoint id; replace "reappraisal session" with fork behaviour and the current-state writing rule. |
-| `superconductor/SKILL.md` | Operators as sessions; admission by dependency; questions go to forks; merge-review forks; re-checkpoint rule; operator replacement on approach change; reconcile now finds live operators with `claude agents` instead of assuming them dead. |
-| `superconductor/operator-briefing.md` | Operator is a top-level session; peers addressed by name; leaves are its own subagents; ruling intake as current-state. |
+| `superconductor/SKILL.md` | Operators as sessions; admission by dependency; questions go to forks; merge-review forks; re-checkpoint rule; operator replacement on approach change; reconcile finds live operators with `claude agents`; the heartbeat, the escalation ladder and fork exit checks. |
+| `superconductor/beat.sh` | The heartbeat's report and its mechanical helpers: beat files, status asks, the timer, the fork time limit and stopping a fork's process group. |
+| `superconductor/operator-briefing.md` | Operator is a top-level session; peers addressed by name; leaves are its own subagents, dispatched in the background with bounded waits; ruling intake as current-state; status and denied-command messages. |
+| `supercomposer/composer-forks.md` | Every fork and the checkpoint run under `beat.sh`'s time limit, with their output in a file. |
 | settings | `subagentPromptCacheTtl: "1h"`. |
 | `superpowers-jev` points | `bounce` is no longer needed once sessions address by name. **(call)** |
 

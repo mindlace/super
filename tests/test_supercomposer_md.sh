@@ -155,6 +155,22 @@ for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'
   section "$h" | grep -qF -- 'env -C "<package worktree>" claude -p' \
     || { echo "FAIL: ## $h command must launch with env -C \"<package worktree>\""; exit 1; }
 done
+# Every fork and the checkpoint run under beat.sh's time limit; output lines go to a file.
+grep -qF 'sh <supersonic plugin dir>/skills/superconductor/beat.sh <ledger dir> fork <fork name>' "$forks" \
+  || { echo "FAIL: <time limit> must be beat.sh's fork command"; exit 1; }
+grep -qF 'stop-fork <fork name>' "$forks" || { echo "FAIL: composer-forks.md must name stop-fork"; exit 1; }
+grep -qF 'perl -e' "$forks" && { echo "FAIL: the time limit lives in beat.sh, not inline perl"; exit 1; }
+for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  section "$h" | grep -qF -- '<time limit> env -C "<package worktree>" claude -p' \
+    || { echo "FAIL: ## $h command must start with <time limit>"; exit 1; }
+  section "$h" | grep -qF 'as a background Bash command' \
+    || { echo "FAIL: ## $h must run as a background Bash command"; exit 1; }
+done
+for h in 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  section "$h" | grep -qF -- '"$(cat <prompt file>)" > <ledger dir>/prompts/<fork name>.out 2>&1' \
+    || { echo "FAIL: ## $h must write its output to <fork name>.out"; exit 1; }
+done
+printf '%s\n' "$flat" | grep -qF '(fork name `graph-all`)' || { echo "FAIL: C5 must name its build-graph fork"; exit 1; }
 grep -qF 'No conversation found' "$forks" || { echo "FAIL: composer-forks.md must name the No conversation found failure"; exit 1; }
 grep -qF '/add-dir' "$forks" && { echo "FAIL: composer-forks.md must not ask the partner to /add-dir"; exit 1; }
 # C5 commits after branching land in the package worktree.
