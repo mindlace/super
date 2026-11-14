@@ -56,4 +56,4 @@ Owns all state (Svelte 5 runes). Autosave debounces 1s after input; tracks `know
 - Config constants (`PROJECTS_ROOT`, `SUPERPOWERS_SEGMENT`) live in `src/lib/server/config.ts` — change roots there, not inline.
 - Tests are colocated (`*.test.ts`) and pure-unit: discovery/pairing/paths/watcher are written to be testable against a passed-in `root` or plain inputs rather than mocking the FS globally.
 - Svelte 5 runes (`$state`, `$derived`), 2-space indent, single quotes.
-- Specs/plans this app's own work generates live in `docs/superpowers/{specs,plans}/`.
+- Specs/plans this app's own work generates live in `../docs/superpowers/{specs,plans}/`.

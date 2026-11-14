@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- App commands (`npm`, `npx vitest`) run from `superspec/`: issue `cd superspec` as its own command first, never `cd superspec && cmd`. Paths in commands below are relative to `superspec/` unless they start with `docs/`.
+- App commands (`npm`, `npx vitest`) run from `superspec/`: issue `cd superspec` as its own command first, never `cd superspec && cmd`. App code and commands run with `superspec/` as the working directory, so they reach the repo's docs as `../docs/...` (for example a test reading `../docs/spec-format.md`, or a copy into `../docs/superpowers/specs/`). Prose references to docs files stay repo-root-relative (`docs/...`).
 - Spec files are `.md` or `.html`; every "is this a spec file" decision goes through `isSpecFile()` in `superspec/src/lib/specfile.ts`. No new `.endsWith('.md')` anywhere.
 - Allowed elements, attributes and the "Never" list are exactly the spec's tables under "The format" (including the Checklists row: `input` with `type="checkbox"` as the first child of an `li`; `type` and `checked` on `input` only, `type` only as `checkbox`). No `u`, no underline anywhere; `b`/`i` are never written, only `strong`/`em`.
 - Assets: served only from `docs/superpowers/<type>/assets/…`, extensions exactly `png`, `jpg`, `jpeg`, `gif`, `webp`, `mp4`, `webm`. SVG files are not served. Remote `src` is never allowed.
@@ -412,7 +412,7 @@ expect(scrollTopFor(0.7, { scrollTop: 0, scrollHeight: 80, clientHeight: 100 }))
 
 - [ ] **Step 6: Verify** — `npm test`; `npm run check` — Expected: PASS.
 
-- [ ] **Step 7: Manual check** — copy `superspec/src/lib/fixtures/sample-spec.html` to `docs/superpowers/specs/2026-11-13-sample-spec.html` in this worktree; `npm run dev`. The spec is listed with title "Worktree→main path fallback, with main as read-only"; it renders with the diagram painted in text colours, the table copies cleanly into a spreadsheet, no notice. Toggle to Source: HTML highlighting; edit and wait 1s: saved; toggle back: re-rendered at the same relative scroll. Add `<span>x</span>` to a `p` in source: the notice appears. A `.md` spec also toggles. Delete the copied file before committing.
+- [ ] **Step 7: Manual check** — copy `superspec/src/lib/fixtures/sample-spec.html` to `../docs/superpowers/specs/2026-11-13-sample-spec.html` (run from `superspec/`) in this worktree; `npm run dev`. The spec is listed with title "Worktree→main path fallback, with main as read-only"; it renders with the diagram painted in text colours, the table copies cleanly into a spreadsheet, no notice. Toggle to Source: HTML highlighting; edit and wait 1s: saved; toggle back: re-rendered at the same relative scroll. Add `<span>x</span>` to a `p` in source: the notice appears. A `.md` spec also toggles. Delete the copied file before committing.
 
 - [ ] **Step 8: Commit** — `git commit -m "feat: single rendered pane with a source toggle and html source mode"`
 
@@ -541,7 +541,7 @@ expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toB
 
 - [ ] **Step 5: Verify** — `npm test`; `npm run check` — Expected: PASS.
 
-- [ ] **Step 6: Manual check** — copy `sample-spec.html` to `docs/superpowers/specs/2026-11-13-sample-spec.html` and `sample-plan.html` to `docs/superpowers/plans/2026-11-13-sample-spec.html` in this worktree (same slug, so the plan nests under the spec). Edit one word in a paragraph; after save, `git diff --no-index src/lib/fixtures/sample-spec.html docs/superpowers/specs/2026-11-13-sample-spec.html` shows one hunk inside that paragraph only. In the plan, edit the text of `t1-s3`: the diff against `sample-plan.html` leaves its `<input type="checkbox">` untouched; clicking any checkbox does nothing. Enter does nothing; pasting rich text inserts plain text. Open a main-checkout file: no caret, checkboxes disabled. Edit the file externally: it reloads with the toast. Delete both copies.
+- [ ] **Step 6: Manual check** — copy `sample-spec.html` to `../docs/superpowers/specs/2026-11-13-sample-spec.html` and `sample-plan.html` to `../docs/superpowers/plans/2026-11-13-sample-spec.html` (run from `superspec/`) in this worktree (same slug, so the plan nests under the spec). Edit one word in a paragraph; after save, `git diff --no-index src/lib/fixtures/sample-spec.html ../docs/superpowers/specs/2026-11-13-sample-spec.html` shows one hunk inside that paragraph only. In the plan, edit the text of `t1-s3`: the diff against `sample-plan.html` leaves its `<input type="checkbox">` untouched; clicking any checkbox does nothing. Enter does nothing; pasting rich text inserts plain text. Open a main-checkout file: no caret, checkboxes disabled. Edit the file externally: it reloads with the toast. Delete both copies.
 
 - [ ] **Step 7: Commit** — `git commit -m "feat: edit html spec text in place"`
 
@@ -557,7 +557,7 @@ expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toB
 - Consumes: `renderSpecHtml` (Task 4).
 - Produces: a standalone reference containing two fenced ` ```html ` examples, the first spec-shaped, the second plan-shaped.
 
-- [ ] **Step 1: Write failing test** — `specformat.test.ts` › `every html example in docs/spec-format.md is a valid spec`: extract each ` ```html ` fence from `docs/spec-format.md`; expect exactly 2 or more, and for each `renderSpecHtml(example, SPEC)` returns `removed` `[]` and `problems` `[]`. Second test: the plan example contains `type="checkbox"` and at least one `checked`.
+- [ ] **Step 1: Write failing test** — `specformat.test.ts` › `every html example in docs/spec-format.md is a valid spec`: read `../docs/spec-format.md` (the test runs from `superspec/`) and extract each ` ```html ` fence from it; expect exactly 2 or more, and for each `renderSpecHtml(example, SPEC)` returns `removed` `[]` and `problems` `[]`. Second test: the plan example contains `type="checkbox"` and at least one `checked`.
 
 - [ ] **Step 2: Run** `npx vitest run src/lib/specformat.test.ts` — Expected: FAIL (file missing).
 
