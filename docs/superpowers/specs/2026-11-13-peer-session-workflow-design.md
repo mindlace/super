@@ -206,10 +206,23 @@ through the same replacement rule.
 
 ### What the composer does differently when cutting a package
 
-The motivating case, from the partner: in the sim-step-engine build, two specs depended on
-something that was roughly the eleventh task of the `world-core` spec. Neither could start
-until all of `world-core` had finished and merged. The dependency was on one deliverable, but
-it was expressed as a dependency on a whole spec, and the deliverable sat late in that spec.
+The motivating case is the sim-step-engine build (checked against its transcript, design doc
+and ledger on 2026-11-13). Three separate things held specs back:
+
+- **Edges were spec-to-spec.** `world-funding` needed one interface row (S12, the funding
+  hook), which was task 11 of 14 in `world-core`'s plan. The design had S12 as its own row,
+  but the dependency was declared against the whole spec, so `world-funding` was set to wait
+  for all of `world-core`. The hook's late position was real: it depended on earlier tasks.
+- **The declared order was looser than the real one.** `world-score` and `map-stream` needed
+  only `world-core`'s events and readers, but the design's order put them after
+  `ensemble-runner`, and the conductor turned that order into five linear waves.
+- **Nobody re-examined the graph.** The conductor reported the hook done and proposed
+  nothing. Both early starts happened only because the partner asked.
+
+Two more facts from that run shape the rules. The task order inside a spec is written by the
+operator's planning step, not by the composer, so the composer cannot place a deliverable
+early by itself. And once specs ran together they began duplicating a shared measurement
+step; the partner's ruling was that duplicated effort is worse than lost concurrency.
 
 **Two artifacts instead of one (partner's suggestion, under discussion).** The package keeps
 its domain specs: they are organised the way the system is understood, and they stay the
@@ -224,6 +237,14 @@ into a **build graph**: the set of things that get built, in dependency order.
 - A unit is sized to be worth an operator: several tasks, one plan. **(call)** This is the
   guard against repeating the April fork: units are whole operator runs with every review
   intact, in separate worktrees with disjoint files, so there is nothing to resolve at merge.
+- Every edge names rows of the interface table, never a spec or a position in an order. The
+  design doc carries no separate "dependency order" section; order is derived from the edges.
+- Anything two units would both need to build is its own unit or part of contracts, so that
+  running together never means building it twice.
+- A unit's assignment lists the rows other units are waiting on. The operator plans those as
+  early as their own dependencies allow and reports each one as it passes review.
+- The conductor re-derives what can start on every such report, not only when a unit
+  finishes.
 - The translation is done by a fork of the checkpoint, and redone for the affected units
   when a ruling amends a spec. The graph reports its longest chain; the fresh-eyes check
   challenges every edge on it.
