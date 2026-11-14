@@ -68,7 +68,9 @@ class _Parser(HTMLParser):
             return self._svg_start(tag, a)
         if self.pre is not None:
             return
-        if tag == "section":
+        if tag in ("br", "hr"):
+            self._flush()
+        elif tag == "section":
             self._flush()
             entry = self._new_entry(a.get("id"))
             self.entries.append(entry)
@@ -150,10 +152,7 @@ class _Parser(HTMLParser):
 
     def handle_startendtag(self, tag, attrs):
         self.handle_starttag(tag, attrs)
-        if tag in VOID and self.svg is None:
-            if tag in ("br", "hr"):
-                self._flush()
-        else:
+        if tag not in VOID or self.svg is not None:
             self.handle_endtag(tag)
 
     def handle_data(self, data):

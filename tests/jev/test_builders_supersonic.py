@@ -68,6 +68,18 @@ class SectionsTest(unittest.TestCase):
         self.assertEqual(got[1]["text"], "```sh\n# not a heading\n| not | a table |\n```")
         self.assertNotIn("tables", got[1])
 
+    def test_br_and_hr_break_lines_in_both_forms(self):
+        for br, hr in (("<br>", "<hr>"), ("<br/>", "<hr/>")):
+            got = htmldoc.sections('<article><section id="a"><h2>A</h2><p>one%stwo</p><p>x%sy</p></section></article>'
+                                   % (br, hr))
+            self.assertEqual(got[0]["text"], "one\ntwo\nx\ny", br)
+
+    def test_spec_summary_goal_breaks_at_br(self):
+        p = Path(tempfile.mkdtemp()) / "g.html"
+        p.write_text('<article><header><h1>T</h1></header><section id="g"><h2>Goal</h2>'
+                     '<p>one<br>two</p></section></article>', encoding="utf-8")
+        self.assertEqual(ledger.spec_summary(p), "T: one two")
+
     def test_title(self):
         self.assertEqual(htmldoc.title((FX / "spec-a.html").read_text()), "Auth spec")
         self.assertIsNone(htmldoc.title("<p>x</p>"))
