@@ -1,0 +1,46 @@
+Peer-session mechanism drill — 2026-11-13
+claude --version: 2.1.325 (Claude Code)
+Script: SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh
+Result: PASS spawn, PASS message (op-done after 5s; no idle notice recorded), PASS checkpoint, PASS fork, PASS stop
+Step 5 (interactive session receives a --bg SendMessage by name): PASS — controller-run 2026-11-13: `claude --bg -n namecheck-73 --model haiku --permission-mode acceptEdits --allowedTools="SendMessage" "<prompt>"` delivered its message to the interactive session named projects-73 by name, with no approval step. notify_when_idle from the interactive session to a --bg session also delivered one idle notice.
+Info: ttl-report ephemeral_5m_input_tokens=0 ephemeral_1h_input_tokens=58626 (fork 1 transcript)
+Info: claude agents --json keys: cwd id kind name pid sessionId startedAt state status — no usage/token field
+Info: claude stop takes the short "id" from agents --json (e.g. 70e94778), NOT the name and NOT the full sessionId
+
+Exact command forms (run from the directory that should be the session cwd; there is no cwd flag):
+  Operator launch: claude --bg -n <name> --model <model> --permission-mode acceptEdits --allowedTools="Read,Write,SendMessage" "<prompt>"
+    NOTE: --allowedTools is variadic; use the --allowedTools=... form (or put the prompt first), or the prompt is swallowed as a tool name and the session starts empty and blocked.
+  Checkpoint: claude -p --model haiku --output-format json --allowedTools="Read" "<cold-read prompt>"   # session id: python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])'
+  Fork (amending): claude -p --resume <id> --fork-session --model haiku --output-format json --permission-mode acceptEdits --allowedTools="Read,Write,Edit,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "<prompt>"
+  Fork (read-only): claude -p --resume <id> --fork-session --model haiku --output-format json --allowedTools="Read" "<prompt>"
+  Stop: claude stop <short-id>     # short id = "id" field of claude agents --json; names do not work
+  Agents query: claude agents --json [--cwd <path>]   # fields: id, sessionId, name, status, state, cwd, kind, pid
+  Transcript path: ~/.claude/projects/<cwd with every / and . replaced by ->/<session-id>.jsonl   (cwd via pwd -P)
+  No-tools run: claude -p --tools "" --append-system-prompt "<ctx>" "<prompt>"
+Writes outside cwd (2026-11-13, haiku, cwd = repo worktree, target = fresh mktemp -d dir outside the repo):
+  claude -p --model haiku --permission-mode acceptEdits --allowedTools="Write" "<write one line to <tmp>/out.txt>"                      -> written, exit 0, 5 s
+  claude -p --model haiku --permission-mode acceptEdits --allowedTools="Write" --add-dir="<tmp>" "<write one line to <tmp>/out.txt>"   -> written, exit 0, 5 s
+  Both forms work; forks still pass --add-dir="<ledger dir>" (equals form: the flag is variadic) so the outside write is declared, not incidental.
+Launch directory: env -C "<dir>" claude -p ...   # verified in the design spike and by the controller: the launch directory decides the session's cwd (and so which sessions --resume finds); a cd in a separate harness call persists only inside the session's working directories
+
+subagentPromptCacheTtl (controller-run 2026-11-13): cache_creation summed over subagent transcripts in one session. Before the setting: 5m=40316/65443/36913, 1h=0 (three task reviewers). After `"subagentPromptCacheTtl": "1h"` in ~/.claude/settings.json: 5m=0, 1h=134380 and 53550 (two task reviewers). It took effect for subagents started after the edit without restarting the session. `-p --fork-session` forks wrote 1h cache before the setting, so the drill's ttl-report cannot show the change.
+
+Operator launched with the superconductor skill's launch form (2026-11-13, haiku, claude 2.1.325): SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh -> PASS spawn, PASS message (op-done after 5s; operator also wrote ledger-done.txt into a scratch dir outside the worktree via --add-dir), PASS checkpoint, PASS fork, PASS stop. Idle notice: none recorded. What this run exercised: the CLI accepted the list at launch (no rejection, the prompt was not swallowed) and the operator's Write, Read and SendMessage calls ran without a stall. What it did not exercise: no Skill, Agent, SDD script, git or test command call, so it showed nothing about whether the list covers what subagent-driven-development runs (it did not: SDD's `bash <absolute path>` script calls matched no entry).
+  Launch line: env -C "<worktree>" claude --bg -n <name> --model haiku --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git rm:*),Bash(true:*)" --add-dir="<scratch>/ledger" "<prompt>"
+
+SDD scripts in the launch list (2026-11-13, haiku, claude 2.1.325).
+  Permission form probe (claude -p, cwd = a scratch git repo with a committed plan.md, S = the installed superpowers 7.0.2 skills/subagent-driven-development/scripts dir):
+    claude -p --model haiku --permission-mode acceptEdits --allowedTools="Bash(bash $S/sdd-workspace:*)" "<run: bash $S/sdd-workspace plan.md>"  -> ran, printed <repo>/.superpowers/sdd/plan, 6 s
+    claude -p --model haiku --permission-mode acceptEdits --allowedTools="Read" "<same>"                                                    -> "This command requires approval", not run, 2 min 0 s (the stall)
+  So the entry form is Bash(bash <absolute path>:*), the first form tried; it matches `bash <absolute path> <args>`.
+  Live drill: SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh, its operator launched with the skill's new list. The conductor's message asked the operator to run `bash <S>/sdd-workspace drill-plan.md` (a plan the drill commits), make one Skill call (superpowers:verification-before-completion), then write its files and reply.
+    PASS: sdd scripts dir (/Users/mindlace/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2/skills/subagent-driven-development/scripts)
+    PASS: spawn
+    PASS: message (op-done after 10s)
+    INFO: no idle notice recorded
+    PASS: sdd-and-skill (sdd-workspace made .superpowers/sdd/drill-plan; transcript: SDD SKILL)
+    PASS: checkpoint (c15b1e13-e89a-43a2-aaf6-c2e0c5a4100f)
+    PASS: fork
+    PASS: stop
+  Exercised: the SDD script call by absolute path (non-error tool result, workspace dir created), one Skill call (non-error), Write, SendMessage; all answered in 10 s, inside the 120 s limit, so no permission stall. Not exercised: task-brief, review-package, git merge-base, git branch, Agent, or a project command (their entries have the same form as the ones that ran).
+  Launch line: env -C "<worktree>" claude --bg -n <name> --model haiku --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <S>/sdd-workspace:*),Bash(bash <S>/task-brief:*),Bash(bash <S>/review-package:*),Bash(true:*)" --add-dir="<scratch>/ledger" "<prompt>"

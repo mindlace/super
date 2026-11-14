@@ -2,7 +2,7 @@
   "point": "surface-route",
   "version": 1,
   "plugin": "supersonic",
-  "anchor": "supersonic superconductor/SKILL.md ## Supervision: \"Surface to your partner only\" and \"Routine progress\"",
+  "anchor": "supersonic superconductor/SKILL.md ## Supervision: \"Surface to your partner\"",
   "cookbook": "https://docs.typesafe.ai/cookbooks/function_calling.md: a route Choice over a closed set of handlers; facts code can count (consecutive operator deaths) override in code, not in the model",
   "model": "jev-latest",
   "state_schema": {
@@ -43,5 +43,5 @@
   "compare": "picks",
   "on_skips": null,
   "claude_verdict_example": {"picks": {"route": "routine"}},
-  "notes": "Conservative = unclear, which falls back to the controller's own judgment, so a first-option bias can neither hide a frame event nor add an interruption. Any confident non-routine route is surfaced to the partner; routine goes in the wave-boundary summary."
+  "notes": "Conservative = unclear, which falls back to the controller's own judgment, so a first-option bias can neither hide a frame event nor add an interruption. Any confident non-routine route is surfaced to the partner; routine goes in the merge summary."
 }

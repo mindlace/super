@@ -416,6 +416,13 @@ class CliTest(unittest.TestCase):
         self.assertFalse(out["enabled"])
         self.assertEqual(srv.requests, [])
 
+    def test_retired_bounce_fails_open(self):
+        with support.StubServer(support.ok()) as srv:
+            env = support.make_env(srv.url)
+            out = ask.ask("bounce", {"message": "x", "operators": []}, env)
+        self.assertFalse(out["enabled"])
+        self.assertEqual(srv.requests, [])
+
     def test_mode_command(self):
         self.assertEqual(self.run_jev(["mode"], {}).stdout.strip(), "off")
         env = {"TYPESAFE_API_KEY": "k", "SUPERPOWERS_JEV_ON": "tier"}
