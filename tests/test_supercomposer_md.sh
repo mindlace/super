@@ -130,10 +130,14 @@ for h in 'Adjudication fork' 'Merge-review fork'; do
     || { echo "FAIL: ## $h must pass --add-dir=\"<ledger dir>\""; exit 1; }
 done
 grep -qF -- '--add-dir <' "$forks" && { echo "FAIL: --add-dir must use the equals form"; exit 1; }
-# The cd can silently not take effect: check pwd -P and name the failure.
-for s in 'pwd -P' 'No conversation found'; do
-  grep -qF -- "$s" "$forks" || { echo "FAIL: composer-forks.md missing cwd check: $s"; exit 1; }
+# A separate cd can silently not take effect: every command sets its launch dir with env -C,
+# and nothing waits on the partner to add a directory.
+for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  section "$h" | grep -qF -- 'env -C "<package worktree>" claude -p' \
+    || { echo "FAIL: ## $h command must launch with env -C \"<package worktree>\""; exit 1; }
 done
+grep -qF 'No conversation found' "$forks" || { echo "FAIL: composer-forks.md must name the No conversation found failure"; exit 1; }
+grep -qF '/add-dir' "$forks" && { echo "FAIL: composer-forks.md must not ask the partner to /add-dir"; exit 1; }
 # C5 commits after branching land in the package worktree.
 printf '%s\n' "$flat" | grep -qF 'git -C <package worktree>' \
   || { echo "FAIL: C5 must commit fixes in the package worktree"; exit 1; }

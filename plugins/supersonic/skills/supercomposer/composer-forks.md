@@ -9,20 +9,18 @@ To run one:
 
 1. Copy the prompt text below into a prompt file under `<ledger dir>/prompts/`, filling every
    `<placeholder>`. Paths are absolute.
-2. `cd <package worktree>` as a command of its own, then `pwd -P` as another, and confirm it
-   prints the package worktree. Every one of these runs with cwd = the package worktree:
-   there is no cwd flag, and `--resume` looks up sessions per project directory. The harness
-   keeps a `cd` only when the target is inside the session's working directories, so a `cd`
-   can silently not take effect. When `pwd -P` shows anything else, do not launch: the
-   package worktree is outside this session's working directories, so ask your partner to
-   add it (`/add-dir <package worktree>`) and repeat this step. A fork that exits with
+2. Run the command line exactly as written, starting with `env -C "<package worktree>"`.
+   Every one of these runs with cwd = the package worktree: `claude` has no cwd flag, and
+   `--resume` looks up sessions per project directory. `env -C` sets the launch directory
+   for that one command; a `cd` in a separate call persists only inside the session's
+   working directories, so it can silently not take effect. A fork that exits with
    "No conversation found" was started from the wrong cwd.
-3. Run the command line. `--allowedTools="..."` and `--add-dir="..."` keep their equals sign:
-   both flags are variadic, and without `=` they swallow the prompt. `--add-dir="<ledger
-   dir>"` declares the one directory outside the cwd that the adjudication and merge-review
-   forks write to (a plain `Write` allow also wrote outside the cwd in the drill; the flag
-   makes it explicit). Forks run as
-   background Bash commands, so whoever started one is told when it exits.
+3. `--allowedTools="..."` and `--add-dir="..."` keep their equals sign: both flags are
+   variadic, and without `=` they swallow the prompt. `--add-dir="<ledger dir>"` declares
+   the one directory outside the cwd that the adjudication and merge-review forks write to
+   (a plain `Write` allow also wrote outside the cwd in the drill; the flag makes it
+   explicit). Forks run as background Bash commands, so whoever started one is told when
+   it exits.
 
 `<model>` is always the checkpoint's model, recorded beside its id in the ledger.
 
@@ -34,7 +32,7 @@ touch it, each as a new session.
 
 Command, with cwd = `<package worktree>`:
 
-    claude -p --model <model> --output-format json --allowedTools="Read,Grep,Glob" "$(cat <prompt file>)" > <ledger dir>/checkpoint-<n>.json
+    env -C "<package worktree>" claude -p --model <model> --output-format json --allowedTools="Read,Grep,Glob" "$(cat <prompt file>)" > <ledger dir>/checkpoint-<n>.json
     python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])' < <ledger dir>/checkpoint-<n>.json
 
 Append the id under the ledger's `## Checkpoints` heading as
@@ -76,7 +74,7 @@ The question file it reads, `<ledger dir>/questions/<id>.md`, has this form:
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Bash(jev:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
+    env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Bash(jev:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
 
 Prompt:
 
@@ -139,7 +137,7 @@ package, so any number run at once, beside an amending fork.
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
+    env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
 
 Prompt:
 
@@ -175,7 +173,7 @@ package, so it runs alone. It writes only inside the package worktree, so it tak
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "$(cat <prompt file>)"
+    env -C "<package worktree>" claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "$(cat <prompt file>)"
 
 Prompt:
 
