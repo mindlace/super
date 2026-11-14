@@ -16,6 +16,17 @@ const ALLOWED_TAG_SET = new Set(ALLOWED_TAGS);
 const ALLOWED_ATTR_SET = new Set(ALLOWED_ATTR);
 const SVG_TAG_SET = new Set(SVG_TAGS);
 const MARKER_ATTR_SET = new Set(MARKER_ATTR);
+/** The diagram vocabulary: the only class names the stylesheet paints on SVG. */
+const SVG_CLASSES = new Set([
+  'diagram',
+  'node',
+  'edge',
+  'group',
+  'missing',
+  'result',
+  'external',
+  'muted'
+]);
 
 /** Per-call state the shared hooks read and write. */
 interface Run {
@@ -64,6 +75,18 @@ function attributeRule(el: Element, name: string, value: string, r: Run): string
   return null;
 }
 
+/** An SVG `class` keeps only the diagram vocabulary; any other token is dropped and reported. */
+function keepDiagramClasses(el: Element, r: Run): void {
+  if (el.namespaceURI !== SVG_NS || !el.hasAttribute('class')) return;
+  const tokens = (el.getAttribute('class') ?? '').split(/\s+/).filter(Boolean);
+  const kept = tokens.filter((t) => SVG_CLASSES.has(t));
+  if (kept.length === tokens.length) return;
+  const dropped = tokens.filter((t) => !SVG_CLASSES.has(t));
+  r.removed.push(`class "${dropped.join(' ')}" on <${tagOf(el)}>`);
+  if (kept.length) el.setAttribute('class', kept.join(' '));
+  else el.removeAttribute('class');
+}
+
 function getPurifier(): Purifier {
   if (purifier) return purifier;
   const p = DOMPurify(window);
@@ -101,7 +124,9 @@ function getPurifier(): Purifier {
 
   p.addHook('afterSanitizeAttributes', (node) => {
     const r = run;
-    if (!r || !node.hasAttribute('src')) return;
+    if (!r) return;
+    keepDiagramClasses(node, r);
+    if (!node.hasAttribute('src')) return;
     const rewritten = r.rewriteSrc(node.getAttribute('src') ?? '');
     if (rewritten === null) node.removeAttribute('src');
     else node.setAttribute('src', rewritten);
@@ -114,6 +139,7 @@ function getPurifier(): Purifier {
 /** Turn DOMPurify's own removal records into report lines, skipping harmless ones. */
 function describeRemovals(p: Purifier, r: Run): string[] {
   const out: string[] = [];
+  let sentinelSeen = false;
   for (const entry of p.removed) {
     if ('element' in entry) {
       const node = entry.element;
@@ -122,6 +148,12 @@ function describeRemovals(p: Purifier, r: Run): string[] {
       // `body` is the root DOMPurify parsed into, not the spec's markup (the
       // HTML parser drops a spec's own html/head/body tags before this point).
       if (tag === 'body') continue;
+      // FORCE_BODY prepends a `<remove>` placeholder and removes it again; it
+      // is always the first one removed. A spec's own `<remove>` is still reported.
+      if (tag === 'remove' && !sentinelSeen) {
+        sentinelSeen = true;
+        continue;
+      }
       out.push(ALLOWED_TAG_SET.has(tag) ? `<${tag}> (unsafe)` : `<${tag}>`);
     } else {
       const { attribute } = entry;
@@ -132,8 +164,8 @@ function describeRemovals(p: Purifier, r: Run): string[] {
       const tag = tagOf(from);
       const listed =
         ALLOWED_ATTR_SET.has(name) || name.startsWith('data-') || name.startsWith('aria-');
-      // A listed attribute only goes when DOMPurify rejects its value: a
-      // script URL, or an id that would shadow a document property.
+      // A listed attribute only goes when DOMPurify rejects its value, such as
+      // a script URL.
       out.push(
         listed ? `${name}="${attribute.value}" on <${tag}> (unsafe value)` : `${name} on <${tag}>`
       );
@@ -156,6 +188,17 @@ export function sanitizeSpec(
       ALLOWED_ATTR: [...ALLOWED_ATTR],
       ALLOW_DATA_ATTR: true,
       ALLOW_ARIA_ATTR: true,
+      // Parse everything into the body, so a `style`, `script`, `link`, `meta`
+      // or `title` before the article is removed and reported, not hoisted into
+      // a head and dropped silently.
+      FORCE_BODY: true,
+      // SANITIZE_DOM drops ids that match document or form properties (`title`,
+      // `links`, `timeline`, ...), which are natural section ids. Its purpose,
+      // DOM clobbering, cannot happen here: named document properties come only
+      // from form, embed, iframe, object and named img elements, none of which
+      // is in the subset, and `name` is not an allowed attribute. An id only adds
+      // a window named property, which never shadows an existing global.
+      SANITIZE_DOM: false,
       RETURN_DOM_FRAGMENT: true
     });
   } finally {

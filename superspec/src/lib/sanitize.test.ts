@@ -108,6 +108,61 @@ describe('sanitizeSpec', () => {
       expect(removed).toContain(t);
   });
 
+  it('keeps section ids that name document properties', () => {
+    const r = sanitizeSpec(
+      '<article><header><h1>T</h1></header>' +
+        '<section id="title"><h2>a</h2></section><section id="links"><h2>b</h2></section>' +
+        '<section id="timeline"><h2>c</h2></section></article>',
+      (s) => s
+    );
+    expect(r.removed).toEqual([]);
+    expect(r.problems).toEqual([]);
+    expect([...r.fragment.querySelectorAll('section')].map((s) => s.id)).toEqual([
+      'title',
+      'links',
+      'timeline'
+    ]);
+  });
+
+  it('reports a style or script before the article', () => {
+    for (const lead of ['<style>p{color:red}</style>', '<script>x()</script>']) {
+      const r = sanitizeSpec(lead + '<article><header><h1>T</h1></header></article>', (s) => s);
+      const tag = lead.slice(0, lead.indexOf('>') + 1);
+      expect(r.removed).toEqual([tag]);
+      expect(r.problems).toEqual([]);
+      expect(r.fragment.querySelector('style, script')).toBeNull();
+    }
+  });
+
+  it('reports a real <remove> element', () => {
+    const r = sanitizeSpec(
+      '<article><header><h1>T</h1></header><remove>x</remove></article>',
+      (s) => s
+    );
+    expect(r.removed).toEqual(['<remove>']);
+  });
+
+  it('keeps only the diagram class names on svg elements', () => {
+    const r = sanitizeSpec(
+      '<article><header><h1>T</h1></header><figure id="f">' +
+        '<svg class="diagram fixed inset-0"><g class="node missing"><rect/></g>' +
+        '<g class="edge muted"><path d="M0 0"/></g><g class="group external result"><rect/></g>' +
+        '<g class="bg-red-500"><rect/></g></svg></figure></article>',
+      (s) => s
+    );
+    expect(r.fragment.querySelector('svg')?.getAttribute('class')).toBe('diagram');
+    const gs = [...r.fragment.querySelectorAll('g')];
+    expect(gs.map((g) => g.getAttribute('class'))).toEqual([
+      'node missing',
+      'edge muted',
+      'group external result',
+      null
+    ]);
+    const removed = r.removed.join('\n');
+    for (const t of ['fixed', 'inset-0', 'bg-red-500']) expect(removed).toContain(t);
+    expect(r.removed).toHaveLength(2);
+  });
+
   it('reports structure problems on the sanitised fragment', () => {
     const r = sanitizeSpec('<article><h1>a</h1><h1>b</h1></article>', (s) => s);
     expect(r.problems.join()).toContain('exactly one <h1>, found 2');

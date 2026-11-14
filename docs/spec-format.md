@@ -39,8 +39,10 @@ valid inside one.
 ## Allowed attributes
 
 - `id`
-- `class`, on SVG elements only (including the `svg` itself). A `class` on any
-  HTML element is removed.
+- `class`, on SVG elements only (including the `svg` itself), and only with the
+  diagram class names (`diagram`, `node`, `edge`, `group`, `missing`, `result`,
+  `external`, `muted`; see Diagrams). A `class` on any HTML element is removed,
+  and any other class name on an SVG element is removed.
 - `data-*` (for example `data-kind`, `data-lang`, `data-from`, `data-to`)
 - `aria-*`, `role`
 - `href`, `src`, `alt`, `controls`, `scope`, `colspan`, `rowspan`, `open`
@@ -57,10 +59,6 @@ valid inside one.
   colour or font (`fill`, `stroke`, `font-*`). The stylesheet paints everything.
 - Any form element other than the checkbox described below.
 - Remote URLs in `src`. Links (`href`) may point anywhere; `src` may not.
-- Ids that collide with browser document or form property names. The sanitiser
-  strips them (`title`, `name`, `action`, `method`, `target`, `images`, `forms`,
-  `length`, `id`, and similar). Give every id a descriptive, prefixed form such
-  as `sec-goals`, `tbl-limits`, `fig-flow`, `n-reader`, `t1-s1`.
 
 ## Semantic rules
 
@@ -68,8 +66,8 @@ All of these are required by the format. The reader enforces only the ones
 marked (enforced): it reports a problem for them and still renders. The rest are
 not checked, but a spec that breaks them is wrong.
 
-- Exactly one `h1` (enforced), inside the `header`. It is the title. The `header` may also
-  hold a one-line summary `p`.
+- Exactly one `h1` (enforced). It is the title and goes inside the `header`
+  (not checked). The `header` may also hold a one-line summary `p`.
 - Every `section`, `figure` and `table` has an `id` (enforced), unique in the
   whole file (enforced) and stable across edits (other people link to `#id`).
 - Sections nest; the heading level follows nesting depth (`h2` for a top-level
@@ -81,6 +79,9 @@ not checked, but a spec that breaks them is wrong.
 - Every checklist `li` has an `id` (enforced; see Checklists).
 - No duplicate ids anywhere (enforced).
 - The file has a single `article` root (enforced).
+
+A suggestion, not a rule: a descriptive, prefixed id such as `sec-goals`,
+`tbl-limits`, `fig-flow`, `n-reader` or `t1-s1` says what it names.
 
 ## Callouts
 
