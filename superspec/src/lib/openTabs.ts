@@ -16,17 +16,17 @@ export function findSelectedGroup(
 
 /**
  * The group that should be appended to openedGroups: the cached selection
- * (lastSelectedGroup) once it has been culled from tabGroups, still matches the
+ * (lastSelectedGroup) once it has been culled from listedGroups, still matches the
  * current selection, and is not already opened. Otherwise null.
  */
 export function groupToPromote(
   selectedPath: string | null,
-  tabGroups: DisplayGroup[],
+  listedGroups: DisplayGroup[],
   lastSelectedGroup: DisplayGroup | null,
   openedGroups: DisplayGroup[]
 ): DisplayGroup | null {
   if (!selectedPath || !lastSelectedGroup) return null;
-  if (findSelectedGroup(tabGroups, selectedPath)) return null; // still live
+  if (findSelectedGroup(listedGroups, selectedPath)) return null; // still live
   if (!selectionMatches(lastSelectedGroup, selectedPath)) return null;
   if (
     openedGroups.some((o) => o.parent.path === lastSelectedGroup.parent.path)

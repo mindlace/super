@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, mkdir, writeFile, rm, utimes } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, rm, utimes, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { scanSpecs, parseFilenameDateMs, extractTitle, extractHtmlTitle, listSuperpowersLocations } from './discovery';
+import { scanSpecs, parseFilenameDateMs, extractTitle, extractHtmlTitle, listSuperpowersLocations, entryTimes } from './discovery';
 import { makeTree } from './testtree';
 import type { GitRunner } from './gitdirty';
 
@@ -32,11 +32,6 @@ beforeAll(async () => {
   await write(aWtPlans, '2026-06-21-bar-design.md', '# Bar Plan\n'); // kept, wt1, type plan
   await write(bWtSpecs, '2026-06-22-baz-design.md', 'no heading here\nsecond line'); // first-line title
   await write(bWtSpecs, 'zzz-untitled.md', ''); // empty -> title falls back to filename
-
-  // recency = max(mtime, filenameDate): old mtime + future-ish filename date -> filename wins
-  await write(bWtSpecs, '2026-06-22-recency-design.md', '# Recency\n');
-  const old = new Date(2020, 0, 1).getTime() / 1000;
-  await utimes(join(bWtSpecs, '2026-06-22-recency-design.md'), old, old);
 
   // A branch with a slash ("support/thing") nests the worktree one level deeper.
   const dNested = join(root, 'projD/.claude/worktrees/support/thing/docs/superpowers/specs');
@@ -124,11 +119,11 @@ describe('listSuperpowersLocations', () => {
 });
 
 describe('scanSpecs', () => {
-  it('returns a flat array sorted by recency descending', async () => {
+  it('returns a flat array sorted by created descending', async () => {
     const list = await scanSpecs(root);
     expect(Array.isArray(list)).toBe(true);
     for (let i = 1; i < list.length; i++) {
-      expect(list[i - 1].recency).toBeGreaterThanOrEqual(list[i].recency);
+      expect(list[i - 1].created).toBeGreaterThanOrEqual(list[i].created);
     }
   });
 
@@ -194,59 +189,115 @@ describe('scanSpecs', () => {
     expect(byName(list, 'zzz-untitled.md')?.title).toBe('zzz-untitled.md');
   });
 
-  it('recency takes the max of mtime and filename date', async () => {
-    const e = byName(await scanSpecs(root), '2026-06-22-recency-design.md')!;
-    expect(e.recency).toBe(parseFilenameDateMs('2026-06-22-recency-design.md'));
-    expect(e.recency).toBeGreaterThan(e.mtime);
+});
+
+describe('entryTimes', () => {
+  const base = { filename: '2026-01-05-x.md', mtime: 5000, birthtime: 3000 };
+
+  it('uses mtime for both when git is unknown', () => {
+    expect(entryTimes({ ...base, dirty: null, git: undefined })).toEqual({ created: 5000, updated: 5000 });
+  });
+
+  it('dirty: created from git, updated from mtime', () => {
+    expect(entryTimes({ ...base, dirty: true, git: { created: 1000, updated: 2000 } })).toEqual({
+      created: 1000,
+      updated: 5000
+    });
+  });
+
+  it('dirty and untracked: created is the birthtime', () => {
+    expect(entryTimes({ ...base, dirty: true, git: undefined })).toEqual({ created: 3000, updated: 5000 });
+  });
+
+  it('clean: both from git', () => {
+    expect(entryTimes({ ...base, dirty: false, git: { created: 1000, updated: 2000 } })).toEqual({
+      created: 1000,
+      updated: 2000
+    });
+  });
+
+  it('clean without git history falls back to mtime', () => {
+    expect(entryTimes({ ...base, dirty: false, git: undefined })).toEqual({ created: 5000, updated: 5000 });
+  });
+
+  it('birthtime 0 falls back to mtime', () => {
+    expect(entryTimes({ ...base, birthtime: 0, dirty: true, git: undefined })).toEqual({
+      created: 5000,
+      updated: 5000
+    });
+  });
+
+  it('falls back to the filename date when mtime is also unusable', () => {
+    const t = entryTimes({ filename: '2026-01-05-x.md', mtime: 0, birthtime: 0, dirty: null, git: undefined });
+    expect(t).toEqual({ created: parseFilenameDateMs('2026-01-05-x.md'), updated: parseFilenameDateMs('2026-01-05-x.md') });
   });
 });
 
-describe('scanSpecs recency vs. checkout mtime', () => {
-  // A fresh `git worktree add` stamps every file with the checkout time, which
-  // would otherwise report a whole backlog of old specs as edited today.
-  const DATED = '2026-01-05-backlog-design.md';
-  const UNDATED = 'undated-design.md';
+describe('scanSpecs times', () => {
+  const SPECS = 'proj/.claude/worktrees/wt/docs/superpowers/specs';
+  const AAA = '2026-11-13-aaa-design.md';
+  const ZZZ = '2026-11-13-zzz-design.md';
+  const REL = 'docs/superpowers/specs';
 
-  async function treeWithWorktreeSpecs() {
+  function runner(log: string, status = ''): GitRunner {
+    return async (_cwd, args) => (args.includes('log') ? log : args.includes('status') ? status : null);
+  }
+  const logOf = (...entries: [number, string][]) =>
+    entries.map(([t, f]) => `\x01${t}\n\nA\t${REL}/${f}\n`).join('');
+
+  async function tree() {
     return makeTree({
-      [`proj/.claude/worktrees/wt/.git`]: 'gitdir: whatever',
-      [`proj/.claude/worktrees/wt/docs/superpowers/specs/${DATED}`]: '# Backlog\n',
-      [`proj/.claude/worktrees/wt/docs/superpowers/specs/${UNDATED}`]: '# Undated\n'
+      'proj/.claude/worktrees/wt/.git': 'gitdir: x',
+      [`${SPECS}/${AAA}`]: '# A\n',
+      [`${SPECS}/${ZZZ}`]: '# Z\n'
     });
   }
 
-  it('ignores the checkout mtime of a clean file and uses its filename date', async () => {
-    const treeRoot = await treeWithWorktreeSpecs();
-    const clean: GitRunner = async () => '';
-
-    const e = byName(await scanSpecs(treeRoot, clean), DATED)!;
-    expect(e.recency).toBe(parseFilenameDateMs(DATED));
-    expect(e.recency).toBeLessThan(e.mtime);
+  it('orders same-day committed specs by commit time, not name', async () => {
+    const r = await tree();
+    const log = logOf([200, ZZZ], [100, AAA]); // newest commit first
+    const list = await scanSpecs(r, runner(log));
+    expect(list[0].filename).toBe(ZZZ);
+    expect(list[0].created).toBe(200_000);
+    expect(list[1].created).toBe(100_000);
   });
 
-  it('keeps the mtime of a file git reports as modified', async () => {
-    const treeRoot = await treeWithWorktreeSpecs();
-    const dirty: GitRunner = async () => ` M docs/superpowers/specs/${DATED}\0`;
-
-    const e = byName(await scanSpecs(treeRoot, dirty), DATED)!;
-    expect(e.recency).toBe(e.mtime);
-    expect(e.recency).toBeGreaterThan(parseFilenameDateMs(DATED));
+  it('takes created from git and updated from mtime for a modified file', async () => {
+    const r = await tree();
+    const log = logOf([200, ZZZ], [100, AAA]);
+    const status = ` M ${REL}/${ZZZ}\0`;
+    const e = byName(await scanSpecs(r, runner(log, status)), ZZZ)!;
+    expect(e.created).toBe(200_000);
+    expect(e.updated).toBe(e.mtime);
   });
 
-  it('falls back to mtime for a clean file with no date in its name', async () => {
-    const treeRoot = await treeWithWorktreeSpecs();
-    const clean: GitRunner = async () => '';
-
-    const e = byName(await scanSpecs(treeRoot, clean), UNDATED)!;
-    expect(e.recency).toBe(e.mtime);
+  it('uses birthtime as created for an untracked file', async () => {
+    const r = await tree();
+    const status = `?? ${REL}/${ZZZ}\0`;
+    const e = byName(await scanSpecs(r, runner('', status)), ZZZ)!;
+    const st = await stat(e.path);
+    expect(e.created).toBe(st.birthtimeMs || st.mtimeMs);
+    expect(e.updated).toBe(e.mtime);
   });
 
-  it('treats every file as recent when git cannot answer', async () => {
-    const treeRoot = await treeWithWorktreeSpecs();
-    const noGit: GitRunner = async () => null;
+  it("falls back to mtime when git paths don't match any file", async () => {
+    const r = await tree();
+    const log = `\x01100\n\nA\tother/x.md\n`;
+    const list = await scanSpecs(r, runner(log));
+    expect(list).toHaveLength(2);
+    for (const e of list) {
+      expect(e.created).toBe(e.mtime);
+      expect(e.updated).toBe(e.mtime);
+    }
+  });
 
-    const e = byName(await scanSpecs(treeRoot, noGit), DATED)!;
-    expect(e.recency).toBe(e.mtime);
+  it('uses mtime for both when git cannot answer', async () => {
+    const r = await tree();
+    const list = await scanSpecs(r, async () => null);
+    for (const e of list) {
+      expect(e.created).toBe(e.mtime);
+      expect(e.updated).toBe(e.mtime);
+    }
   });
 });
 

@@ -12,7 +12,8 @@ function entry(path: string, type: SpecEntry['type'] = 'spec'): SpecEntry {
     worktree: 'wt',
     type,
     mtime: 1000,
-    recency: 1000
+    created: 1000,
+    updated: 1000
   };
 }
 
@@ -20,7 +21,8 @@ function group(parentPath: string, childPaths: string[] = []): DisplayGroup {
   return {
     parent: entry(parentPath),
     children: childPaths.map((p) => entry(p, 'plan')),
-    recency: 1000
+    created: 1000,
+    updated: 1000
   };
 }
 
@@ -53,12 +55,12 @@ describe('findSelectedGroup', () => {
 describe('groupToPromote', () => {
   const culled = group('/a/spec.md', ['/a/plan.md']);
 
-  it('promotes the cached selection when it is no longer in tabGroups', () => {
-    // selection points at the culled group's child; tabGroups no longer contains it
+  it('promotes the cached selection when it is no longer in listedGroups', () => {
+    // selection points at the culled group's child; listedGroups no longer contains it
     expect(groupToPromote('/a/plan.md', [group('/b/spec.md')], culled, [])).toBe(culled);
   });
 
-  it('does not promote while the selection is still live in tabGroups', () => {
+  it('does not promote while the selection is still live in listedGroups', () => {
     expect(groupToPromote('/a/spec.md', [culled], culled, [])).toBeNull();
   });
 
