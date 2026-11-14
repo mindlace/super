@@ -62,7 +62,8 @@ Package worktree: $proj/pkg
 EOF
 cp "$d/ledger.md" "$tmp/ledger.base"
 reset_ledger() { cp "$tmp/ledger.base" "$d/ledger.md"; }
-agents='[{"name":"des-api","id":"a1","status":"idle"},{"name":"des-web","id":"w1","status":"idle"},{"name":"des-ops","id":"o1","status":"busy"}]'
+agents='[{"name":"des-api","id":"a1","sessionId":"aaaa1111-2222-3333-4444-555566667777","status":"busy","state":"working"},{"name":"des-web","id":"w1","status":"busy"},{"name":"des-ops","id":"o1","status":"busy"}]'
+HOME="$tmp/home"; export HOME
 printf '#!/bin/sh\n[ -e "%s/agents.fail" ] && exit 1\n[ "$1 $2" = "agents --json" ] && cat "%s/agents.json"\n' "$tmp" "$tmp" > "$tmp/bin/claude"
 chmod +x "$tmp/bin/claude"; printf '%s' "$agents" > "$tmp/agents.json"
 PATH="$tmp/bin:$PATH"; export PATH
@@ -81,7 +82,7 @@ line "unit old" >/dev/null && fail "a stopped unit must not be listed"
 [ "$(field db session)" = absent ] || fail "db should be absent"
 [ "$(field api session)" = alive ] || fail "api should be alive"
 [ "$(field ops fixround)" = open ] || fail "ops fix round should be open"
-[ "$(field ops state)" = busy ] || fail "ops state should be busy"
+line "unit api" | grep -q ' state ' && fail "the report must not print the session list status: it does not tell working from idle"
 [ "$(field api rung)" = 1 ] && [ "$(field api restart)" = none ] || fail "fresh unit: rung 1, no pending restart"
 printf '%s\n' "$out" | grep -qx 'row api r1 task 2 head ccccccc' || fail "unreported row r1 not found: $out"
 printf '%s\n' "$out" | grep -q '^row api r2' && fail "r2 has no Delivers line, must not be listed"
@@ -112,15 +113,13 @@ out=$(b "$d")
 ago 590 "$d/assignments/api.beat"
 out=$(b "$d"); [ "$(field api ask)" = none ] || fail "under one beat must not be due"
 
-# 4. An ask: open, then overdue a beat later; a busy session gets a second beat.
+# 4. An ask: open, then overdue one beat later, whatever the session list says.
 ago 1200 "$d/assignments/api.beat"; b "$d" asked api; ago 300 "$d/assignments/api.asked"
 out=$(b "$d"); [ "$(field api ask)" = open ] || fail "fresh ask should be open: $(line 'unit api')"
 ago 600 "$d/assignments/api.asked"
 out=$(b "$d"); [ "$(field api ask)" = overdue ] || fail "ask a beat old should be overdue: $(line 'unit api')"
-ago 3000 "$d/assignments/ops.beat"; b "$d" asked ops; ago 660 "$d/assignments/ops.asked"
-out=$(b "$d"); [ "$(field ops ask)" = open ] || fail "busy session gets a second beat: $(line 'unit ops')"
-ago 1200 "$d/assignments/ops.asked"
-out=$(b "$d"); [ "$(field ops ask)" = overdue ] || fail "busy session overdue after two beats"
+ago 3000 "$d/assignments/ops.beat"; b "$d" asked ops; ago 610 "$d/assignments/ops.asked"
+out=$(b "$d"); [ "$(field ops ask)" = overdue ] || fail "a session listed busy gets no extra beat: $(line 'unit ops')"
 
 # 5. A message handled (seen) closes the ask; a file written in the worktree is evidence.
 b "$d" seen api
@@ -172,6 +171,18 @@ reset_ledger
 # A relaunch never seen through is pending, so its death is no new rung (OS-2).
 perl -0pi -e 's/(- plan web[^\n]*\n)/$1- relaunched db\n/' "$d/ledger.md"
 out=$(b "$d"); [ "$(field db restart)" = pending ] && [ "$(field db rung)" = 1 ] || fail "relaunch pending: $(line 'unit db')"
+reset_ledger
+
+# 7b. launched records the session id; a unit on rung 2 gets its transcript path.
+r=$(b "$d" launched api); [ "$r" = "des-api aaaa1111-2222-3333-4444-555566667777" ] || fail "launched said: $r"
+[ "$(cat "$d/assignments/api.session")" = aaaa1111-2222-3333-4444-555566667777 ] || fail "session id not recorded"
+b "$d" launched db && fail "launched must fail for a session that is not listed"
+: > "$tmp/agents.fail"; b "$d" launched api && fail "launched must fail when the session list is unreadable"; rm -f "$tmp/agents.fail"
+out=$(b "$d"); printf '%s\n' "$out" | grep -q '^transcript api' && fail "no transcript line below rung 2"
+tdir="$HOME/.claude/projects/-my proj-x"; mkdir -p "$tdir"; printf '{"a":1}\n' > "$tdir/aaaa1111-2222-3333-4444-555566667777.jsonl"
+b "$d" restart api death >/dev/null; perl -0pi -e 's/(- restarted api: death[^\n]*\n)/$1- resent to des-api\n/' "$d/ledger.md"
+out=$(b "$d"); printf '%s\n' "$out" | grep -qx "transcript api $tdir/aaaa1111-2222-3333-4444-555566667777.jsonl" || fail "transcript line wrong: $out"
+rm -f "$tdir"/*.jsonl; out=$(b "$d"); printf '%s\n' "$out" | grep -qx 'transcript api none' || fail "a missing transcript must read none"
 reset_ledger
 
 # 8. Waiting for a usage reset (N4): not absent, not asked, not movable; then over; restart has no rung.

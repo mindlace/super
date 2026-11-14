@@ -39,7 +39,7 @@ For local development, add the checkout as a directory marketplace instead:
 - Conductor commands allowed without a prompt. A permission prompt in the conductor waits on you and holds every bound in the run, so allow its commands in the project's `.claude/settings.json`. With `<dir>` the installed `supersonic` plugin's `skills/superconductor` directory, the entries and what each one really admits:
   - `"Bash(sh <dir>/beat.sh:*)"`: the heartbeat, the timer and the fork time limit. Its `fork` subcommand runs whatever command follows it, so this entry admits any command.
   - `"Bash(sh <dir>/budget.sh:*)"`: reads the usage figures; nothing else.
-  - `"Bash(claude agents:*)"`, `"Bash(claude stop:*)"`, `"Bash(claude logs:*)"`: list, stop and read sessions.
+  - `"Bash(claude agents:*)"`, `"Bash(claude stop:*)"`: list and stop sessions.
   - `"Bash(git:*)"`: every git command, and through aliases and `-c` options, any command.
   - `"Bash(env -C:*)"`: operator launches; it admits any command run with `env -C`.
   - `"Bash(python3 -c:*)"`: the checkpoint id; it admits any Python.

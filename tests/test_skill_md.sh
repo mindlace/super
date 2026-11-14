@@ -80,7 +80,7 @@ drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
 # The live drill checks what beat.sh and the skill assume about real sessions.
 for s in 'fork drill-limit env -C' 'fork drill-normal env -C' 'claude logs "$opid"' 'claude logs "$op2id"' \
          'run_in_background true' 'TaskStop' 'beat.sh changed' 'drill-$pid-nobody' 'sleep-woke.txt' 'msg-read.txt' \
-         'grep -qw busy' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
+         '30 s after its last step' 'stopped session transcript' 'stopped sessions still listed' 'DRILL_DEADLINE' 'peer-session-drill-result.txt'; do
   grep -qF -- "$s" "$drill" || { echo "FAIL: live drill lacks: $s"; exit 1; }
 done
 for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
@@ -291,7 +291,7 @@ test -x "$(dirname "$skill")/beat.sh" || { echo "FAIL: beat.sh missing or not ex
 # The beat is one command; its lines are specified here.
 need 'A beat** is one command, `sh <skill dir>/beat.sh <ledger dir>`'
 need 'A beat with nothing to do is two tool calls whatever the number of units'
-need 'unit <unit-slug> status <status> session alive|absent|unknown state <listed status> evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no'
+need 'unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no'
 need 'row <unit-slug> <row id> task <N> head <sha7>'
 need 'fork <fork name> running|gone|unstarted failures <n>'
 need 'beat: sessions ok|unknown watched <n> absent <n> evidence <n> due <n> overdue <n> rows <n> forks running <n> gone <n> fixrounds <n> deferred <n> questions <n> waiting <n> next-reset <epoch>|- movable <n> timer running|none'
@@ -360,7 +360,12 @@ need '`checkpoint-<n>`, whose output is a session id'
 need '**Rung 1: restart**, with cause `death` or `stall`.'
 need '**Rung 2: investigate, apply the remedy, restart.**'
 need '**Rung 3: stop.** Do not restart. If its name is listed (a stall), stop it'
-need 'claude logs <short id>'
+forbid 'claude logs'
+forbid 'busy'
+need 'Read only the last 200 lines of its transcript'
+need 'transcript <unit-slug> <path>|none'
+need 'sh <skill dir>/beat.sh <ledger dir> launched <unit-slug>'
+need 'handled as stalled one beat later: 20 to 30 minutes.'
 need 'cause: denied command <command> | usage limit | hung process <command> | defect <the task and what it keeps hitting> | unknown'
 need 'It reads only, so a death mid-investigation just dispatches it again'
 need 'the report'"'"'s `rung` field is the rung this one is on'

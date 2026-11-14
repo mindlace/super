@@ -235,7 +235,7 @@ as header lines below `Build graph:`:
 partner and so unbounds every wait in this skill. Everything the heartbeat
 and the fork time limit do runs through `sh <skill dir>/beat.sh`, and the
 budget through `sh <skill dir>/budget.sh`; the rest is `git`, `claude
-agents`, `claude stop`, `claude logs`, `env -C` (operator launches),
+agents`, `claude stop`, `env -C` (operator launches),
 and `python3` (the checkpoint id). If a prompt appears for one of these, ask your partner once
 to allow them for this project; the plugin README gives the entries.
 
@@ -405,8 +405,8 @@ is done: go on from step 2.
      the plan it already has (as for a restart, `## Supervision`, Operator
      death), ledger `- relaunched <unit-slug>` under `## Supervision`, and
      launch it with this step's command and the longer list, same name,
-     worktree and model. Then run `sh <skill dir>/beat.sh <ledger dir> seen
-     <unit-slug>` and send it again what it was sent (Heartbeat, Resends),
+     worktree and model. Then record its session (step 5's `launched`), run
+     `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it again what it was sent (Heartbeat, Resends),
      which ends with its `resent to` line; until then the report shows it
      `restart pending`, and a death in between launches it again with no
      rung. A relaunch
@@ -417,8 +417,12 @@ is done: go on from step 2.
 5. **Ledger** the unit line again with its status, `planning` when its
    assignment says `Admitted: no` and `admitted` otherwise, and its `## Cost`
    start: the timestamp and the `SEVEN_DAY` percentage from the `budget.sh`
-   run. Then start its beat file, `sh <skill dir>/beat.sh <ledger dir>
-   seen <unit-slug>`, and start the heartbeat timer if none is running
+   run. Then record its session: `sh <skill dir>/beat.sh <ledger dir>
+   launched <unit-slug>` stores the id of the session `claude agents --json`
+   lists under its name, so its transcript can be found after it dies; if it
+   says the name is not listed yet, run it again a few seconds later. Then
+   start its beat file, `sh <skill dir>/beat.sh <ledger dir> seen
+   <unit-slug>`, and start the heartbeat timer if none is running
    (`## Supervision`, Heartbeat).
 
 **Bringing a branch up to date.** Before you ledger and launch a hand-back
@@ -481,8 +485,9 @@ yourself for anything it prints.
   ledgers only the lines of what it changed. The report, one line each,
   then a summary line:
 
-      unit <unit-slug> status <status> session alive|absent|unknown state <listed status> evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no
+      unit <unit-slug> status <status> session alive|absent|unknown evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no
       row <unit-slug> <row id> task <N> head <sha7>
+      transcript <unit-slug> <path>|none
       fork <fork name> running|gone|unstarted failures <n>
       question <id>
       timer running|none deadline <epoch>|-
@@ -514,12 +519,18 @@ yourself for anything it prints.
     status asked <unit-slug>`. Skip a unit every one of whose unfinished
     tasks is held by a question with no `routed <id>` line. An ask is open
     until the next evidence.
-  - `ask overdue`: the ask is a beat old with no evidence and no reply (two
-    beats when the session list shows it `busy`, which covers a foreground
-    command of up to ten minutes plus a permission stall). It is stalled
-    (Operator death, below).
+  - `ask overdue`: the ask is a beat old with no evidence and no reply. It
+    is stalled (Operator death, below). The session list's own status
+    fields do not tell a working session from an idle one, so the report
+    does not read them.
   - `rung`: the rung of the ladder its next death or stall is on (Operator
     death).
+  - A `transcript` line, for a unit on rung 2 or higher: the transcript
+    file of its last confirmed session, `~/.claude/projects/<project
+    dir>/<session id>.jsonl`, found by the session id `sh <skill
+    dir>/beat.sh <ledger dir> launched <unit-slug>` recorded; `none` when
+    there is no such file. It exists for a dead session as for a live
+    one.
   - `restart pending`: its newest `restarted` or `relaunched` line has no
     `- resent to <session name>` after it. Alive, it is owed its resends
     (below). Absent, the launch was never seen through (Operator death).
@@ -557,8 +568,7 @@ yourself for anything it prints.
   changes nothing.
 
 So a silent operator is asked 10 to 20 minutes after its last evidence and
-handled as stalled one beat later (two if listed `busy`): 20 to 30 minutes,
-or up to 40.
+handled as stalled one beat later: 20 to 30 minutes.
 
 **Messages operators send you** (`operator-briefing.md`, `## Progress`).
 Every message from an operator is progress evidence: when you handle it,
@@ -694,12 +704,13 @@ authority.
     line is in the ledger (an investigation the last conductor finished),
     dispatch one fresh agent and wait for its one-line answer, so the log
     stays out of your context: `Find why operator <session name> stopped
-    making progress. Run claude logs <short id> and read its last 200
-    lines. If that fails or there is no short id (a dead session's log can
-    be gone), read git -C <unit worktree> status, git -C <unit worktree>
-    log -5 --stat, the last 40 lines of <unit
-    worktree>/.superpowers/sdd/*/progress.md, and the output of sh <skill
-    dir>/beat.sh <ledger dir> strays <unit-slug>. Change nothing. Reply
+    making progress. Read only the last 200 lines of its transcript,
+    <the report's transcript path> (JSON lines: its last tool calls, tool
+    results and errors). If that is none, read git -C <unit worktree>
+    status, git -C <unit worktree> log -5 --stat and the last 40 lines of
+    <unit worktree>/.superpowers/sdd/*/progress.md instead. Either way also
+    read the output of sh <skill dir>/beat.sh <ledger dir> strays
+    <unit-slug>. Change nothing. Reply
     with exactly one line: cause: denied command <command> | usage limit |
     hung process <command> | defect <the task and what it keeps hitting> |
     unknown.` It reads only, so a death mid-investigation just dispatches
@@ -753,8 +764,10 @@ authority.
   4. Bring its branch up to date (Phase 2, Bringing a branch up to date)
      and launch it (Phase 2, Starting an operator, step 4), unless its name
      is listed.
-  5. Run `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it
-     its resends (Heartbeat, Resends), which end with its `resent to` line;
+  5. Record its session (`sh <skill dir>/beat.sh <ledger dir> launched
+     <unit-slug>`, as Phase 2, Starting an operator, step 5, says), run `sh
+     <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it its
+     resends (Heartbeat, Resends), which end with its `resent to` line;
      its assignment already carries its admission, and it keeps its status.
 
   SDD's ledger makes mid-plan resume cheap. A restart keeps the running
@@ -1207,9 +1220,10 @@ aborted or taken back, fix round sent, deferral recorded, sibling notice
 sent, plan ledgered, status asked, operator stalled, operator
 investigated, relays and notices resent. A beat that changed none of these
 appends nothing. The heartbeat's `<ledger dir>/timer` and the `<ledger
-dir>/assignments/<unit-slug>.beat` and `.asked` files are `beat.sh`'s
-working state, not ledger: losing them costs one beat of detection, and
-`beat.sh` rewrites each from git when missing. `beat.sh` writes the
+dir>/assignments/<unit-slug>.beat`, `.asked` and `.session` files are
+`beat.sh`'s working state, not ledger: losing a `.beat` or `.asked` file
+costs one beat of detection, and `beat.sh` rewrites it from git; losing a
+`.session` file leaves a rung-2 investigation the worktree fallback. `beat.sh` writes the
 `restarted` and `waiting reset` lines itself (`restart`, `wait`): the
 cause names one of `death`, `stall`, `denied-command`, `hung-process`,
 `defect`, `unknown` or `usage-limit`; `<key>` is the `@ <sha>` of the

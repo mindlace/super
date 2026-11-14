@@ -4,9 +4,10 @@
 # and decides nothing the skill does not define here as arithmetic. Stock macOS: sh + perl.
 #
 # Usage (<dir> is the ledger dir, <project>/.superpowers/superconductor/<design-slug>):
-#   beat.sh <dir>                       report: unit, row, fork, question and timer lines, then "beat:"
+#   beat.sh <dir>                       report: unit, row, transcript, fork, question and timer lines, then "beat:"
 #   beat.sh <dir> seen <unit-slug>      progress seen (a message handled, a restart): rewrite its beat file
 #   beat.sh <dir> asked <unit-slug>     a status ask was sent: record it
+#   beat.sh <dir> launched <unit-slug>  a launch is confirmed: record its session's id
 #   beat.sh <dir> resume                Phase 0: stop the old timer, restart every beat file, drop asks
 #   beat.sh <dir> restart <unit> <cause>  ledger a restart; the script writes its rung and key
 #   beat.sh <dir> wait <unit> <minutes> ledger a unit waiting for a usage reset that far ahead
@@ -57,6 +58,10 @@ report)
 seen|asked|restart|wait|strays|kill-strays)
   [ $# -ge 2 ] || die "usage: beat.sh <dir> $1 <unit-slug> ..."
   pl "$@" "$dir" ;;
+launched)
+  [ $# -eq 2 ] || die "usage: beat.sh <dir> launched <unit-slug>"
+  agents=$(claude agents --json 2>/dev/null) || die "the session list is unreadable"
+  AGENTS=$agents pl launched "$2" "$dir" ;;
 resume)
   [ -f "$dir/timer" ] && pkill -F "$dir/timer" -x sleep 2>/dev/null
   pl resume x "$dir" ;;
@@ -146,6 +151,10 @@ sub head { my ($h) = run("git", "-C", shift, "rev-parse", "HEAD"); $h // "" }
 sub writebeat { my ($u, $h) = @_; mkdir "$dir/assignments";
   open(my $B, ">", "$dir/assignments/$u.beat") or die; print $B "$h\n"; close $B }
 sub mtime { my @s = stat $_[0]; @s ? $s[9] : undef }
+# The transcript of the unit's last confirmed session: <session id>.jsonl under ~/.claude/projects.
+sub transcript { my $u = shift; open(my $S, "<", "$dir/assignments/$u.session") or return undef;
+  my $id = <$S> // ""; close $S; chomp $id; return undef unless $id =~ /^[0-9a-f-]+$/;
+  my ($f) = bsd_glob("$ENV{HOME}/.claude/projects/*/$id.jsonl"); $f }
 my @sup; my @int;
 # The ladder's key: the unit's newest merge (the sha exactly as its merged line has it) and
 # how many times it has been replaced. A merge or a replacement starts the ladder again.
@@ -198,7 +207,7 @@ if ($mode eq "report") {
     my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
     if (ref $list eq "ARRAY") {
       for my $a (@$list) { next unless ref $a eq "HASH" && defined $a->{name};
-        $sess{$a->{name}} = join("/", grep { defined && length } $a->{status}, $a->{state}) || "-" }
+        $sess{$a->{name}} = 1 }
     } else { $known = 0 }
   }
   my %fixopen; for my $u (@slugs) { my $o = 0;
@@ -223,7 +232,6 @@ if ($mode eq "report") {
     $n{watched}++; $n{fixrounds}++ if $fix;
     my $name = "$design-$u"; my $wt = wt($u);
     my $session = !$known ? "unknown" : exists $sess{$name} ? "alive" : "absent";
-    my $state = $session eq "alive" ? $sess{$name} : "-";
     my $until = waiting($u);
     my $wait = !defined $until ? "none" : $until > $now ? "until-$until" : "over";
     if (defined $until && $until > $now) { $n{waiting}++; $next = $until if $next eq "-" || $until < $next }
@@ -246,8 +254,7 @@ if ($mode eq "report") {
     my $ask = "none"; my $asked = "-";
     if (defined $am && $am > $bm && $wait eq "none") {
       my $age = $now - $am; $asked = int($age / 60);
-      my $busy = $state =~ /\bbusy\b/;
-      $ask = ($age >= 2 * $beat || ($age >= $beat && !$busy)) ? "overdue" : "open";
+      $ask = $age >= $beat ? "overdue" : "open";
     } elsif ($progress && $evidence eq "no" && $now - $bm >= $stall * $beat) { $ask = "due" }
     $n{due}++ if $ask eq "due"; $n{overdue}++ if $ask eq "overdue";
     # Can it move without the partner? Waiting on a reset, or planned and waiting on rows
@@ -260,9 +267,12 @@ if ($mode eq "report") {
       $movable = (grep { my $r = $_; grep { $live{$_} && grep { $_ eq $r } @{ $produces{$_} } } @slugs } @open) ? "yes" : "no" }
     $n{movable}++ if $movable eq "yes";
     my ($sha, $gen) = key($u);
-    printf "unit %s status %s session %s state %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d restart %s wait %s movable %s\n",
-      $u, $st, $session, $state, $evidence, $quiet, $ask, $asked, $plan, ($fix ? "open" : "none"),
-      rung($u), (pending($u) ? "pending" : "none"), $wait, $movable;
+    my $rung = rung($u);
+    printf "unit %s status %s session %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d restart %s wait %s movable %s\n",
+      $u, $st, $session, $evidence, $quiet, $ask, $asked, $plan, ($fix ? "open" : "none"),
+      $rung, (pending($u) ? "pending" : "none"), $wait, $movable;
+    # On the investigating rung, where its last session's transcript is.
+    print "transcript $u ", transcript($u) // "none", "\n" if $rung >= 2;
 
     # Rows the SDD ledger shows passed review that no merge has delivered.
     for my $pp (bsd_glob("$wt/.superpowers/sdd/*/plan-path")) {
@@ -323,6 +333,15 @@ if ($mode eq "restart") {
   # A usage-limit restart climbs no rung; every other restart takes the unit's next rung.
   append_sup($cause eq "usage-limit" ? "- restarted $u: usage-limit, since $sha gen $gen"
                                      : "- restarted $u: $cause, rung " . rung($u) . ", since $sha gen $gen");
+} elsif ($mode eq "launched") {
+  my ($d) = @ARGV; load($d); my $name = "$design-$u";
+  my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
+  die "beat.sh: the session list is unreadable\n" unless ref $list eq "ARRAY";
+  my ($a) = grep { ref $_ eq "HASH" && ($_->{name} // "") eq $name } @$list;
+  die "beat.sh: $name is not listed\n" unless $a && ($a->{sessionId} // "") =~ /^[0-9a-f-]+$/;
+  mkdir "$dir/assignments";
+  open(my $S, ">", "$dir/assignments/$u.session") or die; print $S "$a->{sessionId}\n"; close $S;
+  print "$name $a->{sessionId}\n";
 } elsif ($mode eq "wait") {
   my ($min, $d) = @ARGV; die "beat.sh: minutes must be a number\n" unless $min =~ /^\d+$/;
   load($d); append_sup("- waiting reset $u until " . (time + 60 * $min));
