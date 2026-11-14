@@ -14,8 +14,21 @@ On 2026-11-13 we evaluated about 5.8k shadow-mode Jev calls across 15 repos to d
 
 Success: the next evaluation runs from data Jev itself persisted, with no transcript archaeology, using `jev` commands rather than one-off scripts. Its accuracy numbers say what the truth source was.
 
+## Scope after review (2026-11-13)
+
+The evaluation found no agent-workflow point where Jev can stand in for a Claude decision. Ethan's aim is different: use Jev's narrow, fast judgment wherever a problem calls for it. Data and research work are the clearest case; sfhousing's pathway regexes, stories extraction and road-lot keyword lists are examples.
+
+This PR therefore covers two things:
+- **Goal 0**, below;
+- **the persistence core:** goals 1–3 and 6, plus the stale-transcript-path fix, because that is the minimum that lets any later evaluation be judged fairly.
+
+Goals 4, 5, 7 and 8 are **deferred**. That covers adjudication entries, built-in labeling and adjudication tooling, the verify-stop window, evidence and rule work, and the backfill. Their design sections below are kept for when a point is worth evaluating that hard.
+- verify-stop stays in shadow. Its catches are almost all orchestrator status relays inside pipelines that review already covers.
+- The 2026-11-13 eval data stays saved at `~/.claude/plugins/data/superpowers-jev-super/evals/2026-11-13/`.
+
 ## Goals
 
+0. **Agents reach for Jev on their own when a problem fits.** The session-start note tells every session, when a key is present, to consider Jev for semantic judgments repeated over many items, and how to use it. It replaces the stopgap paragraph currently in Ethan's `~/.claude/CLAUDE.md` (see "Reach for Jev" below).
 1. **Every ask persists the exact state Jev saw.** This covers every point and every entry path: hooks, `--state <file>`, piped `--state -`, and `jev coverage`'s per-spec asks. Supersonic gets this for free, because all its points go through `jev ask`.
 2. **Every call is linked to its context:** session id, transcript path, cwd, git HEAD and branch, and the plugin version.
 3. **Every verdict says where it came from.** `record` entries get a `source` and an optional `rule_version`.
@@ -49,6 +62,22 @@ Success: the next evaluation runs from data Jev itself persisted, with no transc
 My call is **B**. Builders may split large repeated parts, such as prompt-route's skills list, into their own blob referenced by sha. That is left to the builder.
 
 ## Design
+
+### Reach for Jev (goal 0)
+
+- **The session-start note.** `SESSION_NOTE` in `lib/jevlib/hooks.py` is only emitted when the mode isn't `off`, which means a key is present. Append one short paragraph to it:
+  - **When:** a semantic judgment repeated over many items. Examples: categorizing records, picking a value out of messy text, deciding whether two records are the same thing, flagging what looks wrong, scoring relevance.
+  - **Before what:** before writing regexes, keyword lists or exception files, or running an LLM call per item.
+  - **Warning signs:** an override file that keeps growing, negation windows, keyword lists retuned after false positives, a "couldn't classify" bucket.
+  - **How:**
+    - run Jev as a separate labeling step that saves its answers, confidence and input hash as data;
+    - send low-confidence answers to review;
+    - measure against existing labels first.
+  - **Where to learn more:** load `typesafe:typesafe-ai` if it's installed, otherwise https://docs.typesafe.ai/llms.txt.
+- **The key in project code.** The note says the key is available to project code through `jev key --export`, which prints `TYPESAFE_API_KEY=<value>` for a dev shell. That's a new flag on the existing `jev key`, which today only reports where the key comes from. Project code always reads `TYPESAFE_API_KEY` from its own environment and never the plugin's key file.
+- **Size.** The note's added text stays under about 120 words, because it lands in every session's context.
+- **Tests.** In `tests/jev/test_hooks.py`: the note includes the guidance when the mode is `shadow` or `on`, and the hook emits nothing when the mode is `off`. Plus a test for `jev key --export`.
+- **After release.** Once 0.6.0 is installed, remove the stopgap section from `~/.claude/CLAUDE.md`. That file isn't in this repo, so it's a manual follow-up.
 
 ### Log entries (schema additions)
 
