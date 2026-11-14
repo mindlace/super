@@ -39,8 +39,9 @@ Command, with cwd = `<package worktree>`:
     python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])' < <ledger dir>/checkpoint-<n>.json
 
 Append the id under the ledger's `## Checkpoints` heading as
-`- <checkpoint id> | model <model> | package @ <short sha> | <date>`. The last line there is
-the current checkpoint.
+`- <checkpoint id> | model <model> | package @ <short sha> | <date> [| ruling <id>]`, ending
+with `| ruling <id>` when a ruling's routing builds it (a conductor re-checkpoint). The last
+line there is the current checkpoint.
 
 Prompt:
 
