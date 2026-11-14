@@ -55,10 +55,10 @@ A group's **created** is its spec's created time (or the standalone doc's). A gr
 
 ### Opening any file by absolute path
 
-"Choose a doc" also accepts an absolute path to any `.md` or `.html` file on disk, not just files under `~/Projects/*/docs/superpowers/`. Name and partial-path lookups keep searching the discovered docs as today; an absolute path that isn't one of them opens directly.
+"Choose a doc" also accepts an absolute path to any `.md` or `.html` file under a project's `docs/` folder, not just `docs/superpowers/`: `~/Projects/<project>/docs/**`, and the same inside that project's worktrees (`~/Projects/<project>/.claude/worktrees/<wt>/docs/**`). Name and partial-path lookups keep searching the discovered docs as today; an absolute path that isn't one of them opens directly.
 
-- The read guard (`assertSpecPath`, used by `GET /api/spec` and `/open`) splits in two. Paths inside the search roots keep today's rules. An absolute path outside them must exist, be a regular file, and end in `.md` or `.html`. That's acceptable only because the app no longer writes anything; nothing can be written through either guard.
-- Because reads now reach the whole disk, the server rejects requests whose `Host` header isn't `127.0.0.1:4510` or `localhost:4510`. Otherwise a web page could use DNS rebinding to read local files through superspec.
+- The read guard (`assertSpecPath`, used by `GET /api/spec` and `/open`) relaxes its `docs/superpowers/` requirement to the `docs/` folder of a project or one of its worktrees. Symlinks are resolved before the check, so nothing outside those folders is reachable. The file must exist, be a regular file, and end in `.md` or `.html`. Nothing can be written through the guard: the app no longer writes.
+- As defence in depth, the server rejects requests whose `Host` header isn't `127.0.0.1:4510` or `localhost:4510`. Otherwise a web page could use DNS rebinding to read local files through superspec.
 - Such a file opens as a hand-opened entry. Its caption is its parent folder, it has no plans, and it's persisted, reloaded on outside changes and closeable like any other hand-opened entry. Its times come from git if it's in a repo, otherwise from the filesystem.
 - Its relative images and other assets are **not** served; the asset route stays limited to `docs/superpowers/<type>/assets/`.
 
