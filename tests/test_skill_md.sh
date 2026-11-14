@@ -57,6 +57,26 @@ for s in 'claude --bg -n' '--allowedTools="' 'notify_when_idle' 'claude agents -
 done
 # The launch line sets its cwd with env -C, never with a separate cd.
 need 'env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug>'
+# The launch list allows what SDD runs: its three scripts by absolute path, merge-base, branch,
+# and the project's own commands (not the plan's); a relaunch is a procedure, not a death.
+for s in 'Bash(bash <sdd scripts dir>/sdd-workspace:*)' 'Bash(bash <sdd scripts dir>/task-brief:*)' \
+         'Bash(bash <sdd scripts dir>/review-package:*)' 'Bash(git merge-base:*)' 'Bash(git branch:*)' \
+         'Bash(<project command>:*)' 'SDD scripts: <absolute path>' 'Project commands: <commands>' \
+         '/skills/subagent-driven-development/scripts' 'installed_plugins.json' 'never from a plan' \
+         'Relaunching with a longer list' 'A relaunch is not a death' \
+         'until its name is no longer listed'; do
+  need "$s"
+done
+forbid "per command the plan's tasks run"
+forbid 'Bash(<test command>:*)'
+# The live drill launches its operator with this exact list (scripts dir and project command
+# substituted), so the drill's PASS covers the list the skill writes.
+drill="$(dirname "$skill")/../../../../tests/drill_peer_sessions.sh"
+skill_list=$(sed -n 's/.*claude --bg -n <design-slug>-<unit-slug> .*--allowedTools="\([^"]*\)".*/\1/p' "$skill" \
+  | sed -e 's|<sdd scripts dir>|$sdd|g' -e 's|<project command>|true|g')
+drill_list=$(sed -n 's/^op_tools="\([^"]*\)"$/\1/p' "$drill")
+[ -n "$skill_list" ] && [ "$skill_list" = "$drill_list" ] \
+  || { echo "FAIL: drill op_tools does not mirror the skill's launch list"; printf '%s\n%s\n' "$skill_list" "$drill_list"; exit 1; }
 for s in 'VERDICT: STOP' 'VERDICT: HOLD' 'scope gate' 'agentId' 'Operators from prior sessions are dead' \
          'rate-limits.json' 'defer-only' 'specs completed'; do
   forbid "$s"

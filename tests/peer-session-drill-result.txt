@@ -25,5 +25,22 @@ Launch directory: env -C "<dir>" claude -p ...   # verified in the design spike 
 
 subagentPromptCacheTtl (controller-run 2026-11-13): cache_creation summed over subagent transcripts in one session. Before the setting: 5m=40316/65443/36913, 1h=0 (three task reviewers). After `"subagentPromptCacheTtl": "1h"` in ~/.claude/settings.json: 5m=0, 1h=134380 and 53550 (two task reviewers). It took effect for subagents started after the edit without restarting the session. `-p --fork-session` forks wrote 1h cache before the setting, so the drill's ttl-report cannot show the change.
 
-Operator launched with the superconductor skill's launch form (2026-11-13, haiku, claude 2.1.325): SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh -> PASS spawn, PASS message (op-done after 5s; operator also wrote ledger-done.txt into a scratch dir outside the worktree via --add-dir), PASS checkpoint, PASS fork, PASS stop. Idle notice: none recorded. No CLI rejection or stall from the skill's --allowedTools list.
+Operator launched with the superconductor skill's launch form (2026-11-13, haiku, claude 2.1.325): SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh -> PASS spawn, PASS message (op-done after 5s; operator also wrote ledger-done.txt into a scratch dir outside the worktree via --add-dir), PASS checkpoint, PASS fork, PASS stop. Idle notice: none recorded. What this run exercised: the CLI accepted the list at launch (no rejection, the prompt was not swallowed) and the operator's Write, Read and SendMessage calls ran without a stall. What it did not exercise: no Skill, Agent, SDD script, git or test command call, so it showed nothing about whether the list covers what subagent-driven-development runs (it did not: SDD's `bash <absolute path>` script calls matched no entry).
   Launch line: env -C "<worktree>" claude --bg -n <name> --model haiku --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git rm:*),Bash(true:*)" --add-dir="<scratch>/ledger" "<prompt>"
+
+SDD scripts in the launch list (2026-11-13, haiku, claude 2.1.325).
+  Permission form probe (claude -p, cwd = a scratch git repo with a committed plan.md, S = the installed superpowers 7.0.2 skills/subagent-driven-development/scripts dir):
+    claude -p --model haiku --permission-mode acceptEdits --allowedTools="Bash(bash $S/sdd-workspace:*)" "<run: bash $S/sdd-workspace plan.md>"  -> ran, printed <repo>/.superpowers/sdd/plan, 6 s
+    claude -p --model haiku --permission-mode acceptEdits --allowedTools="Read" "<same>"                                                    -> "This command requires approval", not run, 2 min 0 s (the stall)
+  So the entry form is Bash(bash <absolute path>:*), the first form tried; it matches `bash <absolute path> <args>`.
+  Live drill: SUPERSONIC_LIVE=1 sh tests/drill_peer_sessions.sh, its operator launched with the skill's new list. The conductor's message asked the operator to run `bash <S>/sdd-workspace drill-plan.md` (a plan the drill commits), make one Skill call (superpowers:verification-before-completion), then write its files and reply.
+    PASS: sdd scripts dir (/Users/mindlace/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2/skills/subagent-driven-development/scripts)
+    PASS: spawn
+    PASS: message (op-done after 10s)
+    INFO: no idle notice recorded
+    PASS: sdd-and-skill (sdd-workspace made .superpowers/sdd/drill-plan; transcript: SDD SKILL)
+    PASS: checkpoint (c15b1e13-e89a-43a2-aaf6-c2e0c5a4100f)
+    PASS: fork
+    PASS: stop
+  Exercised: the SDD script call by absolute path (non-error tool result, workspace dir created), one Skill call (non-error), Write, SendMessage; all answered in 10 s, inside the 120 s limit, so no permission stall. Not exercised: task-brief, review-package, git merge-base, git branch, Agent, or a project command (their entries have the same form as the ones that ran).
+  Launch line: env -C "<worktree>" claude --bg -n <name> --model haiku --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <S>/sdd-workspace:*),Bash(bash <S>/task-brief:*),Bash(bash <S>/review-package:*),Bash(true:*)" --add-dir="<scratch>/ledger" "<prompt>"

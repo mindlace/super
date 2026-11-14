@@ -41,12 +41,24 @@ cd "$wt" || exit 1
 wtp=$(pwd -P)
 
 tools="Read,Write,SendMessage"
-# the operator is launched with the superconductor skill's launch template
-# (test command replaced by the harmless Bash(true:*)); the ledger dir is outside the worktree
-op_tools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git rm:*),Bash(true:*)"
+# SDD's scripts directory, resolved the way the conductor resolves it at intake: the scripts/
+# directory of the installed superpowers subagent-driven-development skill
+sdd=$(python3 -c '
+import json,os
+d=json.load(open(os.path.expanduser("~/.claude/plugins/installed_plugins.json")))
+for k,v in d.get("plugins",{}).items():
+    if k.split("@")[0]=="superpowers" and v:
+        print(v[0]["installPath"]+"/skills/subagent-driven-development/scripts"); break' 2>/dev/null)
+if [ -n "$sdd" ] && [ -f "$sdd/sdd-workspace" ]; then pass "sdd scripts dir ($sdd)"; else fail "sdd scripts dir ('$sdd')"; fi
+# the operator is launched with the superconductor skill's launch template (project command
+# replaced by the harmless Bash(true:*)); the ledger dir is outside the worktree
+op_tools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash $sdd/sdd-workspace:*),Bash(bash $sdd/task-brief:*),Bash(bash $sdd/review-package:*),Bash(true:*)"
 ledger="$scratch/ledger"
 mkdir -p "$ledger"
 ledger=$(cd "$ledger" && pwd -P)
+# a small committed plan for the operator's SDD script call
+printf '# Drill plan\n\n### Task 1: nothing\n\nNo steps.\n' > drill-plan.md
+git add drill-plan.md && git -c user.name=drill -c user.email=drill@example.invalid commit -q -m "drill: plan"
 
 # --- spawn ---
 cat > "$scratch/op.txt" <<PROMPT
@@ -54,7 +66,7 @@ You are the session named $op. Your peer is named $cond. You are already in work
 PROMPT
 cat > "$scratch/cond.txt" <<PROMPT
 You are the session named $cond. Your peer is named $op. You are already in worktree $wtp; that satisfies the worktree rule; do not create another. Marker: \`cond\`.
-Do this now: call SendMessage to $op (by name) with notify_when_idle enabled, message text exactly: "Please write the file op-done.txt in $wtp containing the single word PONG, then write the file $ledger/ledger-done.txt containing the single word LEDGER, then reply to $cond by name with the single word DONE." Then end your turn.
+Do this now: call SendMessage to $op (by name) with notify_when_idle enabled, message text exactly: "Please run the Bash command bash $sdd/sdd-workspace drill-plan.md from your cwd, then call the Skill tool once with skill superpowers:verification-before-completion (only load it), then write the file op-done.txt in $wtp containing the single word PONG, then write the file $ledger/ledger-done.txt containing the single word LEDGER, then reply to $cond by name with the single word DONE." Then end your turn.
 When the reply from $op arrives, write $wtp/cond-done.txt containing the reply text, and also the token IDLE-NOTIFIED if an idle notification from $op arrived. Then end your turn.
 PROMPT
 env -C "$wtp" claude --bg -n "$op" --model haiku --permission-mode acceptEdits --allowedTools="$op_tools" --add-dir="$ledger" "$(cat "$scratch/op.txt")" >"$scratch/launch-$op.log" 2>&1 </dev/null
@@ -81,6 +93,38 @@ else
 fi
 if [ -f cond-done.txt ] && grep -q IDLE-NOTIFIED cond-done.txt; then echo "INFO: idle notice arrived"; else echo "INFO: no idle notice recorded"; fi
 
+# --- sdd-and-skill: the operator ran an SDD script by absolute path and made a Skill call,
+# both inside the launch list (op-done within 120 s above rules out a permission stall) ---
+proj="$HOME/.claude/projects/$(printf '%s' "$wtp" | sed 's|[/.]|-|g')"
+opsid=$(claude agents --json 2>/dev/null | python3 -c '
+import json,sys
+for a in json.load(sys.stdin):
+    if a.get("name")==sys.argv[1]: print(a.get("sessionId","")); break' "$op")
+calls=$(python3 - "$proj/$opsid.jsonl" "$sdd/sdd-workspace" <<'PY'
+import json,sys
+uses={}; errs=set(); out=[]
+try:
+    for line in open(sys.argv[1]):
+        try: d=json.loads(line)
+        except ValueError: continue
+        c=(d.get("message") or {}).get("content")
+        if not isinstance(c,list): continue
+        for b in c:
+            if b.get("type")=="tool_use": uses[b["id"]]=(b.get("name"),json.dumps(b.get("input")))
+            if b.get("type")=="tool_result" and b.get("is_error"): errs.add(b.get("tool_use_id"))
+except OSError: pass
+for i,(n,inp) in uses.items():
+    if n=="Bash" and ("bash "+sys.argv[2]) in json.loads(inp).get("command","") and i not in errs: out.append("SDD")
+    if n=="Skill" and i not in errs: out.append("SKILL")
+print(" ".join(sorted(set(out))))
+PY
+)
+if [ -d "$wtp/.superpowers/sdd/drill-plan" ] && [ "$calls" = "SDD SKILL" ]; then
+  pass "sdd-and-skill (sdd-workspace made .superpowers/sdd/drill-plan; transcript: $calls)"
+else
+  fail "sdd-and-skill (workspace dir: $([ -d "$wtp/.superpowers/sdd/drill-plan" ] && echo yes || echo no); transcript calls: '${calls}'; transcript $proj/$opsid.jsonl)"
+fi
+
 # --- checkpoint ---
 mkdir -p pkg/questions pkg/rulings
 printf '# Design\n\n- Unit A writes a.txt containing 1\n' > pkg/design.md
@@ -91,7 +135,6 @@ cpid=$(printf '%s' "$cp_json" | python3 -c 'import json,sys; print(json.load(sys
 if [ -n "$cpid" ]; then pass "checkpoint ($cpid)"; else fail "checkpoint"; fi
 
 # --- fork ---
-proj="$HOME/.claude/projects/$(printf '%s' "$wtp" | sed 's|[/.]|-|g')"
 tr_cp="$proj/$cpid.jsonl"
 h0=$(shasum "$tr_cp" 2>/dev/null)
 claude -p --resume "$cpid" --fork-session --model haiku --output-format json \

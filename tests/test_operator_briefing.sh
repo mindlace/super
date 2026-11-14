@@ -42,6 +42,11 @@ require 'The kept commits stand and are not redone'
 require 'existing code'
 require 'covering only what remains after the kept'
 
+# The launch list includes SDD's scripts, called by absolute path; a relaunch resumes the plan.
+require 'git commands, SDD scripts'
+require '`bash <the absolute path your assignment names> <args>`'
+require 'restart you with a longer list'
+
 forbid 'with a pointer to'
 forbid 'message `main`'
 forbid 'to `main`'

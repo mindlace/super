@@ -97,6 +97,19 @@ Before the first admission, verify it is complete:
 
 Anything missing → back to supersonic:supercomposer; do not patch it here.
 
+**Operator commands.** Resolve two things once, at intake, and ledger them
+as header lines below `Build graph:`:
+
+- `SDD scripts: <absolute path>`: the `scripts/` directory of the installed
+  superpowers `subagent-driven-development` skill. It is the `installPath`
+  of the `superpowers` entry in `~/.claude/plugins/installed_plugins.json`
+  followed by `/skills/subagent-driven-development/scripts`; check that
+  `sdd-workspace`, `task-brief` and `review-package` are in it. SDD runs
+  each as `bash <absolute path> ...`.
+- `Project commands: <commands>`: the project's own test, build, lint and
+  install commands, taken from its CLAUDE.md and its package scripts (for
+  example `npm test`, `npx vitest`, `npm install`), never from a plan.
+
 **Comprehension gate — once, before the first admission** (and again before
 any cutover-class step): dispatch a fresh agent to write an "explain the
 system the package describes" doc and diff it against the source model
@@ -198,11 +211,13 @@ result.
        - Admitted: yes|no
        - Replaces: none | an earlier operator; kept commits <base sha>..<kept sha> stand and are not redone; superseded plan <plan path>
        - Permission mode: acceptEdits
-       - Allowed git commands: git add, git commit, git rev-parse, git log, git diff, git status, git show, git merge, git rm
+       - Allowed git commands: git add, git commit, git rev-parse, git log, git diff, git status, git show, git merge, git merge-base, git branch, git rm
+       - Allowed SDD scripts: bash <sdd scripts dir>/sdd-workspace, bash <sdd scripts dir>/task-brief, bash <sdd scripts dir>/review-package
+       - Allowed project commands: <project commands>
 
 3. **Launch**, as one Bash call:
 
-       env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git rm:*),Bash(<test command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
+       env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <sdd scripts dir>/sdd-workspace:*),Bash(bash <sdd scripts dir>/task-brief:*),Bash(bash <sdd scripts dir>/review-package:*),Bash(<project command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
 
    - `env -C` sets the session's cwd for that one command. A `cd` in a
      separate call persists only inside this session's working
@@ -210,12 +225,24 @@ result.
    - `--allowedTools="..."` and `--add-dir="..."` keep their equals sign:
      both flags are variadic, and without `=` they swallow the prompt and
      the session starts empty.
-   - `<test command>` is the project's test and build runner (for example
-     `npm test`, `npx vitest`); add one `Bash(...:*)` entry per command the
-     plan's tasks run. Add `Bash(jev:*)` when `superpowers-jev` is
+   - `<sdd scripts dir>` is the ledger's `SDD scripts:` path. The entry
+     form `Bash(bash <absolute path>:*)` matches SDD's
+     `bash <absolute path> <args>` calls; it is the form the live drill
+     verified.
+   - `Bash(<project command>:*)` is one entry per command on the ledger's
+     `Project commands:` line. Add `Bash(jev:*)` when `superpowers-jev` is
      installed. A tool call outside the list stalls about two minutes and
-     then fails: the operator asks you, and you relaunch with the list
-     extended.
+     then fails: the operator asks you for the command, and you relaunch it
+     with a longer list (below) when the command belongs to its unit's work.
+   - **Relaunching with a longer list.** Add the command to the ledger's
+     `Project commands:` line. Stop the operator by its short id
+     (`## Supervision`, Stopping an operator), run `claude agents --json`
+     until its name is no longer listed, set its assignment's `Plan:` line to
+     the plan it already has (as for a restart, `## Supervision`, Operator
+     death), and launch it with this step's command and the longer list,
+     same name, worktree and model. Ledger it as `relaunched`. A relaunch is
+     not a death: it does not count toward the second-death rule, and it
+     keeps the running count.
    - `--add-dir="<ledger dir>"` declares the one directory outside the
      worktree the operator writes: its question files.
 4. **Ledger** the unit line (`## Units`) and its `## Cost` start: the
@@ -535,6 +562,8 @@ still listed (`claude stop <id>`).
     # Superconductor ledger — design: <design doc path>
     Package worktree: <absolute path>
     Build graph: <build-graph path> @ <sha>
+    SDD scripts: <absolute path>
+    Project commands: <commands>
 
     ## Checkpoints
     - <checkpoint id> | model <model> | package @ <short sha> | <date>
@@ -563,7 +592,8 @@ still listed (`claude stop <id>`).
 `session <id>` is the full `sessionId` from `claude agents --json`: that
 listing has no usage field, so tokens come from the session's transcript.
 Append a line after every state change: package accepted, band applied,
-operator started / admitted / complete / died / restarted / stopped,
+operator started / admitted / complete / died / restarted / relaunched /
+stopped,
 question filed, fork started / exited, ruling relayed, operator replaced,
 checkpoint built, merge done, merge aborted or taken back, deferral
 recorded.

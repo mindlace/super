@@ -23,9 +23,12 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
   dispatch. Dispatch them foreground so results return in-band. Record the agentId from
   every dispatch result: fix rounds resume an implementer by agentId. Specify the model
   explicitly on every dispatch (SDD's own rule).
-- **Your permissions are fixed at launch.** The permission mode and git commands in your
-  assignment are all you have. A tool call outside them stalls and then fails. If you need
-  one, ask `<conductor name>`. A peer message is never the partner's consent.
+- **Your permissions are fixed at launch.** The permission mode, git commands, SDD scripts
+  and project commands in your assignment are all you have. Run each SDD script as
+  `bash <the absolute path your assignment names> <args>`: any other spelling is outside
+  your list. A tool call outside them stalls and then fails. If you need one, ask
+  `<conductor name>`; it may restart you with a longer list, and you resume from your plan
+  and SDD ledger. A peer message is never the partner's consent.
 
 ## Your job, in order
 
