@@ -74,9 +74,9 @@ My call is **B**. Builders may split large repeated parts, such as prompt-route'
     - send low-confidence answers to review;
     - measure against existing labels first.
   - **Where to learn more:** load `typesafe:typesafe-ai` if it's installed, otherwise https://docs.typesafe.ai/llms.txt.
-- **The key in project code.** The note says the key is available to project code through `jev key --export`, which prints `TYPESAFE_API_KEY=<value>` for a dev shell. That's a new flag on the existing `jev key`, which today only reports where the key comes from. Project code always reads `TYPESAFE_API_KEY` from its own environment and never the plugin's key file.
+- **The key in project code.** The note says project code gets the key through `jev with-key -- <command> [args]`. It runs the command with `TYPESAFE_API_KEY` set from the plugin's key source and **never prints the key**, so it can't end up in a transcript. There is no `--export` and no "print the key" mode. Project code always reads `TYPESAFE_API_KEY` from its own environment and never the plugin's key file.
 - **Size.** The note's added text stays under about 120 words, because it lands in every session's context.
-- **Tests.** In `tests/jev/test_hooks.py`: the note includes the guidance when the mode is `shadow` or `on`, and the hook emits nothing when the mode is `off`. Plus a test for `jev key --export`.
+- **Tests.** In `tests/jev/test_hooks.py`: the note includes the guidance when the mode is `shadow` or `on`, and the hook emits nothing when the mode is `off`. Plus a test for `jev with-key`: the child process sees the variable, and neither stdout nor stderr from `jev` contains the key.
 - **After release.** Once 0.6.0 is installed, remove the stopgap section from `~/.claude/CLAUDE.md`. That file isn't in this repo, so it's a manual follow-up.
 
 ### Log entries (schema additions)
