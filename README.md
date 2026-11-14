@@ -1,11 +1,12 @@
 # super
 
-A Claude Code plugin marketplace with two plugins.
+A Claude Code plugin marketplace with three plugins.
 
 | Plugin | What it does |
 |---|---|
 | `supersonic` | `supersonic:superconductor` conducts a multi-spec build through operator subagents. `supersonic:supercomposer` composes the design package it executes. |
 | `superpowers-jev` | Optional [TypeSafe](https://typesafe.ai) Jev typed judgments at 13 decision points in superpowers and supersonic. Shadow mode by default. Fails open. |
+| `superpowers-html` | Overlays superpowers 7.x so specs and plans are written as `.html` in the supersonic spec format. Fails open. |
 
 `superspec/` is a local SvelteKit app for reading superpowers specs and plans across `~/Projects`. It is not a plugin yet. See `superspec/README.md`.
 
@@ -15,12 +16,15 @@ A Claude Code plugin marketplace with two plugins.
 /plugin marketplace add mindlace/super
 /plugin install supersonic@super
 /plugin install superpowers-jev@super
+/plugin install superpowers-html@super
 ```
 
 For local development, add the checkout as a directory marketplace instead:
 `/plugin marketplace add ~/Projects/super`.
 
 `superpowers-jev` overlays the official `superpowers` plugin and does not replace it. Keep superpowers installed.
+
+`superpowers-html` overlays superpowers 7.x the same way and makes the specs and plans it writes `.html` instead of markdown. Keep superpowers installed; a `.md` plan still runs as before.
 
 ## Jev modes
 
