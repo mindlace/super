@@ -146,6 +146,13 @@ say what the system does".
 No spec text refers to the walk-per-tick approach, to tasks or to "before"; every rep has
 `Changes design: yes`, `Changes contract: no` and `first task that no longer holds: task 2`.
 
-The merge-review and disk-wins GREEN runs predate both refactors. Both refactors touch only the
-adjudication prompt's step 4 and ruling form; merge review does not use that prompt, and the
-disk-wins reps already used the ruling form, so they were not rerun.
+### composer-fork-disk-wins, rerun on the final text: 3/3 pass
+
+Same context as GREEN, after both refactors. Every rep rules from `contracts/src/rows.ts:32`
+("Disk wins, so S4 is `bigint`"), rejects the local widening and the clamp, marks
+`simstep-world-funding: clarification` with `Changes contract: no`, and keeps any S4 text fix to
+current state ("with no 'changed from int' wording"). No rep amends S4 to `int`.
+
+The merge-review GREEN run predates both refactors and was not rerun: both changed only the
+`## Adjudication fork` section (step 4 and the ruling form), and the merge-review fork has its own
+prompt.
