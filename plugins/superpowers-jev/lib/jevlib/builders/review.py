@@ -8,6 +8,10 @@ from . import _run
 
 BULLET_RE = re.compile(r"^\s*(?:[-*]|\d+[.)])\s+(.*)$")
 SEV_RE = re.compile(r"^#{2,6}\s*(Critical|Important|Minor)\b", re.I)
+_SEV = r"(Critical|Important|Minor)"
+INLINE_SEV_RE = re.compile(
+    r"^(?:\[" + _SEV + r"\]|\(" + _SEV + r"\)|\*\*" + _SEV + r":?\*\*|" + _SEV + r":)"
+    r"\s*[:\u2014\u2013-]?\s*", re.I)
 HEADING_RE = re.compile(r"^#{1,6}\s")
 PATH_RE = re.compile(r"(?<![\w/.-])([\w.-]+(?:/[\w.-]+)*\.[A-Za-z0-9]+)(?::\d+(?:-\d+)?)?")
 MAX_HUNKS_PER_FINDING = 8
@@ -101,12 +105,12 @@ def parse_review(text):
     """Findings under Critical / Important / Minor headings of a reviewer report."""
     findings, sev, current = [], None, None
 
-    def start(t):
+    def start(t, severity):
         nonlocal current
         if t.lower().rstrip(".") in ("none", "n/a", "none found"):
             current = None
             return
-        current = {"text": t, "reviewer_severity": sev}
+        current = {"text": t, "reviewer_severity": severity}
         findings.append(current)
 
     for line in text.splitlines():
@@ -117,17 +121,23 @@ def parse_review(text):
         if HEADING_RE.match(line):
             sev, current = None, None
             continue
-        if sev is None:
-            continue
         stripped = line.strip()
         if not stripped:
             current = None
             continue
         b = BULLET_RE.match(line)
         if b and not line[:1].isspace():
-            start(b.group(1).strip())
+            text = b.group(1).strip()
+            tag = INLINE_SEV_RE.match(text)
+            if tag:
+                start(text[tag.end():].strip(), next(g for g in tag.groups() if g).lower())
+            elif sev is not None:
+                start(text, sev)
+            else:
+                current = None
         elif current is None:
-            start(stripped)
+            if sev is not None:
+                start(stripped, sev)
         else:
             current["text"] += " " + stripped
     return {"findings": findings}
