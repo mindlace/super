@@ -21,8 +21,14 @@ for s in '## The Written Design' '## Overview' '## Plan Document Header' '## Tas
          'spec-format.md' '7.0.2' 'checkbox' \
          'progress is kept in the workspace ledger' 'Write every step unchecked (no `checked` attribute)' \
          'nobody ticks steps during execution' \
-         'bash <absolute path of this skill' '/../../bin/task-brief` (same' '/../../bin/task-start` (same'; do
+         "bash <absolute path of this skill's base directory>/../../bin/task-brief\` (same" \
+         "bash <absolute path of this skill's base directory>/../../bin/task-start\` (same" \
+         "python3 <absolute path of this skill's base directory>/../../bin/superpowers-html compat"; do
   grep -qF -- "$s" "$skill" || fail "html-docs skill missing: $s"
 done
+# The helper is Python: it must never be run with bash.
+if grep -qF -- 'bash <absolute path of this skill'"'"'s base directory>/../../bin/superpowers-html' "$skill"; then
+  fail "html-docs skill runs the python helper superpowers-html with bash"
+fi
 if grep -qF -- '- [ ]' "$skill"; then fail "html-docs skill still mentions '- [ ]'"; fi
 echo "PASS: html-docs skill"

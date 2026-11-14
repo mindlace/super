@@ -280,7 +280,7 @@ result.
 
    If `superpowers-html:html-docs` is among your available skills, also add
    the line `- Before superpowers:writing-plans, load superpowers-html:html-docs.`
-   and add `bash <html scripts dir>/task-brief, bash <html scripts dir>/superpowers-html`
+   and add `bash <html scripts dir>/task-brief, python3 <html scripts dir>/superpowers-html`
    to `Allowed SDD scripts:`. Otherwise the assignment is unchanged.
 
 3. **Launch**, as one Bash call:
@@ -300,7 +300,7 @@ result.
    - `Bash(<project command>:*)` is one entry per command on the ledger's
      `Project commands:` line. Add `Bash(jev:*)` when `superpowers-jev` is
      installed. Add `Bash(bash <html scripts dir>/task-brief:*)` and
-     `Bash(bash <html scripts dir>/superpowers-html:*)` when the ledger has
+     `Bash(python3 <html scripts dir>/superpowers-html:*)` when the ledger has
      an `HTML scripts:` line; `<html scripts dir>` is that path. A tool call outside the list stalls about two minutes and
      then fails: the operator asks you for the command, and you relaunch it
      with a longer list (below) when the command belongs to its unit's work.

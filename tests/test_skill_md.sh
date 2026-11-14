@@ -221,5 +221,7 @@ for s in 'superpowers-html:html-docs' 'among your available skills' '.html'; do
 done
 need 'HTML scripts: <absolute path>'
 need 'Bash(bash <html scripts dir>/task-brief:*)'
-need 'bash <html scripts dir>/task-brief, bash <html scripts dir>/superpowers-html'
+need 'bash <html scripts dir>/task-brief, python3 <html scripts dir>/superpowers-html'
+need 'Bash(python3 <html scripts dir>/superpowers-html:*)'
+forbid 'bash <html scripts dir>/superpowers-html'
 echo "PASS: SKILL.md structure"

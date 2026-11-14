@@ -13,7 +13,7 @@ The helpers live in `<this skill's base directory>/../../bin/` (the harness prin
 
 ## Version check
 
-Once per session, run `bash <absolute path of this skill's base directory>/../../bin/superpowers-html compat`. If it prints `"compatible": false`, tell your human partner once: "superpowers-html was written against superpowers 7.0.2; the installed version is <superpowers_version>." Then carry on with this skill.
+Once per session, run `python3 <absolute path of this skill's base directory>/../../bin/superpowers-html compat`. If it prints `"compatible": false`, tell your human partner once: "superpowers-html was written against superpowers 7.0.2; the installed version is <superpowers_version>." Then carry on with this skill.
 
 ## brainstorming
 
