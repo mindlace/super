@@ -90,7 +90,10 @@ Then, for every unit whose ledger status is planning, admitted or running:
   the plan it already wrote, if one qualifies, its branch is brought up to
   date, and it is launched with the same name in its existing worktree. Its SDD ledger
   makes mid-plan resume cheap. Ledger the restart; a restart counts as a
-  death for the second-death rule.
+  death for the second-death rule. Restart no member of a family that a
+  ruling still to be routed (Routing, below) replaces: its `## Affected
+  units` names a member's `first task that no longer holds`. Reading that
+  ruling for this is part of routing it; routing replaces the family.
 
 Then reconcile the rest of what a conductor that ended mid-run can leave
 behind. The package worktree has one writer at a time (`## Composer forks`,
@@ -104,11 +107,20 @@ package worktree, and before it merges anything, a row report or
   adjudication fork exits). A ruling with a `routing <id>` line and no
   `routed <id>` line is routed again from the top: every step skips what the
   ledger shows done (Routing again). A question whose `rulings/<id>.md`
-  exists but which has no `routing <id>` line is a ruling whose fork exited
-  while no conductor ran: route it.
-- **Questions.** Once every ruling has its `routed <id>` line, start the
-  adjudication fork again for each question with no `rulings/<id>.md`, one
-  at a time in the order filed.
+  exists but whose `## Questions` line has no commit recorded yet is a
+  ruling whose fork exited while no conductor ran: route it. A question line
+  with its commit recorded and no `routing <id>` line was routed in full.
+- **Questions.** Once routing is finished, take each question with no
+  `rulings/<id>.md`, one at a time in the order filed. If its fork committed
+  before it died, take that commit out first, so the fork rules on the
+  package without its own half-made amendment. That commit is the one
+  `git -C <package worktree> log -1 --format=%H
+  --grep='^docs(<design-slug>): rule <id>$'` prints (the subject the
+  adjudication fork commits with, matched whole), unless `git -C <package
+  worktree> log --format=%H --grep='^This reverts commit <that sha>\.$'`
+  prints a revert of it. Revert it with `git -C <package worktree> revert
+  --no-edit <that sha>` and ledger `- reverted <that sha> for <id>: no
+  ruling file`. Then start its adjudication fork again.
 - **Merge reviews.** For each `## Integration` merge line with neither a
   `No drift @ <sha>` line nor a `merge-<unit-slug>-<short-sha>` question,
   start its merge-review fork.
@@ -238,7 +250,11 @@ result.
 > Degraded output is paid for in cleanup and refactor work, which costs
 > more than the tokens saved.
 
-**Starting an operator.**
+**Starting an operator.** First check what a conductor that died may
+already have done. If `claude agents --json` lists
+`<design-slug>-<unit-slug>`, the operator is started (step 3 ledgered it
+before step 4 launched it): start nothing. If `git -C <project> worktree
+list` lists its worktree, step 1 is done: go on from step 2.
 
 1. **Worktree.** `git -C <project> worktree add
    <project>/.claude/worktrees/<design-slug>-<unit-slug> -b
@@ -268,7 +284,13 @@ result.
        - Allowed SDD scripts: bash <sdd scripts dir>/sdd-workspace, bash <sdd scripts dir>/task-brief, bash <sdd scripts dir>/review-package
        - Allowed project commands: <project commands>
 
-3. **Launch**, as one Bash call:
+3. **Ledger** the unit line (`## Units`) before the launch, with `start
+   <sha>`: `git -C <unit worktree> rev-parse HEAD` just before the first
+   launch, after any bring-up-to-date merge; a restart, relaunch or
+   replacement in an existing worktree keeps the `start` it has. Ledger its
+   `## Cost` start: the timestamp and the `SEVEN_DAY` percentage from the
+   `budget.sh` run.
+4. **Launch**, as one Bash call:
 
        env -C "<unit worktree>" claude --bg -n <design-slug>-<unit-slug> --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <sdd scripts dir>/sdd-workspace:*),Bash(bash <sdd scripts dir>/task-brief:*),Bash(bash <sdd scripts dir>/review-package:*),Bash(<project command>:*)" --add-dir="<ledger dir>" "$(cat <ledger dir>/assignments/<unit-slug>.md)"
 
@@ -298,11 +320,6 @@ result.
      keeps the running count.
    - `--add-dir="<ledger dir>"` declares the one directory outside the
      worktree the operator writes: its question files.
-4. **Ledger** the unit line (`## Units`), with `start <sha>`: `git -C
-   <unit worktree> rev-parse HEAD` just before the first launch, after any
-   bring-up-to-date merge; a restart, relaunch or replacement in an
-   existing worktree keeps the `start` it has. Ledger its `## Cost` start: the timestamp and the
-   `SEVEN_DAY` percentage from the `budget.sh` run.
 
 **Bringing a branch up to date.** Before you launch a hand-back sibling, a
 replacement or a restart into an existing branch, run `git -C <unit
@@ -439,7 +456,7 @@ authority.
      replacement work is in that plan. If no plan qualifies,
      `Plan:` stays `none` and `Replaces:` stays as it is.
   2. Bring its branch up to date (Phase 2, Bringing a branch up to date)
-     and launch it (Phase 2, Starting an operator, step 3).
+     and launch it (Phase 2, Starting an operator, step 4).
   3. Ledger the restart.
 
   SDD's ledger makes mid-plan resume cheap. A restart keeps the running
@@ -503,7 +520,13 @@ contract`. Then, in order:
    stop its operator (and its family's), cut the branches and take the cut
    work back out now (Replacing an operator, steps 1-4).
 3. If `Changes design: yes`, run `## Build-graph fork`, unless a `build
-   graph for <id>` line is in the ledger, with "Units to write" set to the ruling's `## Build graph` lines: the unit slugs whose
+   graph for <id>` line is in the ledger or that fork already committed
+   before a death: `git -C <package worktree> log -1 --format=%h
+   --grep='^docs(<design-slug>): build graph$' <package commit>..HEAD`
+   prints its sha (`<package commit>` is the ruling's `Package commit`);
+   then update `Build graph:` and ledger the `build graph for` line with
+   that sha instead. Run it
+   with "Units to write" set to the ruling's `## Build graph` lines: the unit slugs whose
    rows to rewrite, and each `new: <what>` the specs now need that no row
    implements; `none named` when the section lists nothing. A hand-back
    sibling `<unit-slug>-<k>` has no row of its own: pass `<unit-slug>`.
@@ -522,6 +545,9 @@ ruling again from the top, and each step above, and each Replacing step it
 runs, checks the ledger or git first and skips what is done. Routing a
 ruling again after a death is still routing it: the file is read again only
 to route it. The `routing <id>` line is appended only if it is missing.
+Every such check matches the id whole: a line is for `<id>` only when the
+id in it equals `<id>` up to the next space, `:` or the line's end, so
+`routed api-2` is not a line for `api`.
 
 `rulings/` is the partner's record of what was decided and why. No agent
 loads it as design context: operators, forks and the checkpoint never open
@@ -538,6 +564,14 @@ A unit's **family** is the unit and its hand-back siblings
 family that has siblings replaces the whole family: every member is stopped
 and cut, and one fresh operator starts on `<unit-slug>` from its
 build-graph row. A unit with no siblings is a family of one.
+
+When routing again, never stop the fresh operator this ruling already
+started. A family whose `<unit-slug>` has a `## Units` line below its
+`replaced (ruling <id>)` line is already replaced: skip steps 1-6 for it.
+A family where every member has its `- cut <member> to <cut-to sha> for
+ruling <id>` line got past step 2, which saw every old operator gone, so a
+session listed under `<unit-slug>`'s name now is the fresh one: skip steps
+1-3 and let step 6 find it.
 
 1. Ledger every member `replaced (ruling <id>)` in one append, then stop
    each member still listed in `claude agents --json`: `claude stop <id>`
@@ -558,17 +592,19 @@ build-graph row. A unit with no siblings is a family of one.
    worktree> reset --hard <the commit before it>`; if it never reached that
    task, or its branch no longer holds that task's commits because an
    earlier routing cut it, nothing of it is cut. When the ruling names a
-   sibling's task, `<unit-slug>`'s own branch is not cut. Every later task goes, even one
-   that might have survived, and no branch keeps a copy: no old-approach
-   code or comment carries over. The kept commits are `<base sha>..<kept
-   sha>`, where `<base sha>` is `<unit-slug>`'s `start` commit on its
-   `## Units` line and `<kept sha>` is the commit its branch now ends at.
-   Then remove the superseded plan's SDD workspace from `<unit-slug>`'s
-   worktree, so no later plan can resume its ledger: the directory under
-   `<unit worktree>/.superpowers/sdd/` whose `plan-path` file reads `<plan
-   path>` (`grep -lxF -- '<plan path>' <unit
-   worktree>/.superpowers/sdd/*/plan-path`), with `rm -rf <that
-   directory>`, if it is still there. Ledger each member's cut under
+   sibling's task, `<unit-slug>`'s own branch is not cut. Every later task
+   goes, even one that might have survived, and no branch keeps a copy: no
+   old-approach code or comment carries over. The kept commits are `<base
+   sha>..<kept sha>`, where `<base sha>` is `<unit-slug>`'s `start` commit
+   on its `## Units` line and `<kept sha>` is the commit its branch now
+   ends at. Then remove the superseded plan's SDD workspace from
+   `<unit-slug>`'s worktree, so no later plan can resume its ledger. SDD
+   writes `plan-path` repo-relative, so make `<plan path>` repo-relative
+   first: drop a leading `<unit worktree>/` (an absolute path) or `./`. The
+   workspace is the directory under `<unit worktree>/.superpowers/sdd/`
+   whose `plan-path` file reads that path (`grep -lxF -- '<plan path>'
+   <unit worktree>/.superpowers/sdd/*/plan-path`); remove it with `rm -rf
+   <that directory>`, if it is still there. Ledger each member's cut under
    `## Integration`: `- cut <member> to <cut-to sha> for ruling <id>`.
 4. Take the cut work back out of the integration branch. For each member
    whose cut commits had merged and that has no `- reverted` line for
@@ -609,8 +645,8 @@ build-graph row. A unit with no siblings is a family of one.
 6. If its name is listed in `claude agents --json`, it is already launched:
    ledger its start if the ledger does not show it, and launch nothing.
    Otherwise bring its branch up to date (Phase 2, Bringing a branch up to
-   date), then launch it with the same name, worktree and model (Phase 2, Starting
-   an operator, step 3), and ledger the start. It keeps the running count,
+   date), then launch it with the same name, worktree and model (Phase 2,
+   Starting an operator, step 4), and ledger the start. It keeps the running count,
    so it goes ahead in every band, `high` included.
 
 **Re-checkpointing.** The checkpoint holds the package as it was when read,
@@ -622,7 +658,8 @@ these holds:
 - the ruling says `Changes contract: yes`;
 - five rulings have committed to the package since the current
   checkpoint: count `git -C <package worktree> log --first-parent --oneline
-  --grep='): rule ' <checkpoint package sha>..HEAD`;
+  --grep='^docs(<design-slug>): rule ' <checkpoint package sha>..HEAD`,
+  whose anchor leaves out the reverts Phase 0 makes of a rule commit;
 - the question this fork ruled on brought a class's frame-defect tally to
   three (`## Supervision`). A tally that already stood at three or more
   before this question triggers nothing.
@@ -747,6 +784,7 @@ still listed (`claude stop <id>`).
     - relayed <id> to <session name>
     - build graph for <id> @ <sha>
     - routed <id>
+    - reverted <sha> for <id>: no ruling file
 
     ## Frame-defect tally
     - <class-slug>: <count> — instances: <one line each, dated>
@@ -772,6 +810,7 @@ Append a line after every state change: package accepted, band applied,
 operator started / admitted / complete / died / restarted / relaunched /
 stopped,
 question filed, fork started / exited, routing begun, ruling relayed,
-build graph rewritten, routing done, operator replaced,
+build graph rewritten, routing done, rule commit with no ruling file
+reverted, operator replaced,
 branch cut, cut commits reverted, checkpoint built, merge done, merge
 aborted or taken back, deferral recorded.

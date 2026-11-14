@@ -180,7 +180,31 @@ need 'append `- routed <id>` under `## Questions`'
 need 'routing begun'
 need 'routing done'
 need 'A ruling with a `routing <id>` line and no `routed <id>` line is routed again from the top'
-need 'whose `rulings/<id>.md` exists but which has no `routing <id>` line'
+# An unrouted ruling is one whose question line has no commit yet, true on any ledger (I-3).
+need 'whose `## Questions` line has no commit recorded yet is a ruling whose fork exited'
+need 'A question line with its commit recorded and no `routing <id>` line was routed in full'
+forbid 'exists but which has no `routing <id>` line'
+forbid 'Once every ruling has its `routed <id>` line'
+# Routing again never stops the fresh operator the ruling already started (I-1).
+need 'When routing again, never stop the fresh operator this ruling already started'
+need 'has a `## Units` line below its `replaced (ruling <id>)` line is already replaced: skip steps 1-6'
+need 'a session listed under `<unit-slug>`'"'"'s name now is the fresh one: skip steps 1-3'
+# A rule commit with no ruling file is reverted, found by its whole subject, before the fork restarts (I-2).
+need "git -C <package worktree> log -1 --format=%H --grep='^docs(<design-slug>): rule <id>\$'"
+need "--grep='^This reverts commit <that sha>\\.\$'"
+need '- reverted <sha> for <id>: no ruling file'
+need "--grep='^docs(<design-slug>): rule ' <checkpoint package sha>..HEAD"
+forbid "--grep='): rule '"
+# Minor: start checks, family not restarted, build-graph commit found, whole-id match, plan path.
+need 'If `claude agents --json` lists `<design-slug>-<unit-slug>`, the operator is started'
+need 'lists its worktree, step 1 is done: go on from step 2'
+need '**Ledger** the unit line (`## Units`) before the launch'
+need 'Starting an operator, step 4'
+forbid 'Starting an operator, step 3'
+need 'Restart no member of a family that a ruling still to be routed'
+need "--grep='^docs(<design-slug>): build graph\$' <package commit>..HEAD"
+need 'Every such check matches the id whole'
+need 'drop a leading `<unit worktree>/` (an absolute path) or `./`'
 need 'Routing a ruling again after a death is still routing it'
 need 'unless a `relayed <id> to <session name>` line records it'
 need 'unless a `build graph for <id>` line is in the ledger'

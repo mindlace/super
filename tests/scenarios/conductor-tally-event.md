@@ -23,7 +23,7 @@ Ledger excerpt:
 
 The checkpoint above was built when `world-core-3`'s ruling exited, and your partner got the
 `Defect class tick-order has reached 3` line then. `git -C
-/Users/p/sim/.claude/worktrees/simstep-package log --first-parent --oneline --grep='): rule '
+/Users/p/sim/.claude/worktrees/simstep-package log --first-parent --oneline --grep='^docs(simstep): rule '
 4f2a91c..HEAD` lists two commits: `2c7d9f1` and `91ab3e2`.
 
 The adjudication fork for question `world-score-2` has just exited, and wrote:
