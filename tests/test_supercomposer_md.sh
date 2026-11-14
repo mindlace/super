@@ -98,6 +98,45 @@ case ",$mr_tools," in *,Edit,*|*'git commit'*|*'git add'*)
   echo "FAIL: merge-review fork is read-only on the package; tools were: $mr_tools"; exit 1;; esac
 printf '%s\n' "$(section 'Build-graph fork')" | grep -qF 'Longest chain:' \
   || { echo "FAIL: build-graph fork must report Longest chain:"; exit 1; }
+# No agent loads rulings/: the build-graph runner fills the unit names itself.
+section 'Build-graph fork' | grep -qF 'rulings/' && { echo "FAIL: build-graph fork must not read rulings/"; exit 1; }
+# Each prompt states its permission mode and tools; each tool list is the command's list.
+for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  body=$(section "$h")
+  printf '%s\n' "$body" | grep -qF 'Your tools are exactly' \
+    || { echo "FAIL: composer-forks.md ## $h prompt does not state its tools"; exit 1; }
+  tools=$(printf '%s\n' "$body" | sed -n 's/.*--allowedTools="\([^"]*\)".*/\1/p')
+  [ -n "$tools" ] || { echo "FAIL: ## $h has no --allowedTools list"; exit 1; }
+  oldifs=$IFS; IFS=','
+  for t in $tools; do
+    IFS=$oldifs
+    case "$t" in
+      Bash\(*) cmd=$(printf '%s' "$t" | sed 's/^Bash(\(.*\):\*)$/\1/')
+               printf '%s\n' "$body" | grep -qF -- "\`$cmd" \
+                 || { echo "FAIL: ## $h prompt does not list allowed command: $cmd"; exit 1; } ;;
+      *) printf '%s\n' "$body" | sed -n 's/.*Your tools are exactly\(.*\)/\1/p' | grep -qw -- "$t" \
+           || { echo "FAIL: ## $h prompt does not list allowed tool: $t"; exit 1; } ;;
+    esac
+  done
+  IFS=$oldifs
+  if [ "$h" != 'Checkpoint' ]; then
+    printf '%s\n' "$body" | grep -qF 'Permission mode acceptEdits' \
+      || { echo "FAIL: ## $h prompt does not state its permission mode"; exit 1; }
+  fi
+done
+# Forks that write the ledger declare it with --add-dir in its equals form.
+for h in 'Adjudication fork' 'Merge-review fork'; do
+  section "$h" | grep -qF -- '--add-dir="<ledger dir>"' \
+    || { echo "FAIL: ## $h must pass --add-dir=\"<ledger dir>\""; exit 1; }
+done
+grep -qF -- '--add-dir <' "$forks" && { echo "FAIL: --add-dir must use the equals form"; exit 1; }
+# The cd can silently not take effect: check pwd -P and name the failure.
+for s in 'pwd -P' 'No conversation found'; do
+  grep -qF -- "$s" "$forks" || { echo "FAIL: composer-forks.md missing cwd check: $s"; exit 1; }
+done
+# C5 commits after branching land in the package worktree.
+printf '%s\n' "$flat" | grep -qF 'git -C <package worktree>' \
+  || { echo "FAIL: C5 must commit fixes in the package worktree"; exit 1; }
 desc_len=$(printf '%s' "$desc" | wc -c | tr -d ' ')
 [ "$desc_len" -le 500 ] || { echo "FAIL: description is $desc_len chars (max 500)"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

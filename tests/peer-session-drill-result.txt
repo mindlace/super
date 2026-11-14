@@ -17,3 +17,7 @@ Exact command forms (run from the directory that should be the session cwd; ther
   Agents query: claude agents --json [--cwd <path>]   # fields: id, sessionId, name, status, state, cwd, kind, pid
   Transcript path: ~/.claude/projects/<cwd with every / and . replaced by ->/<session-id>.jsonl   (cwd via pwd -P)
   No-tools run: claude -p --tools "" --append-system-prompt "<ctx>" "<prompt>"
+Writes outside cwd (2026-11-13, haiku, cwd = repo worktree, target = fresh mktemp -d dir outside the repo):
+  claude -p --model haiku --permission-mode acceptEdits --allowedTools="Write" "<write one line to <tmp>/out.txt>"                      -> written, exit 0, 5 s
+  claude -p --model haiku --permission-mode acceptEdits --allowedTools="Write" --add-dir="<tmp>" "<write one line to <tmp>/out.txt>"   -> written, exit 0, 5 s
+  Both forms work; forks still pass --add-dir="<ledger dir>" (equals form: the flag is variadic) so the outside write is declared, not incidental.

@@ -214,10 +214,14 @@ indices in traceability-table order.
    consumer need that row, and does the row need everything before it? A
    chain that differs from the one C4 challenged is itself a finding: the
    translation added or dropped an edge. Fix findings in the package as
-   current state; if a fix changes a contract row, make a new checkpoint
-   the same way and record it.
-6. **Commit and end the session.** Conduction starts fresh with
-   supersonic:superconductor, which consumes the package via its intake
+   current state, editing the files in the package worktree by absolute
+   path and committing there (`git -C <package worktree> add` / `commit`):
+   from step 2 on, the integration branch is the package, and a commit on
+   this session's own branch never reaches a fork. If a fix touches a spec,
+   rerun the build-graph fork for the units that spec feeds. If a fix
+   changes a contract row, make a new checkpoint the same way and record it.
+6. **Commit in the package worktree and end the session.** Conduction
+   starts fresh with supersonic:superconductor, which consumes the package via its intake
    phase. Do not begin dispatching operators from this session.
 
 ## Composer forks

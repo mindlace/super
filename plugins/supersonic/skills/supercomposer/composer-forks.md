@@ -9,12 +9,20 @@ To run one:
 
 1. Copy the prompt text below into a prompt file under `<ledger dir>/prompts/`, filling every
    `<placeholder>`. Paths are absolute.
-2. `cd <package worktree>` as a command of its own. Every one of these runs with cwd = the
-   package worktree: there is no cwd flag, and `--resume` looks up sessions per project
-   directory, so a fork started anywhere else cannot find the checkpoint.
-3. Run the command line. `--allowedTools="..."` keeps its equals sign: the flag is variadic,
-   and without `=` it swallows the prompt as a tool name. Forks run as background Bash
-   commands, so whoever started one is told when it exits.
+2. `cd <package worktree>` as a command of its own, then `pwd -P` as another, and confirm it
+   prints the package worktree. Every one of these runs with cwd = the package worktree:
+   there is no cwd flag, and `--resume` looks up sessions per project directory. The harness
+   keeps a `cd` only when the target is inside the session's working directories, so a `cd`
+   can silently not take effect. When `pwd -P` shows anything else, do not launch: the
+   package worktree is outside this session's working directories, so ask your partner to
+   add it (`/add-dir <package worktree>`) and repeat this step. A fork that exits with
+   "No conversation found" was started from the wrong cwd.
+3. Run the command line. `--allowedTools="..."` and `--add-dir="..."` keep their equals sign:
+   both flags are variadic, and without `=` they swallow the prompt. `--add-dir="<ledger
+   dir>"` declares the one directory outside the cwd that the adjudication and merge-review
+   forks write to (a plain `Write` allow also wrote outside the cwd in the drill; the flag
+   makes it explicit). Forks run as
+   background Bash commands, so whoever started one is told when it exits.
 
 `<model>` is always the checkpoint's model, recorded beside its id in the ledger.
 
@@ -37,7 +45,8 @@ Prompt:
 
     You are the composer checkpoint for the <design-slug> package. You are already in the
     package worktree <package worktree> (your cwd), on the integration branch. Do not create
-    or switch worktrees, and write nothing.
+    or switch worktrees, and write nothing. Your tools are exactly Read, Grep and Glob; you
+    run no shell commands.
 
     Read the package cold, from the files themselves: the design doc <design doc>, every spec
     it lists, the contracts spec, the build graph if there is one, and the survey notes in
@@ -67,14 +76,16 @@ The question file it reads, `<ledger dir>/questions/<id>.md`, has this form:
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Bash(jev:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" "$(cat <prompt file>)"
+    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Bash(jev:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
 
 Prompt:
 
     You are a fork of the <design-slug> composer checkpoint, started to rule on question <id>.
     You are already in the package worktree <package worktree> (your cwd), on the integration
     branch. Do not create or switch worktrees. You send no messages; whoever started you reads
-    your ruling file when you exit.
+    your ruling file when you exit. Permission mode acceptEdits. Your tools are exactly Read,
+    Grep, Glob, Write, Edit and Skill; run shell commands only as `jev ...`, `git add`,
+    `git commit` and `git rev-parse`, from your cwd. Anything else is refused.
 
     1. Disk wins. Read <ledger dir>/questions/<id>.md, then every package file it touches as
        it is on disk now: design doc, specs, contracts, build graph. What you remember from
@@ -128,14 +139,16 @@ package, so any number run at once, beside an amending fork.
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
-    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)" "$(cat <prompt file>)"
+    claude -p --resume <checkpoint id> --fork-session --model <model> --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git rev-parse:*)" --add-dir="<ledger dir>" "$(cat <prompt file>)"
 
 Prompt:
 
     You are a fork of the <design-slug> composer checkpoint, started to review one merge. You
     are already in the package worktree <package worktree> (your cwd), on the integration
     branch. Do not create or switch worktrees. You send no messages and change no package
-    file.
+    file. Permission mode acceptEdits. Your tools are exactly Read, Grep, Glob and Write
+    (Write only for the question file below); run shell commands only as `git diff`,
+    `git log`, `git show` and `git rev-parse`, from your cwd. Anything else is refused.
 
     Disk wins: read the design doc, specs, contracts and build graph as they are on disk
     now; where your checkpoint read disagrees, the disk is the package.
@@ -154,9 +167,11 @@ Prompt:
 
 ## Build-graph fork
 
-Translates the specs into the build graph. The composer runs it once in Phase C5; after a
-ruling amends a spec, the conductor runs it again for the units the ruling names. It amends
-the package, so it runs alone.
+Translates the specs into the build graph. The composer runs it once in Phase C5 for all
+units; after a ruling amends a spec, the conductor runs it again and fills "Units to write"
+with the unit slugs the ruling lists itself, so the fork never reads a ruling file. It amends the
+package, so it runs alone. It writes only inside the package worktree, so it takes no
+`--add-dir`.
 
 Command, with cwd = `<package worktree>`, as a background Bash command:
 
@@ -166,14 +181,16 @@ Prompt:
 
     You are a fork of the <design-slug> composer checkpoint, started to write the build
     graph. You are already in the package worktree <package worktree> (your cwd), on the
-    integration branch. Do not create or switch worktrees. You send no messages.
+    integration branch. Do not create or switch worktrees. You send no messages. Permission
+    mode acceptEdits. Your tools are exactly Read, Grep, Glob, Write and Edit; run shell
+    commands only as `git add`, `git commit` and `git rev-parse`, from your cwd. Anything
+    else is refused.
 
     Disk wins: read the design doc, specs and contracts as they are on disk now; where your
     checkpoint read disagrees, the disk is the package.
 
     Write docs/superpowers/design/<design-file-stem>-build-graph.md. Units to write: <all |
-    the units named under "Affected units" in rulings/<id>.md>; leave every other row as it
-    is. A unit is one serial lane, cut as fine as the dependencies allow; it cites the spec
+    unit-slug, unit-slug, ...>; leave every other row as it is. A unit is one serial lane, cut as fine as the dependencies allow; it cites the spec
     sections it implements; no two units that can run together write the same file;
     anything two units would both build is its own unit or part of contracts; every edge
     names interface rows. The file is this table followed by one line:
