@@ -211,7 +211,25 @@ something that was roughly the eleventh task of the `world-core` spec. Neither c
 until all of `world-core` had finished and merged. The dependency was on one deliverable, but
 it was expressed as a dependency on a whole spec, and the deliverable sat late in that spec.
 
-Proposed **(call)**:
+**Two artifacts instead of one (partner's suggestion, under discussion).** The package keeps
+its domain specs: they are organised the way the system is understood, and they stay the
+truth that adjudication amends and merge review checks against. A second pass translates them
+into a **build graph**: the set of things that get built, in dependency order.
+
+- A build unit is what an operator is assigned. It cites the spec sections it implements,
+  lists the files it writes, and lists the deliverables it needs from other units.
+- One spec may become several units and one unit may draw on several specs. `world-core`'s
+  eleventh task would be its own unit, placed where its dependencies put it.
+- No two units that can run together write the same file.
+- A unit is sized to be worth an operator: several tasks, one plan. **(call)** This is the
+  guard against repeating the April fork: units are whole operator runs with every review
+  intact, in separate worktrees with disjoint files, so there is nothing to resolve at merge.
+- The translation is done by a fork of the checkpoint, and redone for the affected units
+  when a ruling amends a spec. The graph reports its longest chain; the fresh-eyes check
+  challenges every edge on it.
+
+With a build graph, mid-spec milestones are unnecessary and the rules below reduce to how the
+graph is drawn. If the build graph is not adopted, they stand as written **(call)**:
 
 - **Dependencies name a deliverable, never a spec.** Each edge in the package says exactly
   what the consumer needs: a type, a function, a table, a behaviour.
