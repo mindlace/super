@@ -97,7 +97,7 @@ lgot=$(printf '%s\n' "$ledger" | sed -n -e 's/^    \(Package worktree:\).*/\1/p'
   -e 's/^    \(## Checkpoints\)$/\1/p' -e 's/^    \(## Units\)$/\1/p' -e 's/^    \(## Questions\)$/\1/p' \
   -e 's/^    \(## Frame-defect tally\)$/\1/p' -e 's/^    \(## Integration\)$/\1/p' -e 's/^    \(## Cost\)$/\1/p')
 [ "$lgot" = "$lexp" ] || { echo "FAIL: ledger format sections missing or out of order"; printf '%s\n' "$lgot"; exit 1; }
-for s in 'status: planning | admitted | running | complete | stopped | replaced | deferred' \
+for s in 'status: planning | admitted | running | complete | stopped | replaced (ruling <id>) | deferred' \
          '[defect-class: <slug>]' 'changes contract: yes|no' 'seven_day <pct>' 'session <id>'; do
   printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
     || { echo "FAIL: ledger format missing: $s"; exit 1; }
@@ -165,6 +165,27 @@ need 'Reconcile the package worktree first'
 need 'revert --abort`, which takes out the reverts'
 need 'the untested merge at the branch'"'"'s head that Phase 0 takes out'
 need 'If that line gives no reset time you can read, start no wait'
+# Resume finishes a replacement the last conductor left unfinished, from ledgered steps.
+need 'Ledger every member `replaced (ruling <id>)` in one append, then stop'
+need 'with no later start line is a replacement the last conductor did not finish'
+need 'Finish it from the first step its ledger does not show done'
+need 'Replacing steps 5-6, which start the fresh operator'
+need '- cut <member> to <cut-to sha> for ruling <id>'
+# The superseded plan's SDD workspace is removed at the cut, so no plan can resume it.
+need 'remove the superseded plan'"'"'s SDD workspace'
+need "grep -lxF -- '<plan path>' <unit worktree>/.superpowers/sdd/*/plan-path"
+forbid 'Move your plan to a new path'
+need 'git add it, git rm the old path and commit'
+# The restart reads a repo-relative plan path.
+need 'Take the repo-relative path from the `plan-path` file'
+# <merged sha> is the unit-side commit, never the integration merge commit.
+need 'the unit commit that `## Integration` step 1 merged, never the merge commit'
+need 'never the merge commit on the integration branch'
+# No rebase; a dead owner on a failing merge is restarted by the restart rule.
+forbid 'or rebase on'
+need 'restart it as `## Supervision`, Operator death, says, then send it the fix-round'
+forbid 'with the failure output path added'
+forbid "that merge's commit"
 need 'Merge superconductor/<design-slug> into your branch first, then bring the tasks'
 # The tally re-checkpoints on the event, not the standing state.
 need "brought a class's frame-defect tally to three"
