@@ -33,7 +33,8 @@ cleanup() {
   git -C "$main" branch -D "$branch" >/dev/null 2>&1
   rm -rf "$scratch"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'cleanup; exit 1' INT TERM
 
 git -C "$main" worktree add -q -b "$branch" "$wt" HEAD || { echo "FAIL: worktree"; exit 1; }
 cd "$wt" || exit 1
