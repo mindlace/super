@@ -2,7 +2,7 @@
 # Live drill of the peer-session mechanisms. Gated on SUPERSONIC_LIVE=1.
 # Prints PASS:/FAIL:/OBSERVED: <step>; exits non-zero on any FAIL. The whole run is appended,
 # dated, to tests/peer-session-drill-result.txt.
-# Cost and time: five `claude --bg` sessions (one meant to fail at start) and five
+# Cost and time: six `claude --bg` launches (one meant to fail at start, one reusing its name), five
 # `claude -p` runs, all on haiku with trivial prompts (plus two haiku subagents inside one
 # session). Every wait has its own deadline; a run takes about 10 minutes and never more
 # than 25 (DRILL_DEADLINE). Every session, worktree and process group it starts is stopped
@@ -307,6 +307,14 @@ while [ $i -lt 15 ]; do
 done
 observed "--bg launch with an invalid model: exit $rc, printed: $(head -c 200 "$scratch/launch-bad.log" | tr '\n' ' '); in the session list: $seen"
 [ "$seen" != never ] && sleep 10 && observed "the invalid-model session 10 s later: $(agent_field "$bad" status)/$(agent_field "$bad" state)"
+# 7. Relaunch under the name of that failed session, as a restart would: what `claude --bg`
+#    does, and what the session list holds for the name afterwards (beat.sh stops a failed
+#    entry before reusing its name, on the assumption that it may block the name).
+env -C "$wtp" claude --bg -n "$bad" --model haiku --permission-mode acceptEdits --allowedTools="Read" "Reply OK, then end your turn." >"$scratch/relaunch-bad.log" 2>&1 </dev/null; rc=$?
+sleep 10
+observed "--bg relaunch under a failed session's name: exit $rc, printed: $(head -c 200 "$scratch/relaunch-bad.log" | tr '\n' ' '); entries now: $(claude agents --json 2>/dev/null | python3 -c '
+import json,sys
+print([(a.get("id"),a.get("status"),a.get("state")) for a in json.load(sys.stdin) if a.get("name")==sys.argv[1]])' "$bad")"
 
 # --- stop ---
 claude stop "$op" >"$scratch/stop-op.log" 2>&1; echo "INFO stop by name ($op): exit $? $(head -c 120 "$scratch/stop-op.log")"
