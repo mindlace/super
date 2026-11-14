@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`spec_reader` is a **local-only** SvelteKit app for reading and lightly editing superpowers spec/plan markdown files across all projects under `~/Projects/`. It runs on `127.0.0.1:4510`, reads/writes the real filesystem via the Node adapter, and is not deployed anywhere (no Cloudflare, no D1 — unlike the other projects in this workspace).
+`superspec` is a **local-only** SvelteKit app for reading and lightly editing superpowers spec/plan markdown files across all projects under `~/Projects/`. It runs on `127.0.0.1:4510`, reads/writes the real filesystem via the Node adapter, and is not deployed anywhere (no Cloudflare, no D1 — unlike the other projects in this workspace).
 
 ## Commands
+
+Run all commands from `superspec/`. The app's own specs and plans live in `../docs/superpowers/`.
 
 ```bash
 npm run dev      # Vite dev server (port 4510, host 127.0.0.1)

@@ -254,14 +254,14 @@ second)*:
 
 ### One stylesheet, no script
 
-`static/spec.css` holds all typography, tables, callouts and diagram paint,
+`superspec/static/spec.css` holds all typography, tables, callouts and diagram paint,
 with light and dark themes, scoped to the rendered-document container. The
 look is the one approved in the brainstorm mockup: serif body, sans headings
 and tables, restrained callouts, diagrams drawn in the text colours.
 
 - It also styles rendered markdown, so old specs get the same treatment.
 - It **replaces** the Tailwind `prose prose-invert` classes hardcoded on the
-  preview pane in `Editor.svelte` and the prose overrides in `app.css:9-15`.
+  preview pane in `Editor.svelte` and the prose overrides in `superspec/src/app.css:9-15`.
 - The app has no light theme today. The light theme here applies to the
   rendered document only, following the system setting; the rest of the app's
   chrome stays as it is. *(My call.)*
@@ -364,16 +364,10 @@ text.
 The work spans the reader and the `super` plugin repo (`mindlace/super`,
 home of `superpowers-jev` and `supersonic`). It happens in this order.
 
-1. **Move spec_reader into `super`.** A separate exercise, run by Ethan,
-   before any of the implementation below. After it, the reader and the
-   plugins share one repo.
-   - This design doc, its `assets/` directory and the implementation plan
-     live on the unmerged branch `worktree-semantic-html-specs` of the
-     spec_reader repo. The move must carry that branch's commits (or these
-     files) across, or they are lost.
-   - File paths in this doc and in the plan are relative to the spec_reader
-     root as it is today. After the move they need the new prefix; nothing
-     else about them changes.
+1. **Move spec_reader into `super`.** Done. The reader lives at
+   `superspec/` as a standalone app, and its specs and plans are at the
+   repo root `docs/superpowers/`. File paths in this doc and in the plan
+   carry the `superspec/` prefix.
 2. **Build the reader changes** described in this document, from the plan
    `docs/superpowers/plans/2026-11-13-semantic-html-specs.md`, in a fresh
    worktree of the moved repo. Specs and plans keep being written in
@@ -396,8 +390,6 @@ Later, and separately: the feedback loop, then structural editing if wanted.
 
 ### Not yet decided
 
-- Where spec_reader lands inside `super`, and whether it becomes a plugin or
-  stays a standalone app in a subdirectory. The move exercise decides this.
 - Whether the hook is a new plugin or part of an existing one.
 
 ## Testing

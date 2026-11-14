@@ -1,4 +1,4 @@
-# spec_reader
+# superspec
 
 A local web app for reading and lightly editing superpowers spec files across
 `~/Projects/`. Lists only specs that live in a worktree (active work) — specs in a
@@ -7,6 +7,8 @@ the same file lands on main. Specs render as formatted HTML in a split-pane edit
 with autosave. Deep-links (below) still open any spec by path, including ones on main.
 
 ## Running
+
+Run every command below from `superspec/`. The app's own specs and plans live in `../docs/superpowers/`.
 
 Development:
 

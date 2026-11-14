@@ -4,7 +4,7 @@
 
 **Goal:** spec_reader discovers, renders, styles and lets you edit in place `.html` specs written in a small semantic-HTML subset, beside the existing `.md` specs, in one rendered pane with a source toggle.
 
-**Architecture:** One FS-free predicate (`src/lib/specfile.ts`) replaces every `.md` assumption on the server. The client sanitises an `.html` spec with a dedicated DOMPurify instance and an explicit allowlist, then post-processes it (highlighting, asset `src` rewrite, link targets, heading anchors, every checkbox `disabled`); a notice reports anything stripped or structurally wrong. In-place edits never serialise the rendered DOM: pure functions over the source string (parse5 with source locations) locate the element and splice only its inner range. Checkboxes are display only.
+**Architecture:** One FS-free predicate (`superspec/src/lib/specfile.ts`) replaces every `.md` assumption on the server. The client sanitises an `.html` spec with a dedicated DOMPurify instance and an explicit allowlist, then post-processes it (highlighting, asset `src` rewrite, link targets, heading anchors, every checkbox `disabled`); a notice reports anything stripped or structurally wrong. In-place edits never serialise the rendered DOM: pure functions over the source string (parse5 with source locations) locate the element and splice only its inner range. Checkboxes are display only.
 
 **Tech Stack:** SvelteKit 2 + Svelte 5 runes, adapter-node, Vitest (node + jsdom), DOMPurify 3, marked, Shiki, CodeMirror 6 (+ `@codemirror/lang-html`, new), `parse5` (new).
 
@@ -12,16 +12,17 @@
 
 ## Global Constraints
 
-- Spec files are `.md` or `.html`; every "is this a spec file" decision goes through `isSpecFile()` in `src/lib/specfile.ts`. No new `.endsWith('.md')` anywhere.
+- App commands (`npm`, `npx vitest`) run from `superspec/`: issue `cd superspec` as its own command first, never `cd superspec && cmd`. Paths in commands below are relative to `superspec/` unless they start with `docs/`.
+- Spec files are `.md` or `.html`; every "is this a spec file" decision goes through `isSpecFile()` in `superspec/src/lib/specfile.ts`. No new `.endsWith('.md')` anywhere.
 - Allowed elements, attributes and the "Never" list are exactly the spec's tables under "The format" (including the Checklists row: `input` with `type="checkbox"` as the first child of an `li`; `type` and `checked` on `input` only, `type` only as `checkbox`). No `u`, no underline anywhere; `b`/`i` are never written, only `strong`/`em`.
 - Assets: served only from `docs/superpowers/<type>/assets/…`, extensions exactly `png`, `jpg`, `jpeg`, `gif`, `webp`, `mp4`, `webm`. SVG files are not served. Remote `src` is never allowed.
 - The reader runs nothing a spec supplies. Spec HTML is untrusted input.
 - No change to which specs are listed or when one counts as landed, other than the extension-insensitive landed check the spec requires.
-- One stylesheet, `static/spec.css`, plain CSS, no build step, no dependency on the Svelte app. No shared script.
+- One stylesheet, `superspec/static/spec.css`, plain CSS, no build step, no dependency on the Svelte app. No shared script.
 - In-place edits change only bytes inside the edited element. The rendered DOM is never written back.
 - Checkboxes are display only: the reader never changes one. Every rendered checkbox is `disabled`, on every file (worktree or main), and reflects the file's `checked` attribute.
 - `.md` files: rendered pane and source toggle only; no in-place editing. Files on main are read-only everywhere (no contenteditable).
-- Modules imported at runtime by tests use **relative** imports, not `$lib/…`: `vitest.config.ts` has no `$lib` alias (existing code only uses `$lib` for type-only imports).
+- Modules imported at runtime by tests use **relative** imports, not `$lib/…`: `superspec/vitest.config.ts` has no `$lib` alias (existing code only uses `$lib` for type-only imports).
 - Out of scope: `~/.claude/CLAUDE.md`, any superpowers hook, converting existing `.md` specs, Mermaid.
 - 2-space indent, single quotes, Svelte 5 runes, colocated `*.test.ts`. Commands are never written as `cd X && cmd`. Commits use Conventional Commits with no Claude attribution or co-author trailers.
 - The worktree has no `node_modules`: run `npm install` once before Task 1.
@@ -40,26 +41,26 @@
 
 | File | Responsibility |
 |---|---|
-| `src/lib/specfile.ts` (new) | `isSpecFile`, `stripSpecExt`, `specKind` — FS-free, client and server |
-| `src/lib/server/fswalk.ts` | `listMarkdown` → `listSpecFiles` |
-| `src/lib/server/discovery.ts` | extension-free `mainSet`; `extractHtmlTitle`; title by kind |
-| `src/lib/server/resolve.ts` | extension-less query matches either |
-| `src/lib/server/paths.ts` | `assertSpecPath` both extensions; new `assertAssetPath` |
-| `src/lib/server/watcher.ts`, `src/lib/pairing.ts`, `src/lib/types.ts` | use the predicate; doc comments |
-| `src/lib/subset.ts` (new) | the subset as data: allowed tags/attrs, inline tags, editable tags |
-| `src/lib/sanitize.ts` (new) | DOMPurify instance + hooks, removal report, structural check |
-| `src/lib/render.ts` | `renderSpecHtml(source, specPath)` post-processing |
-| `src/lib/assetsrc.ts` (new) | relative `src` → `/api/asset?path=…` (pure, client) |
-| `src/lib/server/assets.ts` (new) | content types, `parseRange` |
-| `src/routes/api/asset/+server.ts` (new) | asset endpoint with Range |
-| `static/spec.css` (new), `src/app.html`, `src/app.css` | the one stylesheet; drop `prose` |
-| `src/lib/highlight.ts` | dual light/dark Shiki themes |
-| `src/lib/scrollratio.ts` (new) | scroll ratio helpers |
-| `src/lib/components/Editor.svelte` | source-only CodeMirror, language by kind |
-| `src/lib/components/DocPane.svelte` (new) | rendered pane, toggle, notice, in-place editing |
-| `src/lib/inplace.ts` (new) | pure: locate editables, clean, splice |
-| `src/lib/inplaceDom.ts` (new) | DOM side: collect rendered editables, `editedInner` |
-| `src/lib/fixtures/sample-spec.html`, `sample-plan.html` (new) | hand-converted test specs |
+| `superspec/src/lib/specfile.ts` (new) | `isSpecFile`, `stripSpecExt`, `specKind` — FS-free, client and server |
+| `superspec/src/lib/server/fswalk.ts` | `listMarkdown` → `listSpecFiles` |
+| `superspec/src/lib/server/discovery.ts` | extension-free `mainSet`; `extractHtmlTitle`; title by kind |
+| `superspec/src/lib/server/resolve.ts` | extension-less query matches either |
+| `superspec/src/lib/server/paths.ts` | `assertSpecPath` both extensions; new `assertAssetPath` |
+| `superspec/src/lib/server/watcher.ts`, `superspec/src/lib/pairing.ts`, `superspec/src/lib/types.ts` | use the predicate; doc comments |
+| `superspec/src/lib/subset.ts` (new) | the subset as data: allowed tags/attrs, inline tags, editable tags |
+| `superspec/src/lib/sanitize.ts` (new) | DOMPurify instance + hooks, removal report, structural check |
+| `superspec/src/lib/render.ts` | `renderSpecHtml(source, specPath)` post-processing |
+| `superspec/src/lib/assetsrc.ts` (new) | relative `src` → `/api/asset?path=…` (pure, client) |
+| `superspec/src/lib/server/assets.ts` (new) | content types, `parseRange` |
+| `superspec/src/routes/api/asset/+server.ts` (new) | asset endpoint with Range |
+| `superspec/static/spec.css` (new), `superspec/src/app.html`, `superspec/src/app.css` | the one stylesheet; drop `prose` |
+| `superspec/src/lib/highlight.ts` | dual light/dark Shiki themes |
+| `superspec/src/lib/scrollratio.ts` (new) | scroll ratio helpers |
+| `superspec/src/lib/components/Editor.svelte` | source-only CodeMirror, language by kind |
+| `superspec/src/lib/components/DocPane.svelte` (new) | rendered pane, toggle, notice, in-place editing |
+| `superspec/src/lib/inplace.ts` (new) | pure: locate editables, clean, splice |
+| `superspec/src/lib/inplaceDom.ts` (new) | DOM side: collect rendered editables, `editedInner` |
+| `superspec/src/lib/fixtures/sample-spec.html`, `sample-plan.html` (new) | hand-converted test specs |
 | `docs/spec-format.md` (new) | standalone format reference |
 
 ---
@@ -67,9 +68,9 @@
 ### Task 1: One spec-file predicate across the server
 
 **Files:**
-- Create: `src/lib/specfile.ts`, `src/lib/specfile.test.ts`
-- Modify: `src/lib/server/fswalk.ts:27-34`, `src/lib/server/discovery.ts:6,160-175,192-207`, `src/lib/server/resolve.ts:3,24,48-56`, `src/lib/server/paths.ts:18-20`, `src/lib/server/watcher.ts:8`, `src/lib/pairing.ts:14`, `src/lib/types.ts:4,6`
-- Test: `src/lib/server/fswalk.test.ts`, `discovery.test.ts`, `resolve.test.ts`, `paths.test.ts`, `watcher.test.ts`, `src/lib/pairing.test.ts`
+- Create: `superspec/src/lib/specfile.ts`, `superspec/src/lib/specfile.test.ts`
+- Modify: `superspec/src/lib/server/fswalk.ts:27-34`, `superspec/src/lib/server/discovery.ts:6,160-175,192-207`, `superspec/src/lib/server/resolve.ts:3,24,48-56`, `superspec/src/lib/server/paths.ts:18-20`, `superspec/src/lib/server/watcher.ts:8`, `superspec/src/lib/pairing.ts:14`, `superspec/src/lib/types.ts:4,6`
+- Test: `superspec/src/lib/server/fswalk.test.ts`, `discovery.test.ts`, `resolve.test.ts`, `paths.test.ts`, `watcher.test.ts`, `superspec/src/lib/pairing.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -138,8 +139,8 @@ git commit -m "feat: treat .html as a spec file everywhere via one predicate"
 ### Task 2: Title of an HTML spec
 
 **Files:**
-- Modify: `src/lib/server/discovery.ts:38-46,82`
-- Test: `src/lib/server/discovery.test.ts`
+- Modify: `superspec/src/lib/server/discovery.ts:38-46,82`
+- Test: `superspec/src/lib/server/discovery.test.ts`
 
 **Interfaces:**
 - Consumes: `specKind` (Task 1)
@@ -169,8 +170,8 @@ And `scanSpecs` › `titles an .html spec from its h1 and falls back to the file
 ### Task 3: Sanitiser for the subset, with the stray-markup report
 
 **Files:**
-- Create: `src/lib/subset.ts`, `src/lib/sanitize.ts`, `src/lib/sanitize.test.ts`, `src/lib/fixtures/sample-spec.html`, `src/lib/fixtures/sample-plan.html`
-- Test: `src/lib/sanitize.test.ts` (`// @vitest-environment jsdom`, like `render.test.ts:1`)
+- Create: `superspec/src/lib/subset.ts`, `superspec/src/lib/sanitize.ts`, `superspec/src/lib/sanitize.test.ts`, `superspec/src/lib/fixtures/sample-spec.html`, `superspec/src/lib/fixtures/sample-plan.html`
+- Test: `superspec/src/lib/sanitize.test.ts` (`// @vitest-environment jsdom`, like `render.test.ts:1`)
 
 **Interfaces:**
 - Produces:
@@ -225,7 +226,7 @@ expect(checkStructure(frag('<article><header><h1>a</h1></header><section id="x">
 expect(checkStructure(frag('<article><header><h1>a</h1></header><ol><li><input type="checkbox"> s</li></ol></article>')).join())
   .toContain('checklist <li> without an id');
 ```
-(`fixture(name)` reads `src/lib/fixtures/<name>` with `readFileSync`; `frag(html)` builds a fragment via a `<template>`.)
+(`fixture(name)` reads `superspec/src/lib/fixtures/<name>` with `readFileSync`; `frag(html)` builds a fragment via a `<template>`.)
 
 - [ ] **Step 3: Run** `npx vitest run src/lib/sanitize.test.ts` — Expected: FAIL (module missing).
 
@@ -246,9 +247,9 @@ expect(checkStructure(frag('<article><header><h1>a</h1></header><ol><li><input t
 ### Task 4: `renderSpecHtml` post-processing and light/dark highlighting
 
 **Files:**
-- Create: `src/lib/assetsrc.ts`, `src/lib/assetsrc.test.ts`
-- Modify: `src/lib/render.ts`, `src/lib/highlight.ts:3,17,19`
-- Test: `src/lib/render.test.ts`, `src/lib/highlight.test.ts`
+- Create: `superspec/src/lib/assetsrc.ts`, `superspec/src/lib/assetsrc.test.ts`
+- Modify: `superspec/src/lib/render.ts`, `superspec/src/lib/highlight.ts:3,17,19`
+- Test: `superspec/src/lib/render.test.ts`, `superspec/src/lib/highlight.test.ts`
 
 **Interfaces:**
 - Consumes: `sanitizeSpec`, `checkStructure` (Task 3); `highlightToHtml` (`highlight.ts:14`).
@@ -305,9 +306,9 @@ Add `pre > code[data-lang="ts"]` to a case and assert `class="shiki`; a `pre > c
 ### Task 5: Asset endpoint
 
 **Files:**
-- Create: `src/lib/server/assets.ts`, `src/lib/server/assets.test.ts`, `src/routes/api/asset/+server.ts`
-- Modify: `src/lib/server/paths.ts`
-- Test: `src/lib/server/paths.test.ts`, `src/lib/server/assets.test.ts`
+- Create: `superspec/src/lib/server/assets.ts`, `superspec/src/lib/server/assets.test.ts`, `superspec/src/routes/api/asset/+server.ts`
+- Modify: `superspec/src/lib/server/paths.ts`
+- Test: `superspec/src/lib/server/paths.test.ts`, `superspec/src/lib/server/assets.test.ts`
 
 **Interfaces:**
 - Produces:
@@ -358,17 +359,17 @@ expect(parseRange('bytes=0-1,5-6', 100)).toBeNull(); // multi-range ignored → 
 ### Task 6: One stylesheet replaces `prose`
 
 **Files:**
-- Create: `static/spec.css`
-- Modify: `src/app.html` (link), `src/app.css:2,7-16`, `src/lib/components/Editor.svelte:196`, `package.json` (drop `@tailwindcss/typography`)
+- Create: `superspec/static/spec.css`
+- Modify: `superspec/src/app.html` (link), `superspec/src/app.css:2,7-16`, `superspec/src/lib/components/Editor.svelte:196`, `superspec/package.json` (drop `@tailwindcss/typography`)
 
 **Interfaces:**
 - Produces: the rendered-document container class `spec-doc`. Every rule in `spec.css` is scoped under `.spec-doc`; a published page would wrap the `article` in `<main class="spec-doc">`. *Builder's call: scoping keeps the app chrome untouched while the file stays standalone.*
 
-- [ ] **Step 1: Write `static/spec.css`**
+- [ ] **Step 1: Write `superspec/static/spec.css`**
 
 Start from the mockup `<style>` (lines 9-69), then: rescope every selector under `.spec-doc`; theme variables on `.spec-doc` (light) with `@media (prefers-color-scheme: dark)` overrides, plus `color-scheme` set to match; delete `.mock-note`, `.copy`, the `figure.table` rule (replace with `.spec-doc figure:has(> table) { overflow-x: auto }`) and the `h2 a`/`h3 a` rules (replace with styles for `a[data-sr-added]`: muted, shown on heading hover); links underlined, nothing else underlined; add `aside[data-kind='warning'|'question']` variants; `li > input[type=checkbox]:first-child` alignment for checklists (`ol:has(> li > input[type=checkbox])` drops list markers); `img, video { max-width: 100% }`; Shiki: `pre.shiki` takes `var(--panel)` background, and under the dark media query `.shiki, .shiki span { color: var(--shiki-dark) !important }`. The same rules must style marked's output (`h1`–`h6`, `table`, `blockquote`, `pre`, `ul`/`ol`, GFM task-list `input`), so old specs get the same look.
 
-- [ ] **Step 2: Wire it** — `src/app.html` head: `<link rel="stylesheet" href="%sveltekit.assets%/spec.css" />`. Remove `@plugin '@tailwindcss/typography'` and the two `.prose` blocks from `app.css` (keep `:root`, background, `shake`). `npm uninstall @tailwindcss/typography`. In `Editor.svelte:196` replace `prose prose-invert prose-base max-w-none bg-neutral-900` with `spec-doc`, and wrap `{@html html}` in `<article>`.
+- [ ] **Step 2: Wire it** — `superspec/src/app.html` head: `<link rel="stylesheet" href="%sveltekit.assets%/spec.css" />`. Remove `@plugin '@tailwindcss/typography'` and the two `.prose` blocks from `app.css` (keep `:root`, background, `shake`). `npm uninstall @tailwindcss/typography`. In `Editor.svelte:196` replace `prose prose-invert prose-base max-w-none bg-neutral-900` with `spec-doc`, and wrap `{@html html}` in `<article>`.
 
 - [ ] **Step 3: Verify** — `rg -n "prose" src` returns nothing; `npm test`; `npm run check`; `npm run build` — Expected: all succeed.
 
@@ -381,8 +382,8 @@ Start from the mockup `<style>` (lines 9-69), then: rescope every selector under
 ### Task 7: Single pane with a source toggle
 
 **Files:**
-- Create: `src/lib/scrollratio.ts`, `src/lib/scrollratio.test.ts`, `src/lib/components/DocPane.svelte`
-- Modify: `src/lib/components/Editor.svelte` (remove preview, lines 25-54, 66-89 scroll sync, 193-208 layout), `src/routes/+page.svelte:4,274-276`, `package.json` (add `@codemirror/lang-html`)
+- Create: `superspec/src/lib/scrollratio.ts`, `superspec/src/lib/scrollratio.test.ts`, `superspec/src/lib/components/DocPane.svelte`
+- Modify: `superspec/src/lib/components/Editor.svelte` (remove preview, lines 25-54, 66-89 scroll sync, 193-208 layout), `superspec/src/routes/+page.svelte:4,274-276`, `superspec/package.json` (add `@codemirror/lang-html`)
 
 **Interfaces:**
 - Consumes: `renderMarkdown`, `renderSpecHtml` (Task 4), `specKind` (Task 1).
@@ -411,7 +412,7 @@ expect(scrollTopFor(0.7, { scrollTop: 0, scrollHeight: 80, clientHeight: 100 }))
 
 - [ ] **Step 6: Verify** — `npm test`; `npm run check` — Expected: PASS.
 
-- [ ] **Step 7: Manual check** — copy `src/lib/fixtures/sample-spec.html` to `docs/superpowers/specs/2026-11-13-sample-spec.html` in this worktree; `npm run dev`. The spec is listed with title "Worktree→main path fallback, with main as read-only"; it renders with the diagram painted in text colours, the table copies cleanly into a spreadsheet, no notice. Toggle to Source: HTML highlighting; edit and wait 1s: saved; toggle back: re-rendered at the same relative scroll. Add `<span>x</span>` to a `p` in source: the notice appears. A `.md` spec also toggles. Delete the copied file before committing.
+- [ ] **Step 7: Manual check** — copy `superspec/src/lib/fixtures/sample-spec.html` to `docs/superpowers/specs/2026-11-13-sample-spec.html` in this worktree; `npm run dev`. The spec is listed with title "Worktree→main path fallback, with main as read-only"; it renders with the diagram painted in text colours, the table copies cleanly into a spreadsheet, no notice. Toggle to Source: HTML highlighting; edit and wait 1s: saved; toggle back: re-rendered at the same relative scroll. Add `<span>x</span>` to a `p` in source: the notice appears. A `.md` spec also toggles. Delete the copied file before committing.
 
 - [ ] **Step 8: Commit** — `git commit -m "feat: single rendered pane with a source toggle and html source mode"`
 
@@ -420,8 +421,8 @@ expect(scrollTopFor(0.7, { scrollTop: 0, scrollHeight: 80, clientHeight: 100 }))
 ### Task 8: In-place editing core (pure functions)
 
 **Files:**
-- Create: `src/lib/inplace.ts`, `src/lib/inplace.test.ts`
-- Modify: `package.json` (add `parse5`)
+- Create: `superspec/src/lib/inplace.ts`, `superspec/src/lib/inplace.test.ts`
+- Modify: `superspec/package.json` (add `parse5`)
 
 **Interfaces:**
 - Consumes: `INLINE_TAGS`, `EDITABLE_TAGS` (Task 3).
@@ -485,8 +486,8 @@ expect(locateEditables(plan).some((e) => e.range && plan.slice(e.range.start, e.
 ### Task 9: In-place editing in the pane
 
 **Files:**
-- Create: `src/lib/inplaceDom.ts`, `src/lib/inplaceDom.test.ts` (jsdom)
-- Modify: `src/lib/components/DocPane.svelte`
+- Create: `superspec/src/lib/inplaceDom.ts`, `superspec/src/lib/inplaceDom.test.ts` (jsdom)
+- Modify: `superspec/src/lib/components/DocPane.svelte`
 
 **Interfaces:**
 - Consumes: `collectEditables`, `locateEditables`, `cleanInline`, `spliceRange`, `Editable` (Task 8); `renderSpecHtml` (Task 4).
@@ -550,7 +551,7 @@ expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toB
 
 **Files:**
 - Create: `docs/spec-format.md`
-- Test: `src/lib/specformat.test.ts` (jsdom)
+- Test: `superspec/src/lib/specformat.test.ts` (jsdom)
 
 **Interfaces:**
 - Consumes: `renderSpecHtml` (Task 4).
@@ -573,7 +574,7 @@ expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toB
 Nothing else depends on this task. Skip it without touching Tasks 1-10.
 
 **Files:**
-- Modify: `src/lib/inplace.ts`, `src/lib/inplace.test.ts`, `src/lib/inplaceDom.ts`, `src/lib/components/DocPane.svelte`
+- Modify: `superspec/src/lib/inplace.ts`, `superspec/src/lib/inplace.test.ts`, `superspec/src/lib/inplaceDom.ts`, `superspec/src/lib/components/DocPane.svelte`
 
 **Interfaces:**
 - Consumes: Task 8 functions.
@@ -599,4 +600,4 @@ Nothing else depends on this task. Skip it without touching Tasks 1-10.
 ## Open questions
 
 1. **Checklist items that hold blocks are not text-editable in place.** The spec's own example (`t1-s2`, text followed by a `pre`) falls under "every descendant inline", so its text is edited in the source. Plans will be full of these once they move to HTML. Recommendation: accept for now; if it chafes, a follow-up can make the leading text run of such an `li` editable as its own range.
-2. **Hand-converted sample spec location.** The fixtures live in `src/lib/fixtures/` and are copied into `docs/superpowers/` only during manual checks, so nothing test-only lands on main as a "spec". Recommendation: keep it that way.
+2. **Hand-converted sample spec location.** The fixtures live in `superspec/src/lib/fixtures/` and are copied into `docs/superpowers/` only during manual checks, so nothing test-only lands on main as a "spec". Recommendation: keep it that way.
