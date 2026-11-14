@@ -193,8 +193,23 @@ whether that arrived with a finished spec or at a milestone part-way through one
 contracts landed first (below), most specs depend only on the contracts commit and are
 admitted at once.
 
-What still involves the partner **(open, see the budget question)**: nothing waits on the
-partner except, possibly, the budget gate. The comprehension gate runs once before the first
+**Budget gate (partner's decision).** The gate becomes mechanical and the conductor applies it
+without asking. It reads the same usage figure the current gate reads and compares it with
+two thresholds:
+
+| Usage | Conductor does |
+|---|---|
+| below the lower threshold | starts every unit that is ready |
+| between the two | reins in concurrency: at most N operators running; a new one starts only when one finishes |
+| above the upper threshold | starts no operators; running ones finish their unit; resumes after the reset |
+
+**(call)** Defaults: lower 70%, upper 90%, N = 2, set in one place in the skill. An unreadable
+or stale figure counts as the middle band. Composer forks are exempt: a ruling or merge review
+is small, and withholding it would stall operators that are already paid for. The HOLD / STOP
+recommendations, the per-wave partner decision and the scope gate are removed. The conductor
+states the band in its merge summaries.
+
+Nothing waits on the partner. The comprehension gate runs once before the first
 admission. Cost calibration is recorded per spec instead of per wave. The conductor posts a
 short summary at each merge instead of at each wave boundary.
 
