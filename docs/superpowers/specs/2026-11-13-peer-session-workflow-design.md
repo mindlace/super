@@ -372,12 +372,19 @@ question files and `claude agents --json`.
   operator's log (or, if a dead session's log is gone, its worktree and SDD ledger) and
   names one cause from a fixed list (denied command, usage limit, hung process, a plan or
   spec defect it keeps hitting, unknown); the conductor applies that cause's remedy and
-  ledgers both. The third stops the unit and surfaces it to the partner with the finding.
-  Every rung is ledgered, so a resumed conductor continues on the same rung.
+  ledgers both. A usage limit is not a death: the unit waits, unwatched, until the reset,
+  and is then restarted without climbing. The third rung stops the unit and surfaces it to
+  the partner with the finding. A replacement operator starts the ladder again. `beat.sh` is
+  the one place the rung is computed: it writes every restart line with its rung and key
+  and prints the rung each unit is on, and a restart is seen through only once its resends
+  are ledgered, so a death between the restart line and the launch is relaunched without
+  climbing. If the session list cannot be read, that beat handles no death at all.
 - **Forks are bounded.** Every fork and the checkpoint run in the background under a 45-minute
   limit that stops the fork's whole process group while the limit's watchdog process lives.
-  On exit the conductor checks for the fork's output, ignoring a stale exit notice from an
-  earlier attempt; with none it starts the fork once more, then surfaces it. A conductor that
+  When the fork exits, the limit's watchdog also stops anything it left in its group. On exit
+  the conductor checks for the fork's output; each attempt has its own name, so a stale exit
+  notice from an earlier attempt is recognised from the ledger. With no output it starts the
+  fork once more, then surfaces it. A conductor that
   resumes stops any amending fork its predecessor left running, because one still writing the
   package worktree would break the one-writer rule; a read-only one is left to finish.
 - **Operators.** Leaves run in the background with five-minute waits, so a status request is
