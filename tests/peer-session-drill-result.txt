@@ -44,3 +44,40 @@ SDD scripts in the launch list (2026-11-13, haiku, claude 2.1.325).
     PASS: stop
   Exercised: the SDD script call by absolute path (non-error tool result, workspace dir created), one Skill call (non-error), Write, SendMessage; all answered in 10 s, inside the 120 s limit, so no permission stall. Not exercised: task-brief, review-package, git merge-base, git branch, Agent, or a project command (their entries have the same form as the ones that ran).
   Launch line: env -C "<worktree>" claude --bg -n <name> --model haiku --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash <S>/sdd-workspace:*),Bash(bash <S>/task-brief:*),Bash(bash <S>/review-package:*),Bash(true:*)" --add-dir="<scratch>/ledger" "<prompt>"
+
+Drill run 2026-11-13 23:06
+PASS: sdd scripts dir (/Users/mindlace/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2/skills/subagent-driven-development/scripts)
+INFO operator launch: env -C "/Users/mindlace/Projects/super/.claude/worktrees/drill-peer-35455" claude --bg -n drill-35455-op --model haiku --permission-mode acceptEdits --allowedTools="Read,Grep,Glob,Write,Edit,Skill,Agent,SendMessage,TodoWrite,TaskCreate,TaskUpdate,TaskList,TaskGet,TaskStop,Bash(sleep:*),Bash(sh /Users/mindlace/Projects/super/.claude/worktrees/stall-detection/plugins/supersonic/skills/superconductor/beat.sh changed:*),Bash(git add:*),Bash(git commit:*),Bash(git rev-parse:*),Bash(git log:*),Bash(git diff:*),Bash(git status:*),Bash(git show:*),Bash(git merge:*),Bash(git merge-base:*),Bash(git branch:*),Bash(git rm:*),Bash(bash /Users/mindlace/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2/skills/subagent-driven-development/scripts/sdd-workspace:*),Bash(bash /Users/mindlace/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2/skills/subagent-driven-development/scripts/task-brief:*),Bash(bash /Users/mindlace/.claude/plugins/cache/claude-plugins-official/superpowers/7.0.2/skills/subagent-driven-development/scripts/review-package:*),Bash(true:*)" --add-dir="/private/var/folders/3b/0zdp2l714bl2l3wn81g0rvjm0000gn/T/tmp.tJCDEsK16P/ledger" "<prompt>"
+PASS: spawn
+PASS: message (op-done after 10s)
+INFO: no idle notice recorded
+PASS: sdd-and-skill (sdd-workspace made .superpowers/sdd/drill-plan; transcript: SDD SKILL)
+PASS: checkpoint (a7a16c9a-6eb6-4def-8586-aa5b80f68777)
+PASS: fork
+INFO ttl-report: ephemeral_5m_input_tokens=0 ephemeral_1h_input_tokens=59754
+INFO agents --json keys: ['cwd', 'id', 'kind', 'name', 'pid', 'sessionId', 'startedAt', 'state', 'status']
+INFO agents --json usage field: False
+OBSERVED: claude logs <running short id>: exit 0 (124 = still streaming at 20 s), 0 lines, first: 78[2J[H[H[1B[38;2;215;119;87m ▐[48;2;0;0;0m▛███▛█[12G[39m[49m[1mClaude Co
+PASS: logs of a running session
+OBSERVED: claude -p under a 3 s limit: exit 124 after 4s; processes left in its group: 0
+PASS: fork limit stops claude -p and its group
+OBSERVED: claude -p normal exit under the watchdog: exit 0, output 'OK ', processes left in its group: 0
+PASS: normal fork exit leaves no process
+OBSERVED: op2 session list status/state counts while working (2 s samples):  27 busy; 27 working;
+OBSERVED: op2 status/state once idle: busy/working
+PASS: the session list says busy while working (beat.sh looks for the word busy)
+PASS: background Agent dispatch returned its id and then its result
+OBSERVED: TaskStop result: {"message":"Successfully stopped task: ab9ea74260362cdca (Sleep 200 probe agent)","task_id":"ab9ea74260362cdca","task_type":"local_agent","command":"Sleep 200 p
+PASS: TaskStop stopped a background child
+OBSERVED: beat.sh changed: 3s between the files around it; said: RAN 
+PASS: beat.sh changed ran without a permission stall (3s)
+OBSERVED: SendMessage to a missing name returned: {"success":false,"message":"No agent named 'drill-35455-nobody' is reachable.
+Use ListAgents to see everyone you can message."} 
+PASS: SendMessage to a missing name reported something (see OBSERVED)
+PASS: a background sleep's exit woke the operator
+PASS: a message was read while the background sleep ran (7s after the stretch began)
+INFO stop by name (drill-35455-op): exit 1 No job matching 'drill-35455-op'. Run 'claude agents' to list running sessions.
+PASS: stop
+OBSERVED: stopped sessions still listed: none
+OBSERVED: claude logs <stopped short id>: exit 1, 1 lines, first: Couldn't read logs for c1d93aaf — job not found — it may have already exited 
+FAIL: logs of a stopped session (exit 1; the investigation then falls back to the worktree)

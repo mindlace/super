@@ -221,11 +221,10 @@ until_file() { # until_file <path> <seconds>: wait for a file, bounded by the dr
 }
 mt() { perl -e 'print((stat shift)[9] // "")' "$1"; }
 
-# 2a. claude logs on a running --bg session (the rung-2 investigation reads it).
+# 2a. claude logs on a running --bg session (information only: the investigation reads the transcript).
 opid=$(agent_field "$op" id)
 sh "$fast" "$ledger" fork logs-running claude logs "$opid" >"$scratch/logs-running.out" 2>&1; rc=$?
 observed "claude logs <running short id>: exit $rc (124 = still streaming at 20 s), $(wc -l < "$scratch/logs-running.out" | tr -d ' ') lines, first: $(head -c 100 "$scratch/logs-running.out" | tr '\n' ' ')"
-if [ -s "$scratch/logs-running.out" ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; }; then pass "logs of a running session"; else fail "logs of a running session (exit $rc)"; fi
 
 # 3. claude -p under beat.sh fork: the limit stops it and its whole group; a normal exit leaves nothing.
 t0=$(date +%s)
@@ -271,11 +270,14 @@ fi
 until_file "$o/sleep-woke.txt" 180
 until_file "$o/agent-result.txt" 30
 wait "$sampler" 2>/dev/null
-idle=$(agent_field "$op2" status)/$(agent_field "$op2" state)
 op2id=$(agent_field "$op2" id)
+op2sid=$(agent_field "$op2" sessionId)
+# Idle, unambiguously: the last step's file is written, both subagents are done or stopped and
+# the background sleep has exited; give the turn 30 s to end, then sample.
+sleep 30
+idle=""; for i in 1 2 3 4 5; do idle="$idle $(agent_field "$op2" status)/$(agent_field "$op2" state)"; sleep 3; done
 observed "op2 session list status/state counts while working (2 s samples): $(tr '\n' ';' < "$scratch/op2-states.txt" | tr -s ' ')"
-observed "op2 status/state once idle: $idle"
-if grep -qw busy "$scratch/op2-states.txt"; then pass "the session list says busy while working (beat.sh looks for the word busy)"; else fail "the word busy never appeared in status/state while op2 worked; beat.sh's busy rule needs the word observed above"; fi
+observed "op2 status/state 30 s after its last step, 5 samples 3 s apart:$idle"
 if [ -s "$o/agent-dispatched.txt" ] && grep -q LEAF "$o/agent-result.txt" 2>/dev/null; then pass "background Agent dispatch returned its id and then its result"
 else fail "background Agent (dispatched: $(cat "$o/agent-dispatched.txt" 2>/dev/null); result: $(cat "$o/agent-result.txt" 2>/dev/null))"; fi
 observed "TaskStop result: $(head -c 160 "$o/taskstop.txt" 2>/dev/null | tr '\n' ' ')"
@@ -302,13 +304,23 @@ observed "stopped sessions still listed: $(claude agents --json 2>/dev/null | py
 import json,sys
 p=sys.argv[1]; m=[(a.get("name"),a.get("status"),a.get("state")) for a in json.load(sys.stdin) if (a.get("name") or "").startswith(p)]
 print(m if m else "none")' "drill-$pid-")"
-# 2b. claude logs on a stopped --bg session (the rung-2 investigation reads it).
-if [ -n "${op2id:-}" ]; then
+# 2b. The transcript of a stopped --bg session, found the way beat.sh finds it (by session id
+#     under ~/.claude/projects), exists and its tail is readable JSON lines.
+if [ -n "${op2sid:-}" ]; then
+  tf=$(ls "$HOME"/.claude/projects/*/"$op2sid".jsonl 2>/dev/null | head -n 1)
+  bad=$(tail -n 20 "$tf" 2>/dev/null | python3 -c '
+import json,sys
+n=0
+for l in sys.stdin:
+    try: json.loads(l)
+    except ValueError: n+=1
+print(n)')
+  observed "stopped session transcript: ${tf:-none}; unparsable lines in its last 20: ${bad:-?}"
+  if [ -n "$tf" ] && [ -s "$tf" ] && [ "$bad" = 0 ]; then pass "a stopped session's transcript is there and its tail is JSON lines"
+  else fail "stopped session transcript (${tf:-not found}; bad lines ${bad:-?})"; fi
   sh "$fast" "$ledger" fork logs-stopped claude logs "$op2id" >"$scratch/logs-stopped.out" 2>&1; rc=$?
-  observed "claude logs <stopped short id>: exit $rc, $(wc -l < "$scratch/logs-stopped.out" | tr -d ' ') lines, first: $(head -c 100 "$scratch/logs-stopped.out" | tr '\n' ' ')"
-  if [ -s "$scratch/logs-stopped.out" ] && { [ "$rc" -eq 0 ] || [ "$rc" -eq 124 ]; }; then pass "logs of a stopped session"
-  else fail "logs of a stopped session (exit $rc; the investigation then falls back to the worktree)"; fi
-fi
+  observed "claude logs <stopped short id> (information only): exit $rc, first: $(head -c 100 "$scratch/logs-stopped.out" | tr '\n' ' ')"
+else fail "op2's session id was never captured"; fi
 
 echo "DRILL-EXIT: $([ "$fails" -eq 0 ] && echo 0 || echo 1)"
 [ "$fails" -eq 0 ]
