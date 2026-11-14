@@ -19,13 +19,15 @@ agreement when Claude's value is "none", and otherwise counts under `abstain` an
 import json
 import sys
 
-from . import ask, log
+from . import ask, log, registry
 
 
 SOURCES = ("in_session", "blind_label", "auto_hook", "import")
 # `import` records are written but excluded from every truth (adjudication/import scoring deferred).
 TRUTHS = {"in_session": ("in_session",), "auto_hook": ("auto_hook",), "blind": ("blind_label",),
           "best": ("blind_label", "in_session", "auto_hook")}
+
+RETIRED = frozenset({"operator-tier"})
 
 
 def record(call_id, claude_verdict, env, cwd=None, source="in_session", rule_version=None,
@@ -108,57 +110,90 @@ def units(call, claude):
     return []
 
 
-def build_report(entries, since=None, point=None, truth="best"):
+def _new_row():
+    return {"calls": 0, "errors": 0, "recorded": 0, "units": 0, "agree": 0,
+            "confident_units": 0, "confident_wrong": 0, "would_skip": 0, "unrecorded": [],
+            "acted_units": 0, "acted_agree": 0, "abstained": 0, "truth_mix": {}}
+
+
+def _accumulate(r, cid, c, records):
+    """Fold one call (and its selected-truth record, if any) into counter dict `r`."""
+    r["calls"] += 1
+    if c.get("error"):
+        r["errors"] += 1
+        return
+    skip = c.get("on_skips")
+    if skip and c.get("confident") and c.get("verdict") == skip.get("verdict"):
+        r["would_skip"] += 1
+    picked = records.get(cid)
+    if picked is None:
+        r["unrecorded"].append(cid)
+        return
+    src, claude = picked
+    r["recorded"] += 1
+    r["truth_mix"][src] = r["truth_mix"].get(src, 0) + 1
+    for jev_v, acted_v, claude_v, confident in units(c, claude):
+        agree = jev_v == claude_v
+        r["units"] += 1
+        r["agree"] += int(agree)
+        # Acted-on verdict: None means Jev took no action. That matches Claude's explicit
+        # "none" (the gate was right); otherwise it is an abstention, not scored.
+        if acted_v is None and claude_v != "none":
+            r["abstained"] += 1
+            continue
+        acted_agree = acted_v == claude_v or (acted_v is None and claude_v == "none")
+        r["acted_units"] += 1
+        r["acted_agree"] += int(acted_agree)
+        # Confident-and-wrong is judged on what an `on` run would act on, not the raw choice.
+        if confident:
+            r["confident_units"] += 1
+            r["confident_wrong"] += int(not acted_agree)
+
+
+def _rates(r):
+    r["agreement"] = r["agree"] / r["units"] if r["units"] else None
+    r["acted_agreement"] = r["acted_agree"] / r["acted_units"] if r["acted_units"] else None
+    r["confident_wrong_rate"] = (r["confident_wrong"] / r["confident_units"]
+                                 if r["confident_units"] else None)
+
+
+def build_report(entries, since=None, point=None, truth="best", by=None):
     calls = {}
     for e in entries:
         if e.get("type") == "call":
             calls[e.get("call_id")] = e
     records = select_truth(entries, truth)
     rows = {}
+    latest = {}
     for cid, c in calls.items():
         if point and c.get("point") != point:
             continue
         if since and (c.get("ts") or "")[:10] < since:
             continue
-        r = rows.setdefault(c.get("point"), {
-            "calls": 0, "errors": 0, "recorded": 0, "units": 0, "agree": 0,
-            "confident_units": 0, "confident_wrong": 0, "would_skip": 0, "unrecorded": [],
-            "acted_units": 0, "acted_agree": 0, "abstained": 0, "truth_mix": {}})
-        r["calls"] += 1
-        if c.get("error"):
-            r["errors"] += 1
-            continue
-        skip = c.get("on_skips")
-        if skip and c.get("confident") and c.get("verdict") == skip.get("verdict"):
-            r["would_skip"] += 1
-        picked = records.get(cid)
-        if picked is None:
-            r["unrecorded"].append(cid)
-            continue
-        src, claude = picked
-        r["recorded"] += 1
-        r["truth_mix"][src] = r["truth_mix"].get(src, 0) + 1
-        for jev_v, acted_v, claude_v, confident in units(c, claude):
-            agree = jev_v == claude_v
-            r["units"] += 1
-            r["agree"] += int(agree)
-            # Acted-on verdict: None means Jev took no action. That matches Claude's explicit
-            # "none" (the gate was right); otherwise it is an abstention, not scored.
-            if acted_v is None and claude_v != "none":
-                r["abstained"] += 1
-                continue
-            acted_agree = acted_v == claude_v or (acted_v is None and claude_v == "none")
-            r["acted_units"] += 1
-            r["acted_agree"] += int(acted_agree)
-            # Confident-and-wrong is judged on what an `on` run would act on, not the raw choice.
-            if confident:
-                r["confident_units"] += 1
-                r["confident_wrong"] += int(not acted_agree)
-    for r in rows.values():
-        r["agreement"] = r["agree"] / r["units"] if r["units"] else None
-        r["acted_agreement"] = r["acted_agree"] / r["acted_units"] if r["acted_units"] else None
-        r["confident_wrong_rate"] = (r["confident_wrong"] / r["confident_units"]
-                                     if r["confident_units"] else None)
+        name = c.get("point")
+        r = rows.setdefault(name, dict(_new_row(), labels_current=0, retired=name in RETIRED))
+        _accumulate(r, cid, c, records)
+        if by:
+            key = c.get(by)
+            sub = r.setdefault("by", {}).setdefault("-" if key is None else str(key), _new_row())
+            _accumulate(sub, cid, c, records)
+        if not c.get("error") and c.get("model") is not None:
+            if name not in latest or (c.get("ts") or "") >= (latest[name].get("ts") or ""):
+                latest[name] = c
+    for name, r in rows.items():
+        cur = latest.get(name) or {}
+        r["current_model"] = cur.get("model")
+        r["current_template_version"] = cur.get("template_version")
+        if cur:
+            r["labels_current"] = sum(
+                1 for cid, c in calls.items()
+                if c.get("point") == name and cid in records
+                and c.get("model") == r["current_model"]
+                and c.get("template_version") == r["current_template_version"]
+                and not (since and (c.get("ts") or "")[:10] < since))
+        _rates(r)
+        for sub in (r.get("by") or {}).values():
+            _rates(sub)
     return rows
 
 
@@ -166,20 +201,32 @@ def _frac(rate, num, den):
     return "-" if rate is None else "%.2f (%d/%d)" % (rate, num, den)
 
 
-def format_report(rows, truth="best"):
-    lines = ["%-18s %5s %4s %4s %-15s %-15s %-7s %-15s %-10s %s" % (
-        "point", "calls", "err", "rec", "acted-agreement", "conf-wrong", "abstain",
-        "raw-agreement", "would-skip", "truth-mix")]
-    for name in sorted(rows):
+_FMT = "%-18s %5s %4s %4s %-15s %-15s %-7s %-15s %-10s %-22s %s"
+
+
+def _line(label, r):
+    mix = " / ".join("%s %d" % (k, r["truth_mix"][k]) for k in sorted(r["truth_mix"])) or "-"
+    cur = "-"
+    if r.get("current_model") is not None:
+        cur = "%d @%s/v%s" % (r["labels_current"], r["current_model"],
+                              r.get("current_template_version"))
+    return _FMT % (
+        label, r["calls"], r["errors"], r["recorded"],
+        _frac(r["acted_agreement"], r["acted_agree"], r["acted_units"]),
+        _frac(r["confident_wrong_rate"], r["confident_wrong"], r["confident_units"]),
+        r["abstained"],
+        _frac(r["agreement"], r["agree"], r["units"]),
+        r["would_skip"], cur, mix)
+
+
+def format_report(rows, truth="best", by=None):
+    lines = [_FMT % ("point", "calls", "err", "rec", "acted-agreement", "conf-wrong", "abstain",
+                     "raw-agreement", "would-skip", "labels-cur", "truth-mix")]
+    for name in sorted(rows, key=lambda n: (bool(rows[n].get("retired")), n)):
         r = rows[name]
-        mix = " / ".join("%s %d" % (k, r["truth_mix"][k]) for k in sorted(r["truth_mix"])) or "-"
-        lines.append("%-18s %5d %4d %4d %-15s %-15s %-7d %-15s %-10d %s" % (
-            name, r["calls"], r["errors"], r["recorded"],
-            _frac(r["acted_agreement"], r["acted_agree"], r["acted_units"]),
-            _frac(r["confident_wrong_rate"], r["confident_wrong"], r["confident_units"]),
-            r["abstained"],
-            _frac(r["agreement"], r["agree"], r["units"]),
-            r["would_skip"], mix))
+        lines.append(_line(name + (" (retired)" if r.get("retired") else ""), r))
+        for val in sorted(r.get("by") or {}):
+            lines.append(_line("  %s=%s" % (by, val), r["by"][val]))
     lines.append("truth: %s (%s)" % (truth, " > ".join(TRUTHS[truth])))
     return "\n".join(lines)
 
@@ -200,8 +247,15 @@ def cmd_record(args, env):
 
 
 def cmd_report(args, env):
-    rows = build_report(log.read_entries(env), since=args.since, point=args.point,
-                        truth=args.truth)
+    if args.all:
+        if registry.registry_path(env) is None:
+            sys.stderr.write("jev report --all: no registry (set JEV_REGISTRY)\n")
+            return 2
+        entries = [e for d in registry.existing(env) for e in log.read_dir(d)]
+    else:
+        entries = log.read_entries(env)
+    rows = build_report(entries, since=args.since, point=args.point, truth=args.truth,
+                        by=args.by)
     if args.json:
         sys.stdout.write(json.dumps(rows, indent=2, sort_keys=True) + "\n")
     elif args.unrecorded:
@@ -209,7 +263,7 @@ def cmd_report(args, env):
             for cid in rows[name]["unrecorded"]:
                 sys.stdout.write("%s %s\n" % (name, cid))
     else:
-        sys.stdout.write(format_report(rows, args.truth) + "\n")
+        sys.stdout.write(format_report(rows, args.truth, args.by) + "\n")
     return 0
 
 
@@ -223,6 +277,10 @@ def add_parser(sub):
     p.add_argument("--point")
     p.add_argument("--truth", choices=sorted(TRUTHS), default="best",
                    help="which record sources count as Claude's verdict (default best)")
+    p.add_argument("--all", action="store_true",
+                   help="aggregate every registered log dir (needs a registry)")
+    p.add_argument("--by", choices=("model", "template_version"),
+                   help="split each point by model or template version")
     g = p.add_mutually_exclusive_group()
     g.add_argument("--json", action="store_true")
     g.add_argument("--unrecorded", action="store_true", help="list call ids with no Claude verdict")

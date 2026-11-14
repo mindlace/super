@@ -1,10 +1,12 @@
 import contextlib
 import io
 import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import support
-from jevlib import cli, log, report
+from jevlib import cli, log, registry, report
 
 
 def call(cid, point, compare, verdict, confident=True, ts="2026-10-11T10:00:00", **kw):
@@ -313,6 +315,73 @@ class RecordCliTest(unittest.TestCase):
         self.assertIn("operator-tier", rows)
         self.assertEqual(rows["operator-tier"]["recorded"], 1)
         self.assertIn("operator-tier", report.format_report(rows))
+        self.assertIs(rows["operator-tier"]["retired"], True)
+        self.assertIn("operator-tier (retired)", report.format_report(rows))
+        mixed = report.build_report(entries + [call("t", "tier", "picks", {})])
+        self.assertIs(mixed["tier"]["retired"], False)
+        text = report.format_report(mixed)
+        self.assertLess(text.index("\ntier "), text.index("operator-tier (retired)"))
+
+
+class ByAndAllTest(unittest.TestCase):
+    def test_by_model_splits(self):
+        es = [call("a", "verify-stop", "verdict", "block", model="jev-1.13.0", template_version=1),
+              call("b", "verify-stop", "verdict", "allow", model="jev-1.14.0", template_version=1),
+              rec("a", {"verdict": "block"})]
+        r = report.build_report(es, by="model")["verify-stop"]
+        self.assertEqual(set(r["by"]), {"jev-1.13.0", "jev-1.14.0"})
+        self.assertEqual((r["by"]["jev-1.13.0"]["recorded"], r["by"]["jev-1.14.0"]["recorded"]),
+                         (1, 0))
+        self.assertNotIn("by", r["by"]["jev-1.13.0"])
+
+    def test_by_template_version(self):
+        es = [call("a", "verify-stop", "verdict", "block", model="m", template_version=1),
+              call("b", "verify-stop", "verdict", "block", model="m", template_version=2),
+              call("c", "verify-stop", "verdict", "block", model="m")]
+        r = report.build_report(es, by="template_version")["verify-stop"]
+        self.assertEqual(set(r["by"]), {"1", "2", "-"})
+
+    def test_labels_on_current_model_needs_model_and_template_version(self):
+        es = [call("old", "verify-stop", "verdict", "block", model="jev-1.13.0",
+                   template_version=1, ts="2026-11-01T00:00:00"),
+              call("tv", "verify-stop", "verdict", "block", model="jev-1.14.0",
+                   template_version=1, ts="2026-11-02T00:00:00"),
+              call("cur", "verify-stop", "verdict", "block", model="jev-1.14.0",
+                   template_version=2, ts="2026-11-03T00:00:00"),
+              rec("old", {"verdict": "block"}), rec("tv", {"verdict": "block"})]
+        r = report.build_report(es)["verify-stop"]
+        self.assertEqual((r["current_model"], r["current_template_version"],
+                          r["labels_current"]), ("jev-1.14.0", 2, 0))
+        es.append(rec("cur", {"verdict": "allow"}))
+        self.assertEqual(report.build_report(es)["verify-stop"]["labels_current"], 1)
+
+    def test_report_all_aggregates_and_skips_missing(self):
+        tmp = Path(tempfile.mkdtemp(prefix="jevtest-"))
+        reg = str(tmp / "reg.json")
+        for name in ("r1", "r2"):
+            log.append(call(name, "tier", "picks", {}),
+                       support.make_env(JEV_LOG_DIR=str(tmp / name), JEV_REGISTRY=reg))
+        registry.register([tmp / "gone"], {"JEV_REGISTRY": reg})
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["report", "--all", "--json"],
+                                      support.make_env(JEV_REGISTRY=reg)), 0)
+        self.assertEqual(json.loads(out.getvalue())["tier"]["calls"], 2)
+
+    def test_report_all_without_registry_exits_2(self):
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.main(["report", "--all"], support.make_env()), 2)
+        self.assertIn("jev report --all: no registry (set JEV_REGISTRY)", err.getvalue())
+
+    def test_cli_by_model_prints_split_lines(self):
+        env = support.make_env()
+        log.append(call("a", "verify-stop", "verdict", "block", model="jev-1.14.0",
+                        template_version=1), env)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(cli.main(["report", "--by", "model"], env), 0)
+        self.assertIn("  model=jev-1.14.0", out.getvalue())
+        self.assertIn("labels-cur", out.getvalue())
 
 
 if __name__ == "__main__":
