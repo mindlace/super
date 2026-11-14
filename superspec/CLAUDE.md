@@ -50,6 +50,8 @@ A set of ~115 **non-recursive** `fs.watch` handles feeds a debounced hub (300ms)
 **Path safety — `src/lib/server/paths.ts`:**
 The app is read-only. Every doc read goes through `locateDoc()`, which returns `{ path, real }` (`path` = the lexical path the client keys on, `real` = what to read) and throws `status` 400 (bad shape) or 404 (missing / not a regular file). It first applies the lexical `assertDocPathShape()`: with `segs = relative(root, resolve(p)).split(sep)` (empty or `..`-leading rejected), the file must end in `.md`/`.html` and be either a **main** doc (`segs[1] === 'docs'`, at least one segment below it) or a **worktree** doc (`segs[1..2]` = `.claude`,`worktrees`; `k` = first index >= 4 with `segs[k] === 'docs'`; `1 <= k - 3 <= MAX_WORKTREE_DEPTH`; a file below `docs/`). So any doc under a project's `docs/` opens, not just `docs/superpowers/`. It then `realpath`s both the file and the root and re-applies the shape check to the real path against the real root, so a symlink cannot lead outside the root or to a non-doc file; then requires `stat().isFile()`. A missing worktree file falls back once to `mainEquivalent()` (the landed main copy), returned as `path`. `/api/spec` and `/open` must use it. The asset route (`/api/asset`) keeps its own `assertAssetPath()` (only `docs/superpowers/<type>/assets/`).
 
+**Host guard — `src/hooks.server.ts` + `src/lib/server/host.ts`:** DNS-rebinding defence. `handle` returns 403 unless the `Host` header's hostname is `127.0.0.1` or `localhost` (case-insensitive, any port).
+
 **Endpoints — `src/routes/`:**
 - `api/specs` GET → `scanSpecs()` list
 - `api/spec` GET → read one file by `?path=` via `locateDoc` (returns content, mtime and the effective `path`, which is the main copy after a worktree fallback)
