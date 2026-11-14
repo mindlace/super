@@ -83,6 +83,47 @@ not checked, but a spec that breaks them is wrong.
 A suggestion, not a rule: a descriptive, prefixed id such as `sec-goals`,
 `tbl-limits`, `fig-flow`, `n-reader` or `t1-s1` says what it names.
 
+## Writing for a reader
+
+A spec is read by people and agents who must hold it in their heads. Write so
+each piece can be found and checked on its own.
+
+- One claim per sentence. A paragraph states one idea.
+- A paragraph that lists more than three things, or states more than one rule,
+  becomes a `ul` or `ol` with one item per thing or rule.
+- Code is a block. A type, signature, message shape, schema, union or command
+  goes in `<pre><code data-lang="...">`, written as it would be in the source
+  file, never spelled out inside a sentence. Always set `data-lang` (`ts`,
+  `sql`, `sh`, `json`, …); the reader highlights by it. Inline `code` is for
+  naming a thing (`setPolicy`, `rev`), not for defining it.
+- A table cell holds a name, a number, a link or one short sentence. Never a
+  code block, a list or several sentences; that content belongs in a section
+  the cell links to.
+- Describe an interface in this order, each part its own block:
+  1. **Shape**: the types in one code block.
+  2. **Meaning**: a `dl` with one `dt` per message, field or function and its
+     meaning in the `dd`, where the name alone does not say it.
+  3. **Rules**: a `ul` of behaviour, one rule per item (ordering, what is
+     dropped and when, what answers what, errors).
+  4. **Unchanged** and **Removed**: short lists of names, when the interface
+     replaces or keeps an existing one.
+
+```html
+<section id="sec-if-s14">
+  <h3>S14 Timeline worker messages</h3>
+  <pre><code data-lang="ts">type ToWorker =
+  | { type: 'setPolicy'; rev: number; policy: SimPolicy4 }
+  | { type: 'viewMonth'; month: number };</code></pre>
+  <dl>
+    <dt><code>rev</code></dt><dd>The page's count of policy edits.</dd>
+  </dl>
+  <ul>
+    <li>The worker drops work for an older <code>rev</code>.</li>
+    <li>A rejected document is answered with <code>bad-request</code> at its <code>rev</code>.</li>
+  </ul>
+</section>
+```
+
 ## Callouts
 
 ```
