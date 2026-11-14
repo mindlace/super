@@ -4,7 +4,7 @@
 
 **Goal:** spec_reader discovers, renders, styles and lets you edit in place `.html` specs written in a small semantic-HTML subset, beside the existing `.md` specs, in one rendered pane with a source toggle.
 
-**Architecture:** One FS-free predicate (`src/lib/specfile.ts`) replaces every `.md` assumption on the server. The client sanitises an `.html` spec with a dedicated DOMPurify instance and an explicit allowlist, then post-processes it (highlighting, asset `src` rewrite, link targets, heading anchors); a notice reports anything stripped or structurally wrong. In-place edits and checkbox toggles never serialise the rendered DOM: pure functions over the source string (parse5 with source locations) locate the element and splice only its inner range, or only its `checked` attribute.
+**Architecture:** One FS-free predicate (`src/lib/specfile.ts`) replaces every `.md` assumption on the server. The client sanitises an `.html` spec with a dedicated DOMPurify instance and an explicit allowlist, then post-processes it (highlighting, asset `src` rewrite, link targets, heading anchors, every checkbox `disabled`); a notice reports anything stripped or structurally wrong. In-place edits never serialise the rendered DOM: pure functions over the source string (parse5 with source locations) locate the element and splice only its inner range. Checkboxes are display only.
 
 **Tech Stack:** SvelteKit 2 + Svelte 5 runes, adapter-node, Vitest (node + jsdom), DOMPurify 3, marked, Shiki, CodeMirror 6 (+ `@codemirror/lang-html`, new), `parse5` (new).
 
@@ -18,8 +18,9 @@
 - The reader runs nothing a spec supplies. Spec HTML is untrusted input.
 - No change to which specs are listed or when one counts as landed, other than the extension-insensitive landed check the spec requires.
 - One stylesheet, `static/spec.css`, plain CSS, no build step, no dependency on the Svelte app. No shared script.
-- In-place edits and checkbox toggles change only bytes inside the edited element / the one `input` start tag. The rendered DOM is never written back.
-- `.md` files: rendered pane and source toggle only; no in-place editing. Files on main are read-only everywhere (no contenteditable, checkboxes disabled).
+- In-place edits change only bytes inside the edited element. The rendered DOM is never written back.
+- Checkboxes are display only: the reader never changes one. Every rendered checkbox is `disabled`, on every file (worktree or main), and reflects the file's `checked` attribute.
+- `.md` files: rendered pane and source toggle only; no in-place editing. Files on main are read-only everywhere (no contenteditable).
 - Modules imported at runtime by tests use **relative** imports, not `$lib/…`: `vitest.config.ts` has no `$lib` alias (existing code only uses `$lib` for type-only imports).
 - Out of scope: `~/.claude/CLAUDE.md`, any superpowers hook, converting existing `.md` specs, Mermaid.
 - 2-space indent, single quotes, Svelte 5 runes, colocated `*.test.ts`. Commands are never written as `cd X && cmd`. Commits use Conventional Commits with no Claude attribution or co-author trailers.
@@ -29,7 +30,7 @@
 
 1. **A spec with stray markup the sanitiser removes** (e.g. a `<span>` inside a `<p>`, or an unclosed `<p>`): the rendered/source element lists drift, and a keystroke would splice into the wrong element. Expected: in-place editing turns itself off for that file and the notice says so. Test: Task 9 Step 1 (`disables editing when rendered and source editables disagree`) and Task 8 (`marks an element with no end tag as not editable`).
 2. **Typing in a paragraph that contains a link, `code`, or a heading with the reader-added anchor**: the reader's additions (`target`, `rel`, the anchor `a`) must not leak into the source. Test: Task 9 Step 1 (`editedInner drops reader-added markup`).
-3. **A checklist item whose text is followed by blocks** (`<li><input> Run it <pre>…</pre></li>`, the spec's own example): its text is not editable in place, but its checkbox must still toggle the right tag. Test: Task 8 (`toggles the checkbox of an item that holds a code block`).
+3. **Typing in a checklist item**: the leading checkbox must survive the splice and never be written into the edited text; an item whose text is followed by blocks (`<li><input> Run it <pre>…</pre></li>`, the spec's own example) is not editable at all. Test: Task 8 (`checklist li range starts after the checkbox`, `an item holding a pre is not editable`) and Task 9 (`editedInner excludes the leading checkbox`).
 4. **Asset paths that look right but escape** (`specs/assets/../../../x.png`, `docs/superpowers/assets/x.png`, `specs/assets/x.svg`, an uppercase `.PNG`): Test: Task 5 assertions.
 5. **Toggling to source and back on a long spec after an external reload**: scroll should land at the same relative position, not the top. Test: Task 7 (`scrollratio` round-trip) plus the manual check in Task 7 Step 7.
 
@@ -55,9 +56,9 @@
 | `src/lib/highlight.ts` | dual light/dark Shiki themes |
 | `src/lib/scrollratio.ts` (new) | scroll ratio helpers |
 | `src/lib/components/Editor.svelte` | source-only CodeMirror, language by kind |
-| `src/lib/components/DocPane.svelte` (new) | rendered pane, toggle, notice, in-place editing, checkboxes |
-| `src/lib/inplace.ts` (new) | pure: locate editables/checkboxes, clean, splice, toggle |
-| `src/lib/inplaceDom.ts` (new) | DOM side: collect rendered editables/checkboxes, `editedInner` |
+| `src/lib/components/DocPane.svelte` (new) | rendered pane, toggle, notice, in-place editing |
+| `src/lib/inplace.ts` (new) | pure: locate editables, clean, splice |
+| `src/lib/inplaceDom.ts` (new) | DOM side: collect rendered editables, `editedInner` |
 | `src/lib/fixtures/sample-spec.html`, `sample-plan.html` (new) | hand-converted test specs |
 | `docs/spec-format.md` (new) | standalone format reference |
 
@@ -256,6 +257,7 @@ expect(checkStructure(frag('<article><header><h1>a</h1></header><ol><li><input t
   - `export interface RenderedSpec { html: string; removed: string[]; problems: string[] }`
   - `export async function renderSpecHtml(source: string, specPath: string): Promise<RenderedSpec>`
   - Reader-added markup carries `data-sr-added` (heading anchors) — Task 9 relies on this marker.
+  - Every `input[type=checkbox]` in the output carries `disabled`; `checked` is left exactly as the file has it. (`container(html)` in tests builds a `div` with that `innerHTML`.)
 
 - [ ] **Step 1: Write failing tests**
 
@@ -280,6 +282,10 @@ expect(ext.html).toContain('target="_blank"'); expect(ext.html).toContain('rel="
 expect(ext.html.match(/target=/g)?.length).toBe(1);
 const img = await renderSpecHtml('<article><header><h1>T</h1></header><figure id="f"><img src="assets/x/a.png" alt="a"><video src="https://x/v.mp4"></video></figure></article>', spec);
 expect(img.html).toContain('src="/api/asset?path='); expect(img.html).not.toContain('https://x/v.mp4');
+// checkboxes are display only: all disabled, checked state as in the file
+const plan = container((await renderSpecHtml(fixture('sample-plan.html'), spec)).html);
+expect([...plan.querySelectorAll('input[type="checkbox"]')].map((b) => [b.hasAttribute('disabled'), b.hasAttribute('checked')]))
+  .toEqual([[true, true], [true, false], [true, false]]);
 ```
 Add `pre > code[data-lang="ts"]` to a case and assert `class="shiki`; a `pre > code` without `data-lang` stays un-highlighted. Existing `renderMarkdown` tests stay green. `highlight.test.ts` › `emits both light and dark colours` → `expect(html).toContain('--shiki-dark')`.
 
@@ -288,11 +294,11 @@ Add `pre > code[data-lang="ts"]` to a case and assert `class="shiki`; a `pre > c
 - [ ] **Step 3: Implement**
 
 - `highlightToHtml`: `themes: { light: 'github-light', dark: 'github-dark' }` (default colour stays light; `spec.css` selects dark by media query, Task 6). *Builder's call: the light document theme needs light code.*
-- `renderSpecHtml`: `sanitizeSpec(source, (s) => assetSrc(specPath, s))` → `checkStructure` on the fragment → post-process the fragment: replace each `pre` whose `code` has `data-lang` with `highlightToHtml(code.textContent, lang)`; `a[href]` with an `http(s):` scheme gets `target="_blank" rel="noopener"`; for each `h1`–`h4`, anchor id = the parent `section`'s id when the heading is that section's first element child, else the heading's own id; if there is one, append `<a data-sr-added href="#id" aria-label="Link to this section">#</a>`. Serialise via a container's `innerHTML`.
+- `renderSpecHtml`: `sanitizeSpec(source, (s) => assetSrc(specPath, s))` → `checkStructure` on the fragment → post-process the fragment: replace each `pre` whose `code` has `data-lang` with `highlightToHtml(code.textContent, lang)`; every checkbox `input` gets `disabled`; `a[href]` with an `http(s):` scheme gets `target="_blank" rel="noopener"`; for each `h1`–`h4`, anchor id = the parent `section`'s id when the heading is that section's first element child, else the heading's own id; if there is one, append `<a data-sr-added href="#id" aria-label="Link to this section">#</a>`. Serialise via a container's `innerHTML`.
 
 - [ ] **Step 4: Run** the Step 2 command — Expected: PASS. Then `npm test`.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: render html specs with highlighting, asset links and heading anchors"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: render html specs with highlighting, asset links, heading anchors and disabled checkboxes"`
 
 ---
 
@@ -423,16 +429,13 @@ expect(scrollTopFor(0.7, { scrollTop: 0, scrollHeight: 80, clientHeight: 100 }))
   ```ts
   export interface Range { start: number; end: number }
   export interface Editable { tag: string; range: Range | null } // null: no end tag in source → not editable
-  export interface Checkbox { tagStart: number; tagEnd: number; checked: boolean }
   export interface TreeAdapter<N> { tag(n: N): string | null; children(n: N): N[]; skip?(n: N): boolean }
   export function collectEditables<N>(root: N, a: TreeAdapter<N>): N[]
   export function locateEditables(source: string): Editable[]
-  export function locateCheckboxes(source: string): Checkbox[]
   export function cleanInline(html: string): string
   export function spliceRange(source: string, range: Range, replacement: string): string
-  export function toggleChecked(source: string, box: Checkbox, checked: boolean): string
   ```
-  **The editable rule** (one implementation, `collectEditables`, used by both the parse5 side here and the DOM side in Task 9): pre-order; never descend into `pre` or `svg`; an element is editable iff its tag is in `EDITABLE_TAGS` and every descendant is text or an `INLINE_TAGS` element — except an `li` may also have a checkbox `input` as its first element child. For such an `li`, `range.start` is the end offset of that `input` tag. Editables never nest (a `td` holding a `p` is not editable; the `p` is). `locateCheckboxes` returns checkbox `input`s (type `checkbox`, case-insensitive) in document order, outside `pre`/`svg`.
+  **The editable rule** (one implementation, `collectEditables`, used by both the parse5 side here and the DOM side in Task 9): pre-order; never descend into `pre` or `svg`; an element is editable iff its tag is in `EDITABLE_TAGS` and every descendant is text or an `INLINE_TAGS` element — except an `li` may also have a checkbox `input` as its first element child. For such an `li`, `range.start` is the end offset of that `input` tag. Editables never nest (a `td` holding a `p` is not editable; the `p` is).
 
 - [ ] **Step 1: Write failing tests**
 
@@ -457,50 +460,39 @@ expect(cleanInline('x<span style="color:red">y</span><div>z</div>')).toBe('xyz')
 expect(cleanInline('<a href="https://x" target="_blank" rel="noopener">l</a>')).toBe('<a href="https://x">l</a>');
 expect(cleanInline('<code data-k="1" id="c">c</code><u>u</u>')).toBe('<code data-k="1" id="c">c</code>u');
 expect(cleanInline('t<a data-sr-added href="#s">#</a>')).toBe('t');
-expect(cleanInline('a b')).toBe('a b'); // builder's call: contenteditable injects nbsp for spaces
-// checklist li: range starts after the checkbox
+expect(cleanInline('a' + String.fromCharCode(160) + 'b')).toBe('a b'); // builder's call: contenteditable injects nbsp for spaces
+// test: checklist li range starts after the checkbox
 const plan = fixture('sample-plan.html');
 const s3 = locateEditables(plan).find((e) => plan.slice(e.range?.start ?? 0, e.range?.end ?? 0).includes('Commit with'))!;
+expect(s3.tag).toBe('li');
 expect(plan.slice(s3.range!.start, s3.range!.end).trim()).toBe('Commit with <code>git</code>');
-// the t1-s2 item holds a pre → not editable
+const spliced = spliceRange(plan, s3.range!, ' Commit it');
+expect(spliced).toContain('<li id="t1-s3"><input type="checkbox"> Commit it</li>'); // checkbox untouched
+// test: an item holding a pre is not editable (t1-s2)
 expect(locateEditables(plan).some((e) => e.range && plan.slice(e.range.start, e.range.end).includes('Run it'))).toBe(false);
-// checkboxes, both directions, confined to the tag
-const boxes = locateCheckboxes(plan);
-expect(boxes.map((b) => b.checked)).toEqual([true, false, false]);
-const ticked = toggleChecked(plan, boxes[1], true); // test: toggles the checkbox of an item that holds a code block
-expect(ticked.slice(boxes[1].tagStart, boxes[1].tagEnd + ' checked'.length)).toBe('<input type="checkbox" checked>');
-expect(ticked.slice(0, boxes[1].tagStart)).toBe(plan.slice(0, boxes[1].tagStart));
-expect(ticked.slice(boxes[1].tagEnd + ' checked'.length)).toBe(plan.slice(boxes[1].tagEnd));
-const unticked = toggleChecked(plan, boxes[0], false);
-expect(unticked.slice(boxes[0].tagStart, boxes[0].tagEnd - ' checked'.length)).toBe('<input type="checkbox">');
-expect(unticked.length).toBe(plan.length - ' checked'.length);
-expect(toggleChecked(plan, boxes[0], true)).toBe(plan); // already in that state → unchanged
-for (const tag of ['<input type="checkbox" checked="">', '<input checked type="checkbox">', '<input type="checkbox" checked/>'])
-  expect(toggleChecked(tag, locateCheckboxes(tag)[0], false)).not.toMatch(/checked/);
 ```
 
 - [ ] **Step 2: Run** `npx vitest run src/lib/inplace.test.ts` — Expected: FAIL (module missing).
 
-- [ ] **Step 3: Implement** — `npm install parse5`; `parseFragment(source, { sourceCodeLocationInfo: true })`; inner range is `startTag.endOffset`…`endTag.startOffset` (absent `endTag` → `null`). `cleanInline` parses with parse5 too (no DOM; runs in node tests and the browser): keep text and `INLINE_TAGS`, map `b`→`strong`, `i`→`em`, unwrap everything else keeping its text, drop elements with `data-sr-added` entirely, keep only `id`, `data-*` (except `data-sr-*`), `aria-*`, and `href` on `a`; serialise. `toggleChecked` rewrites only `source.slice(tagStart, tagEnd)`: to check, insert ` checked` before the closing `>`/`/>`; to uncheck, remove the `checked` attribute (bare, `=""`, or `="checked"`, either quote) with its leading whitespace.
+- [ ] **Step 3: Implement** — `npm install parse5`; `parseFragment(source, { sourceCodeLocationInfo: true })`; inner range is `startTag.endOffset`…`endTag.startOffset` (absent `endTag` → `null`). `cleanInline` parses with parse5 too (no DOM; runs in node tests and the browser): keep text and `INLINE_TAGS`, map `b`→`strong`, `i`→`em`, unwrap everything else keeping its text, drop elements with `data-sr-added` entirely, keep only `id`, `data-*` (except `data-sr-*`), `aria-*`, and `href` on `a`; serialise. `input` is not in `INLINE_TAGS`, so `cleanInline` drops a stray checkbox like any other non-inline element.
 
 - [ ] **Step 4: Run** the Step 2 command — Expected: PASS.
 
-- [ ] **Step 5: Commit** — `git commit -m "feat: pure source splicing for in-place text edits and checkbox toggles"`
+- [ ] **Step 5: Commit** — `git commit -m "feat: pure source splicing for in-place text edits"`
 
 ---
 
-### Task 9: In-place editing and checkboxes in the pane
+### Task 9: In-place editing in the pane
 
 **Files:**
 - Create: `src/lib/inplaceDom.ts`, `src/lib/inplaceDom.test.ts` (jsdom)
 - Modify: `src/lib/components/DocPane.svelte`
 
 **Interfaces:**
-- Consumes: `collectEditables`, `locateEditables`, `locateCheckboxes`, `cleanInline`, `spliceRange`, `toggleChecked` (Task 8); `renderSpecHtml` (Task 4).
+- Consumes: `collectEditables`, `locateEditables`, `cleanInline`, `spliceRange`, `Editable` (Task 8); `renderSpecHtml` (Task 4).
 - Produces:
   ```ts
   export function collectRenderedEditables(root: ParentNode): HTMLElement[]   // DOM adapter; skips [data-sr-added]
-  export function collectRenderedCheckboxes(root: ParentNode): HTMLInputElement[]
   export function editedInner(el: HTMLElement): string                       // innerHTML minus a leading checkbox, through cleanInline
   export function editingAligned(rendered: HTMLElement[], source: Editable[]): boolean // same length and tag sequence
   ```
@@ -512,8 +504,14 @@ const src = fixture('sample-spec.html');
 const root = container((await renderSpecHtml(src, SPEC)).html);
 expect(collectRenderedEditables(root).map((e) => e.tagName.toLowerCase()))
   .toEqual(locateEditables(src).map((e) => e.tag));                     // rendered and source agree
-expect(collectRenderedCheckboxes(container((await renderSpecHtml(fixture('sample-plan.html'), SPEC)).html)).length)
-  .toBe(locateCheckboxes(fixture('sample-plan.html')).length);
+const planSrc = fixture('sample-plan.html');
+const planRoot = container((await renderSpecHtml(planSrc, SPEC)).html);
+expect(collectRenderedEditables(planRoot).map((e) => e.tagName.toLowerCase()))
+  .toEqual(locateEditables(planSrc).map((e) => e.tag));
+// test: editedInner excludes the leading checkbox
+const li = planRoot.querySelector('li#t1-s3') as HTMLElement;
+expect(editedInner(li).trim()).toBe('Commit with <code>git</code>');
+expect(editedInner(li)).not.toContain('input');
 // editedInner drops reader-added markup
 const h2 = [...root.querySelectorAll('h2')][0] as HTMLElement;
 expect(editedInner(h2)).toBe('Problem');
@@ -537,14 +535,14 @@ expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toB
 - `input` on editable *i*: `next = spliceRange(content, locateEditables(content)[i].range!, editedInner(el))` (re-locate against the current source every time, so earlier splices never leave stale offsets); remember `next` as `lastEmitted`; call `onInput(next)`.
 - When `content` changes and equals `lastEmitted`, do **not** re-render (the DOM already shows it; re-rendering would drop the caret). Any other change re-renders as today (external reload, toggle).
 - `keydown` Enter → `preventDefault()`. `paste` → `preventDefault()` and insert `clipboardData.getData('text/plain')` at the selection (*builder's call:* `document.execCommand('insertText', …)`, which keeps the browser's undo stack).
-- Checkboxes: `change` on rendered checkbox *j* → `next = toggleChecked(content, locateCheckboxes(content)[j], el.checked)`, then as above. On read-only, every checkbox gets `disabled`. Checkboxes share the text-editing gate (*builder's call: one rule is easier to trust*): when editing is off, or `collectRenderedCheckboxes` and `locateCheckboxes` lengths differ, they are `disabled`.
+- Checkboxes are not wired: they arrive `disabled` from `renderSpecHtml` (Task 4) and nothing here changes that.
 - Autosave, mtime conflict and the 3s external poll are unchanged: everything flows through `onInput` → `handleInput` (`+page.svelte:176`).
 
 - [ ] **Step 5: Verify** — `npm test`; `npm run check` — Expected: PASS.
 
-- [ ] **Step 6: Manual check** — copy `sample-spec.html` to `docs/superpowers/specs/2026-11-13-sample-spec.html` and `sample-plan.html` to `docs/superpowers/plans/2026-11-13-sample-spec.html` in this worktree (same slug, so the plan nests under the spec). Edit one word in a paragraph; after save, `git diff --no-index src/lib/fixtures/sample-spec.html docs/superpowers/specs/2026-11-13-sample-spec.html` shows one hunk inside that paragraph only. Tick `t1-s2` in the plan: the matching diff against `sample-plan.html` is ` checked` on that one line. Enter does nothing; pasting rich text inserts plain text. Open a main-checkout file: no caret, checkboxes disabled. Edit the file externally: it reloads with the toast. Delete both copies.
+- [ ] **Step 6: Manual check** — copy `sample-spec.html` to `docs/superpowers/specs/2026-11-13-sample-spec.html` and `sample-plan.html` to `docs/superpowers/plans/2026-11-13-sample-spec.html` in this worktree (same slug, so the plan nests under the spec). Edit one word in a paragraph; after save, `git diff --no-index src/lib/fixtures/sample-spec.html docs/superpowers/specs/2026-11-13-sample-spec.html` shows one hunk inside that paragraph only. In the plan, edit the text of `t1-s3`: the diff against `sample-plan.html` leaves its `<input type="checkbox">` untouched; clicking any checkbox does nothing. Enter does nothing; pasting rich text inserts plain text. Open a main-checkout file: no caret, checkboxes disabled. Edit the file externally: it reloads with the toast. Delete both copies.
 
-- [ ] **Step 7: Commit** — `git commit -m "feat: edit html spec text and tick checkboxes in place"`
+- [ ] **Step 7: Commit** — `git commit -m "feat: edit html spec text in place"`
 
 ---
 
@@ -600,5 +598,5 @@ Nothing else depends on this task. Skip it without touching Tasks 1-10.
 
 ## Open questions
 
-1. **Checklist items that hold blocks are not text-editable in place.** The spec's own example (`t1-s2`, text followed by a `pre`) falls under "every descendant inline", so its text is edited in the source; its checkbox still works. Plans will be full of these once they move to HTML. Recommendation: accept for now; if it chafes, a follow-up can make the leading text run of such an `li` editable as its own range.
+1. **Checklist items that hold blocks are not text-editable in place.** The spec's own example (`t1-s2`, text followed by a `pre`) falls under "every descendant inline", so its text is edited in the source. Plans will be full of these once they move to HTML. Recommendation: accept for now; if it chafes, a follow-up can make the leading text run of such an `li` editable as its own range.
 2. **Hand-converted sample spec location.** The fixtures live in `src/lib/fixtures/` and are copied into `docs/superpowers/` only during manual checks, so nothing test-only lands on main as a "spec". Recommendation: keep it that way.
