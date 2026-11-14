@@ -298,16 +298,23 @@ Nothing here is a keep-warm ping. A session with nothing to do is allowed to go 
 
 ### How sessions are started
 
-**(open.)** Two mechanisms work; neither is clean yet.
+Operators are managed background sessions: `claude --bg -n <name> "<assignment>"`, launched
+with the unit's worktree as the working directory. Verified 2026-11-13: once the partner has
+accepted the trust prompt in the repo, `--bg` starts in the repo and in its
+`.claude/worktrees/*` children; the session appears in `claude agents --json` with its name
+and idle/busy status; a `SendMessage` to it while idle woke it and it replied by name; and
+`claude logs`, `attach` and `stop` manage it. It runs the partner's normal session hooks and
+permission mode.
 
-- `claude --bg -n <name>` gives managed sessions (`claude agents`, `logs`, `attach`, `stop`)
-  but needs the directory to be trusted interactively first. Whether trusting a repo covers
-  its `.claude/worktrees/*` children is untested.
-- Headless `claude -p` with a held-open input stream needs no trust but is not managed by
-  `claude logs` / `claude stop`, and holding the stream open is plumbing we would own.
+- The repo must be trusted once, by the partner, before a first run. The conductor checks
+  this at intake by starting one operator and says so plainly if it is refused.
+- The conductor learns an operator is idle with `SendMessage`'s `notify_when_idle`, not by
+  polling.
+- Headless `claude -p` with a held-open input stream also works without trust, but it is not
+  managed by `claude logs` / `claude stop`. Not used.
 
-Composer forks are one-shot (`-p --resume <checkpoint> --fork-session`), have no such problem,
-and are settled.
+Composer forks are one-shot (`claude -p --resume <checkpoint> --fork-session`), run by the
+conductor as a background command.
 
 Every spawned session's prompt must carry: its name, the names of the conductor and the
 ledger path, the instruction to address peers by explicit name, the worktree it is already in,
