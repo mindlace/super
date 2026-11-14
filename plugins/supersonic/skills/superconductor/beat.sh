@@ -290,7 +290,9 @@ if ($mode eq "report") {
   for my $u (@slugs) {
     my $st = status($u); $n{deferred}++ if $st eq "deferred";
     my $fix = $fixopen{$u};
-    next unless $st eq "planning" || $st eq "admitted" || $fix;
+    # A `launching` unit is printed too, so its session can be judged by the same definition
+    # of alive (its launch may have happened just before a conductor died); it is not asked.
+    next unless $st eq "planning" || $st eq "admitted" || $st eq "launching" || $fix;
     $n{watched}++; $n{fixrounds}++ if $fix;
     my $name = "$design-$u"; my $wt = wt($u);
     my $session = !$known ? "unknown" : !exists $sess{$name} ? "absent"
@@ -298,9 +300,9 @@ if ($mode eq "report") {
     my $until = waiting($u);
     my $wait = !defined $until ? "none" : $until > $now ? "until-$until" : "over";
     if (defined $until && $until > $now) { $n{waiting}++; $next = $until if $next eq "-" || $until < $next }
-    $n{absent}++ if ($session eq "absent" || $session eq "failed") && $wait eq "none";
+    $n{absent}++ if ($session eq "absent" || $session eq "failed") && $wait eq "none" && $st ne "launching";
     my $plan = (grep { /^- plan \Q$u\E$w/ } @sup) ? "yes" : "no";
-    my $progress = !($st eq "planning" && $plan eq "yes") && $wait eq "none";
+    my $progress = !($st eq "planning" && $plan eq "yes") && $wait eq "none" && $st ne "launching";
     my $bf = "$dir/assignments/$u.beat"; my $af = "$dir/assignments/$u.asked";
     my $head = head($wt); my $evidence = "no";
     if (!-e $bf) { $evidence = "new" }
@@ -408,13 +410,18 @@ if ($mode eq "restart") {
   my $only = defined $which && $which eq "failed";
   my $list = sub { my $j = join "", run("claude", "agents", "--json");
     my $l = eval { JSON::PP->new->decode($j) }; ref $l eq "ARRAY" ? $l : undef };
-  my $l = $list->() or do { print "stop $u: the session list is unreadable; nothing stopped\n"; exit 0 };
+  # An unreadable list exits 3: the caller must treat the name as still taken.
+  my $unreadable = sub { print "stop $u: the session list is unreadable; still listed: unknown\n"; exit 3 };
+  my $l = $list->() or $unreadable->();
   my @ids = map { $_->{id} } grep { defined $_->{id} } entries($l, $name, $only);
   run("claude", "stop", $_) for @ids;
-  my @left = @ids;
+  # Every entry still listed under the name, stopped or not, as <id>:live or <id>:failed.
+  my @left;
   for my $try (1 .. $ENV{LAUNCH_TRIES}) {
-    my $now = $list->() // last; my %on = map { (($_->{id} // "") => 1) } entries($now, $name, 0);
-    @left = grep { $on{$_} } @ids; last unless @left;
+    my $now = $list->() or $unreadable->();
+    @left = map { ($_->{id} // "?") . ":" . (failed_entry($_) ? "failed" : "live") } entries($now, $name, 0);
+    my %stopped = map { $_ => 1 } @ids;
+    last unless grep { my ($i) = /^(.*):/; $stopped{$i} } @left;
     sleep $ENV{LAUNCH_WAIT} if $try < $ENV{LAUNCH_TRIES} }
   printf "stop %s: stopped %s; still listed: %s\n", $u, (@ids ? join(",", @ids) : "none"), (@left ? join(",", @left) : "none");
 } elsif ($mode eq "launching") {

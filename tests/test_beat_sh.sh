@@ -274,7 +274,7 @@ printf '%s' "$agents" | sed "s/]\$/,$failed3,$failed2]/" > "$tmp/agents.json"
 out=$(b "$d"); [ "$(field db session)" = failed ] || fail "failed + failed is not alive: $(line 'unit db')"
 # stop targets each entry's own short id and waits a bounded time, whatever the list does.
 rm -f "$tmp/stopped"
-r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped d0,d1; still listed: d0,d1" ] || fail "stop with entries that stay: $r"
+r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped d0,d1; still listed: d0:failed,d1:failed" ] || fail "stop with entries that stay: $r"
 [ "$(tr '\n' ' ' < "$tmp/stopped")" = "d0 d1 " ] || fail "stop must target short ids: $(cat "$tmp/stopped")"
 grep -q des-db "$tmp/stopped" && fail "stop must never pass the name"
 sl=$(sed 's/^LAUNCH_WAIT=10$/LAUNCH_WAIT=1/' "$src" > "$tmp/beat-1s.sh"; echo "$tmp/beat-1s.sh")
@@ -282,10 +282,24 @@ t0=$(date +%s); sh "$sl" "$d" stop db failed >/dev/null; el=$(( $(date +%s) - t0
 [ "$el" -ge 2 ] && [ "$el" -le 5 ] || fail "stop must look LAUNCH_TRIES times LAUNCH_WAIT apart and no longer (took ${el}s)"
 printf '%s' "$agents" | sed "s/]\$/,$failed2,$live2]/" > "$tmp/agents.json"; rm -f "$tmp/stopped"
 r=$(bl "$d" stop db failed); [ "$(cat "$tmp/stopped")" = d1 ] || fail "stop failed must leave the live entry alone: $(cat "$tmp/stopped")"
+[ "$r" = "stop db: stopped d1; still listed: d1:failed,d2:live" ] || fail "stop must report each entry still listed with its state (m6-1): $r"
 : > "$tmp/stop-removes"; printf '%s' "$agents" | sed "s/]\$/,$failed2]/" > "$tmp/agents.json"
 r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped d1; still listed: none" ] || fail "stop with an entry that leaves: $r"
 r=$(bl "$d" stop db failed); [ "$r" = "stop db: stopped none; still listed: none" ] || fail "stop run again after it is done: $r"
 rm -f "$tmp/stop-removes" "$tmp/stopped"; printf '%s' "$agents" > "$tmp/agents.json"
+# An unreadable list: stop exits non-zero and claims nothing (m6-2).
+: > "$tmp/agents.fail"; r=$(bl "$d" stop db); rc=$?; rm -f "$tmp/agents.fail"
+[ "$rc" -eq 3 ] && [ "$r" = "stop db: the session list is unreadable; still listed: unknown" ] || fail "unreadable list: rc $rc, $r"
+# A launching unit is judged by the same definition of alive, and is never asked or counted absent (I6-1).
+perl -0pi -e 's/- db: des-db — status: admitted/- db: des-db — status: launching/' "$d/ledger.md"
+ago 3000 "$d/assignments/db.beat" 2>/dev/null
+out=$(b "$d"); [ "$(field db status)" = launching ] && [ "$(field db session)" = absent ] && [ "$(field db ask)" = none ] || fail "launching, absent: $(line 'unit db')"
+summary | grep -q ' absent 0 ' || fail "a launching unit is not counted dead: $(summary)"
+printf '%s' "$agents" | sed "s/]\$/,$failed2,$live2]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = alive ] || fail "launching with a live entry: $(line 'unit db')"
+printf '%s' "$agents" | sed "s/]\$/,$failed2]/" > "$tmp/agents.json"
+out=$(b "$d"); [ "$(field db session)" = failed ] || fail "launching with only a failed entry: $(line 'unit db')"
+printf '%s' "$agents" > "$tmp/agents.json"
 # A probe that sees failed stops at once, even if the session is up again later (N5-4).
 mkdir -p "$tmp/agents.seq"; printf '[%s]' "$dbup" > "$tmp/agents.seq/1"; printf '[%s]' "$dbfail" > "$tmp/agents.seq/2"; printf '[%s]' "$dbup" > "$tmp/agents.seq/3"
 bl "$d" launched db >/dev/null && fail "up, failed, up is a failed start"

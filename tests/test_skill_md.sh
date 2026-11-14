@@ -64,7 +64,7 @@ for s in 'Bash(bash <sdd scripts dir>/sdd-workspace:*)' 'Bash(bash <sdd scripts 
          'Bash(<project command>:*)' 'SDD scripts: <absolute path>' 'Project commands: <commands>' \
          '/skills/subagent-driven-development/scripts' 'installed_plugins.json' 'never from a plan' \
          'Relaunching with a longer list' 'A relaunch is not a death' \
-         'still listed: <ids>|none'; do
+         'still listed: <id>:live|<id>:failed,…|none'; do
   need "$s"
 done
 forbid "per command the plan's tasks run"
@@ -224,13 +224,28 @@ forbid "--grep='): rule '"
 need 'uses only `[a-z0-9-]`'
 need 'stands in it as a whole word'
 # A launch that may never have happened is finished without counting a death (N-3, M-1).
-need 'If the report shows its session alive (listed under `<design-slug>-<unit-slug>` and not `failed`), start nothing'
+need '`alive`, start nothing (never a second session under a live name)'
 # N5-1: stops are bounded, by short id; a failed entry left listed blocks nothing.
 need 'sh <skill dir>/beat.sh <ledger dir> stop <unit-slug>`, or with `failed` after it'
 need 'by that entry'"'"'s own short `id` (never the name or the full `sessionId`; neither works)'
 need 'It never waits longer'
 need 'so a `failed` entry still listed blocks nothing'
-need 'unless a live entry is still listed under its name'
+need 'unless step 1'"'"'s stop left a `:live` entry listed or could not read the list'
+# Round 7: one definition of alive, asked through beat.sh, everywhere.
+need '- `alive` (a live entry is listed under its name): it launched. Launch nothing; record it and go on with step 5.'
+need '- `failed` (only failed entries are listed): stop them'
+need '- `unknown` (the session list is unreadable): launch nothing now; the next beat decides.'
+need 'A unit with no `## Units` line was never launched, because step 3 ledgers the line before the launch'
+need 'If the report shows its session `alive`, Phase 0 already launched it from its `launching` line: launch nothing. If it shows `failed`, stop the failed entries first'
+need 'Start a fresh one from its assignment file only when the report shows its session `absent` or `failed`'
+need 'still listed: <id>:live|<id>:failed,…|none`, every entry still under the name with its state'
+need 'If the session list is unreadable it exits non-zero and prints `still listed: unknown`: treat the name as taken and launch nothing this time'
+need 'unless the stop left a live entry listed or could not read the list (Stopping an operator): then launch nothing this time'
+need 'A `launching` unit is printed too, so its session is judged by the same definition of alive'
+need 'If the report shows its session `absent` or `failed`, handle it'
+forbid 'name is absent from `claude agents --json`'
+forbid 'If `claude agents --json` lists its name'
+forbid 'If its name is listed'
 forbid 'until its name is no longer listed'
 forbid 'wait until it is no longer listed'
 # N5-2: Phase 0 uses the report's one definition of alive.
@@ -374,7 +389,7 @@ need '`checkpoint-<n>`, whose output is a session id'
 # restart line written; the prose says what each rung does, not how to count.
 need '**Rung 1: restart**, with cause `death` or `stall`.'
 need '**Rung 2: investigate, apply the remedy, restart.**'
-need '**Rung 3: stop.** Do not restart. If its name is listed (a stall, or a `failed` entry), stop it'
+need '**Rung 3: stop.** Do not restart. Stop whatever is listed under its name, a stalled session or a `failed` entry (Stopping an operator).'
 forbid 'claude logs'
 forbid 'busy'
 need 'Read <the report'"'"'s transcript file> (the end of its transcript'
@@ -395,7 +410,7 @@ need 'operator launching, launch failed, operator replaced'
 need 'With no command named, it kills nothing: treat the cause as `unknown`'
 need 'found again at the time it runs, never by a remembered pid'
 # R3-8: a usage-limited stall is stopped before it waits.
-need 'If its name is listed (a stall, or a `failed` entry), stop it first (Stopping an operator). Then run `sh <skill dir>/beat.sh <ledger dir> wait'
+need 'First stop whatever is listed under its name, a stalled session or a `failed` entry (Stopping an operator). Then run `sh <skill dir>/beat.sh <ledger dir> wait'
 # R3-9: the script says whether an investigation for this rung is ledgered.
 need 'If the report shows `investigated yes`'
 forbid 'line with no later `restarted <unit-slug>` line is in the ledger'
@@ -455,7 +470,7 @@ forbid 'start no wait: run `budget.sh` again at the next event'
 # running was never set: it is not a status.
 forbid 'planning, admitted or running'
 # Resume of a launching unit keeps its assignment and finishes a sibling's hand-back steps (R2-1, R2-2).
-need 'Keep its assignment as written, except that `Plan:` names a plan its own SDD workspace already holds'
+need 'When you launch it, keep its assignment as written, except that `Plan:` names a plan its own SDD workspace already holds'
 need 'Launch no member of a family that a ruling still to be routed replaces'
 need 'also finish Hand-back siblings, steps 3-4'
 # The unrule conflict path files a real question and does not loop (R2-3).
