@@ -22,7 +22,7 @@ deliberation rides in it.
   censuses. Anything requiring judgment about what code *means* for the
   design, you read at primary source yourself. A summary cannot represent
   what its author didn't read, and a misreading that enters the design here
-  costs an execution wave later.
+  costs rework during execution later.
 - **Ground truth outranks documentation.** CLAUDE.md, architecture docs, and
   code comments are testimony; config and code are evidence. Every
   doc↔code contradiction found is a finding to surface, never silently
