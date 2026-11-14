@@ -31,13 +31,20 @@ def log_dir(env, cwd=None):
     return root / ".superpowers" / "jev"
 
 
-def append(entry, env, cwd=None):
-    d = log_dir(env, cwd)
+def ensure_dir(d):
+    """Create the log dir with its own `.gitignore` (`*`), so nothing in it is committable."""
+    d = Path(d)
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if not ignore.exists():
         ignore.write_text("*\n", encoding="utf-8")
+    return d
+
+
+def append(entry, env, cwd=None, d=None):
+    d = ensure_dir(d if d is not None else log_dir(env, cwd))
     line = json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
+    first = not (d / "log.jsonl").exists()
     with open(d / "log.jsonl", "a", encoding="utf-8") as fh:
         try:
             import fcntl
@@ -45,17 +52,24 @@ def append(entry, env, cwd=None):
         except (ImportError, OSError):
             pass
         fh.write(line)
+    if first:
+        from . import registry   # inside: keeps `ask`'s import surface small
+        registry.safe_register(d, env)
 
 
-def safe_append(entry, env, cwd=None):
+def safe_append(entry, env, cwd=None, d=None):
     try:
-        append(entry, env, cwd)
+        append(entry, env, cwd, d)
     except Exception as exc:  # logging must never break a caller
         sys.stderr.write("jev: log write failed: %s\n" % exc)
 
 
 def read_entries(env, cwd=None):
-    path = log_dir(env, cwd) / "log.jsonl"
+    return read_dir(log_dir(env, cwd))
+
+
+def read_dir(d):
+    path = Path(d) / "log.jsonl"
     if not path.exists():
         return []
     out = []
@@ -74,6 +88,13 @@ def state_entry(call_id, state, session_id, transcript_path, source):
     return {"type": "state", "call_id": call_id, "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
             "state": state, "session_id": session_id, "transcript_path": transcript_path,
             "source": source}
+
+
+def state_ref_entry(call_id, state_sha, session_id, transcript_path, source):
+    """Like state_entry, but the state lives in a blob referenced by `state_sha`."""
+    return {"type": "state", "call_id": call_id, "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "state_sha": state_sha, "session_id": session_id,
+            "transcript_path": transcript_path, "source": source}
 
 
 def states_by_call(entries):

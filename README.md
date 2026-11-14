@@ -7,6 +7,8 @@ A Claude Code plugin marketplace with two plugins.
 | `supersonic` | `supersonic:superconductor` conducts a multi-spec build through named `claude --bg` operator sessions admitted by dependency, and sends design questions to one-shot forks of a frozen composer checkpoint. `supersonic:supercomposer` composes the design package it executes. |
 | `superpowers-jev` | Optional [TypeSafe](https://typesafe.ai) Jev typed judgments at 11 decision points in superpowers and supersonic. Shadow mode by default. Fails open. |
 
+`superspec/` is a local SvelteKit app for reading superpowers specs and plans across `~/Projects`. It is not a plugin yet. See `superspec/README.md`.
+
 ## Install
 
 ```

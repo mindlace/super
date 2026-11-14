@@ -2,11 +2,14 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 import support
-from jevlib import cli, log, recover
+from jevlib import cli, log, recover, state
 from jevlib.builders import transcript
 
 FX = support.FIXTURES / "recover"
@@ -79,11 +82,14 @@ class RecoverTest(unittest.TestCase):
         self.assertEqual(st["source"], "recovered")
         self.assertEqual(st["session_id"], "sess-1")
         self.assertEqual(st["transcript_path"], str(S1))
-        self.assertEqual(st["state"]["last_message"], "Tests pass.")
-        cmds = st["state"]["commands_since_last_edit"]
+        self.assertNotIn("state", st)
+        self.assertTrue(st["state_sha"])
+        loaded = state.load("A", self.env)
+        self.assertEqual(loaded["last_message"], "Tests pass.")
+        cmds = loaded["commands_since_last_edit"]
         self.assertEqual(cmds[0]["command"], "python -m pytest -q")
         self.assertEqual(cmds[0]["output_tail"], "12 passed in 0.4s")
-        blob = json.dumps(st["state"])
+        blob = json.dumps(loaded)
         self.assertNotIn("Docs updated", blob)
         self.assertNotIn("ls docs", blob)
 
@@ -91,11 +97,30 @@ class RecoverTest(unittest.TestCase):
         for e in (call("E", "2026-10-12T09:40:13-0700", error="boom"),
                   call("T", "2026-10-12T09:40:13-0700", point="tier"),
                   call("S", "2026-10-12T09:40:19-0700"),
-                  log.state_entry("S", {"x": 1}, "sess", "/t", "stop")):
+                  log.state_entry("S", {"x": 1}, "sess", "/t", "stop"),
+                  call("H", "2026-10-12T09:40:13-0700", state_sha="f" * 64)):
             log.append(e, self.env)
         res = recover.recover(self.env, "/tmp/repo", FX)
         self.assertEqual(res["recovered"], 0)
+        self.assertNotIn("H", log.states_by_call(log.read_entries(self.env)))
         self.assertEqual(log.states_by_call(log.read_entries(self.env))["S"]["source"], "stop")
+
+    def test_recover_uses_session_ctx_outside_root_dirs(self):
+        projects = Path(tempfile.mkdtemp())
+        (projects / "-elsewhere").mkdir()
+        shutil.copy(S1, projects / "-elsewhere" / "sess-1.jsonl")
+        log.append(call("A", "2026-10-12T09:40:13-0700",
+                        ctx={"session_id": "sess-1", "transcript_path": "/stale/s1.jsonl"}),
+                   self.env)
+        res = recover.recover(self.env, "/tmp/other-root", projects)
+        self.assertEqual(res["recovered"], 1)
+        self.assertEqual(state.load("A", self.env)["last_message"], "Tests pass.")
+
+    def test_recover_falls_back_inline_when_blob_write_fails(self):
+        with mock.patch.object(state, "write_blob", side_effect=OSError("ro")):
+            self.seed_and_recover()
+        st = log.states_by_call(log.read_entries(self.env))["A"]
+        self.assertEqual(st["state"]["last_message"], "Tests pass.")
 
     def test_recover_reports_unmatched(self):
         log.append(call("U", "2026-10-12T07:00:00-0700"), self.env)

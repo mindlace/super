@@ -102,6 +102,40 @@ class ReviewBuildersTest(unittest.TestCase):
         self.assertIn("returns {}, so a corrupt config", f[0]["text"])
         self.assertTrue(f[2]["text"].startswith("**src/config.py:2**"))
 
+    def test_parse_review_inline_tags(self):
+        md = ("## Findings\n\n"
+              "- [Minor] hooks.py:98 — learn more item\n"
+              "  continued here\n"
+              "- **Important** state.py:130 `read_blob`\n"
+              "- Critical: ask.py:40 bad\n"
+              "- (minor) other.py:1 nit\n\n"
+              "## Verified\n\n- config OK\n- tests pass\n")
+        f = review.parse_review(md)["findings"]
+        self.assertEqual([x["reviewer_severity"] for x in f],
+                         ["minor", "important", "critical", "minor"])
+        self.assertEqual(f[0]["text"], "hooks.py:98 — learn more item continued here")
+        self.assertEqual(f[1]["text"], "state.py:130 `read_blob`")
+        self.assertEqual(f[2]["text"], "ask.py:40 bad")
+        self.assertEqual(f[3]["text"], "other.py:1 nit")
+
+    def test_parse_review_inline_tag_overrides_heading(self):
+        f = review.parse_review("### Minor\n\n- [Important] x\n- plain\n")["findings"]
+        self.assertEqual([(x["reviewer_severity"], x["text"]) for x in f],
+                         [("important", "x"), ("minor", "plain")])
+
+    def test_parse_review_mid_sentence_word_is_not_a_tag(self):
+        self.assertEqual(review.parse_review("## Findings\n\n- this is minor but notable\n"),
+                         {"findings": []})
+
+    def test_findings_state_cli_inline_review(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "review.md"
+            p.write_text("## Findings\n\n- [Minor] a.py:1 nit\n")
+            r = subprocess.run([str(support.JEV), "findings-state", str(p)],
+                               capture_output=True, text=True, timeout=20)
+        self.assertEqual(r.returncode, 0)
+        self.assertGreaterEqual(len(json.loads(r.stdout)["findings"]), 1)
+
     def test_diff_state(self):
         repo = make_repo()
         s = review.diff_state(repo, "HEAD~1", "HEAD", scoped_rereview=True)

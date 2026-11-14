@@ -15,9 +15,9 @@ from .mode import resolve_mode
 def command_modules():
     """Modules exposing add_parser(subparsers); each sets func(args, env) -> exit code.
     `jev ask` skips them, so a broken builder import can never break fail-open asks."""
-    from . import hooks, label, recover, report
+    from . import hooks, label, recover, registry, report
     from .builders import cite, diag, generic, ledger, review, spec, superpowers
-    return [report, label, recover, generic, review, diag, superpowers, cite, ledger, spec, hooks]
+    return [report, label, recover, generic, review, diag, superpowers, cite, ledger, spec, hooks, registry]
 
 
 def read_json_arg(value):
@@ -54,6 +54,25 @@ def cmd_key(args, env):
     return 0
 
 
+def cmd_with_key(args, env):
+    cmd = list(args.command)
+    if cmd and cmd[0] == "--":
+        cmd = cmd[1:]
+    if not cmd:
+        sys.stderr.write("usage: jev with-key -- COMMAND [ARGS...]\n")
+        return 2
+    key, _source = resolve_key(env)
+    if not key:
+        sys.stderr.write("jev with-key: no key available (see jev key)\n")
+        return 2
+    try:
+        os.execvpe(cmd[0], cmd, dict(env, TYPESAFE_API_KEY=key))
+    except OSError as exc:
+        sys.stderr.write("jev with-key: cannot run %s: %s\n" % (cmd[0], exc.strerror))
+        return 127
+    return 127  # not reached
+
+
 def build_parser(include_modules=True):
     parser = argparse.ArgumentParser(prog="jev", description="TypeSafe Jev judgments for superpowers.")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -67,6 +86,9 @@ def build_parser(include_modules=True):
     p.set_defaults(func=cmd_mode)
     p = sub.add_parser("key", help="print where the API key comes from (never the key)")
     p.set_defaults(func=cmd_key)
+    p = sub.add_parser("with-key", help="run a command with TYPESAFE_API_KEY set (never prints the key)")
+    p.add_argument("command", nargs=argparse.REMAINDER, help="-- COMMAND [ARGS...]")
+    p.set_defaults(func=cmd_with_key)
     for mod in (command_modules() if include_modules else []):
         mod.add_parser(sub)
     return parser
