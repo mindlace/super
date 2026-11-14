@@ -225,6 +225,16 @@ class RecordCliTest(unittest.TestCase):
         self.assertEqual(rows["operator-tier"]["recorded"], 1)
         self.assertIn("operator-tier", report.format_report(rows))
 
+    def test_report_tolerates_retired_bounce(self):
+        entries = [
+            call("old", "bounce", "picks", {"operator": "auth"},
+                 detail={"choices": {"operator": "auth"}}),
+            rec("old", {"picks": {"operator": "auth"}}),
+        ]
+        rows = report.build_report(entries)
+        self.assertIn("bounce", rows)
+        self.assertIn("bounce", report.format_report(rows))
+
 
 if __name__ == "__main__":
     unittest.main()

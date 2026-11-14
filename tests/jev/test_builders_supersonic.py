@@ -36,10 +36,10 @@ class LedgerTest(unittest.TestCase):
         self.assertEqual(ledger.defect_classes(self.text),
                          ["missing-declaration", "unmodeled-consumer", "schema-drift"])
 
-    def test_live_operators_are_dispatched_only_with_spec_summaries(self):
-        ops = ledger.live_operators(self.text, FX)
-        self.assertEqual([o["slug"] for o in ops], ["auth", "billing"])
-        self.assertEqual(ops[0]["summary"], "Auth spec: Validate session tokens in middleware for every route.")
+    def test_bounce_state_command_removed(self):
+        with self.assertRaises(SystemExit) as cm:
+            cli.main(["bounce-state", "--ledger", "x", "--message", "y"])
+        self.assertEqual(cm.exception.code, 2)
 
 
 class SpecTest(unittest.TestCase):

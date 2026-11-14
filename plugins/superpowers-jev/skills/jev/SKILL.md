@@ -38,7 +38,6 @@ Run it as `jev`. The plugin's `bin/` is on the Bash tool's PATH while `superpowe
 | `jev diag-state <analyst output>` | `diag-confidence` |
 | `jev cite <report> [--root DIR]` | `citation` |
 | `jev defect-state --ledger L --escalation F` | `defect-class` |
-| `jev bounce-state --ledger L --message F [--root DIR]` | `bounce` |
 | `jev coverage --design D --spec S [--spec S ...]` | `fidelity-coverage`. It runs the asks itself and prints the verdict JSON. |
 | `jev compat` | the installed superpowers version, and whether jev-gates' anchors apply to it |
 
@@ -51,7 +50,7 @@ For `items` and `coverage` points, record in the order of the state file you ask
 | Compare kind | Points | Shape |
 |---|---|---|
 | verdict | report-evidence, verify-stop | `{"verdict": "<value>"}` |
-| picks | tier, prompt-route, defect-class, bounce, surface-route | `{"picks": {"<question>": "<option>"}}` |
+| picks | tier, prompt-route, defect-class, surface-route | `{"picks": {"<question>": "<option>"}}` |
 | items | re-review, severity, diag-confidence, citation | `{"items": ["<option for item 0>", ...]}` |
 | coverage | fidelity-coverage | `{"uncovered": [i, ...], "multiply_covered": [i, ...]}` |
 
