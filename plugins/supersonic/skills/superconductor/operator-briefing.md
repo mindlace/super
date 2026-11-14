@@ -68,7 +68,7 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
    hold a task waiting on a sibling's reply: lanes share no dependency edge, and any row you
    need reaches you through `<conductor name>`. Otherwise
    (`Plan: none`), invoke `superpowers:writing-plans` against the spec sections your unit
-   implements (the spec is markdown, `.md`, or HTML, `.html`; read either). The plan's Global Constraints section copies the unit's interface rows and
+   implements (the spec is markdown, `.md`, or HTML, `.html`; read either). The plan's Global Constraints section copies the unit's interface rows (table lines and their row sections) and
    the design's global constraints verbatim. Order it so the tasks delivering your
    `Produces rows others wait on` come as early as their own dependencies allow, and write
    the line `Delivers row <row id>` in the text of each such task: `<conductor name>`

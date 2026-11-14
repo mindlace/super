@@ -101,7 +101,14 @@ not restate it). Required sections keep their names and become `section`s
 with these ids: **Goal** (`sec-goal`); **Subsystems** (`sec-subsystems`;
 one-paragraph scope each, with a `<slug>` and the interface rows it needs);
 **Interface table** (`tbl-interfaces`, a captioned `table` with caption
-"Interface table"); **Global constraints** (`sec-global-constraints`);
+"Interface table"), an index with one line per row: row id, owner,
+commitment layer, a summary of about ten words, and a link to the row's
+section. Each row's contract lives in its own section, `sec-if-<row id>`,
+inside a `sec-interfaces` section that holds the table, written as
+`spec-format.md` describes an interface (Writing for a reader): shape as a
+code block, meaning, rules one per item, unchanged and removed. Never put a
+type, a message list or a rule set in a table cell;
+**Global constraints** (`sec-global-constraints`);
 **Out of scope** (`sec-out-of-scope`); and four this skill adds below.
 Every edge names interface rows, never a spec or a position in an order;
 build order is derived from those edges, so the doc has no separate order
@@ -122,7 +129,7 @@ section.
   source model documents → the interface row or spec section that carries
   it, or an explicit **dropped / narrowed / deferred** entry with partner
   sign-off. A model mechanism stated in prose that constrains code must
-  appear as a type/signature in the interface table — if it cannot be typed
+  appear as a type/signature in its interface row's code block — if it cannot be typed
   yet, it becomes a named open decision, never silence.
 - **Commitment layering** (`sec-commitment-layering`). Interface-table rows are marked *model
   commitment* (from the source design; changes need the partner) or
@@ -141,10 +148,13 @@ derivation.**
 
 Derive one spec per subsystem
 (`docs/superpowers/specs/YYYY-MM-DD-<slug>-design.html`, same format as the
-design doc), each embedding its interface rows as a captioned `table` and the
-global constraints verbatim. Then
+design doc), each embedding its interface rows (the captioned `table` lines
+and their `sec-if-<row id>` sections) and the global constraints verbatim. Then
 one fresh-eyes agent checks: every design requirement covered by exactly one
 spec; no contradictions; signatures identical everywhere; no placeholders;
+**readability** — no paragraph states more than one rule, no type or message
+shape is spelled out in a sentence or a table cell, every code block has
+`data-lang`;
 **the fidelity leg — specs and design diffed against the source model
 documents clause-by-clause, with the traceability table as the checklist**;
 and **the delegation check** (rework-reduction spec, intervention 1): for
