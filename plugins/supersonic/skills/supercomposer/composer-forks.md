@@ -10,7 +10,8 @@ To run one:
 1. Copy the prompt text below into the prompt file `<ledger dir>/prompts/<fork name>.md`,
    filling every `<placeholder>`. Paths are absolute. The fork name is `checkpoint-<n>`,
    `rule-<id>`, `review-<unit-slug>-<short sha>`, or `graph-<id>` (`graph-all` for the
-   composer's first build graph).
+   composer's first build graph); an attempt after the first appends `@<k>` (`rule-q7@2`),
+   so its files never mix with an earlier attempt's.
 2. Run the command line exactly as written, starting with the time limit below, then
    `env -C "<package worktree>"`.
    Every one of these runs with cwd = the package worktree: `claude` has no cwd flag, and
@@ -34,7 +35,8 @@ To run one:
    dir>/prompts/<fork name>.pid`, and stops the whole group (TERM, then KILL five seconds
    later) once `FORK_LIMIT` passes, 2700 seconds (45 minutes), set once at the top of
    `beat.sh`. It exits 124 when the limit stopped the fork, 128 plus the signal when the fork
-   died by a signal, and the fork's own status otherwise. The group matters: `claude` may be
+   died by a signal, and the fork's own status otherwise; when the fork itself exits, it stops
+   anything the fork left running in its group. The group matters: `claude` may be
    a wrapper script whose child is the real session, and stopping only the wrapper would
    leave the session running. Stock macOS has no `timeout` command. The limit holds while
    that `beat.sh` process lives; whoever resumes a run after its conductor died stops a

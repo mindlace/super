@@ -30,11 +30,12 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
   background `sleep 300` (Bash, run in the background) unless one is already running, and
   end your turn. A leaf's completion, a message or the sleep's exit wakes you, so a
   message from `<conductor name>` is answered within five minutes. On each wake, act on
-  any message first, then check every leaf you have no result for: run `sh <beat.sh>
+  any message first. When the wake is your sleep's exit, also check every leaf you have no
+  result for: run `sh <beat.sh>
   changed <ledger dir>/assignments/<unit-slug>.stretch` (`<beat.sh>` is the `beat.sh`
   path your assignment's `Allowed for waiting` line names), which prints a file in your
   worktree changed since its last run, or nothing. A leaf has failed when it has run 60 minutes and that printed
-  nothing at the last two wakes (ten minutes with no file written), or when it has run
+  nothing at the last two sleep exits (ten minutes with no file written), or when it has run
   120 minutes in all. Stop a failed leaf with `TaskStop` and dispatch it once more from
   the same brief, telling it that the worktree holds the stopped leaf's uncommitted edits.
   If that one fails too, the task is BLOCKED: file a question (`## Questions`).

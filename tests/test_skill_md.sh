@@ -285,10 +285,10 @@ test -x "$(dirname "$skill")/beat.sh" || { echo "FAIL: beat.sh missing or not ex
 # The beat is one command; its lines are specified here.
 need 'A beat** is one command, `sh <skill dir>/beat.sh <ledger dir>`'
 need 'A beat with nothing to do is two tool calls whatever the number of units'
-need 'unit <unit-slug> status <status> session alive|absent state <listed status> evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n>'
+need 'unit <unit-slug> status <status> session alive|absent|unknown state <listed status> evidence yes|no|new quiet <minutes> ask none|due|open|overdue asked <minutes>|- plan yes|no fixround open|none rung <n> restart pending|none wait none|until-<epoch>|over movable yes|no'
 need 'row <unit-slug> <row id> task <N> head <sha7>'
-need 'fork <fork name> running|gone failures <n>'
-need 'beat: watched <n> absent <n> evidence <n> due <n> overdue <n> rows <n> forks running <n> gone <n> fixrounds <n> deferred <n> questions <n> resends <n> timer running|none'
+need 'fork <fork name> running|gone|unstarted failures <n>'
+need 'beat: sessions ok|unknown watched <n> absent <n> evidence <n> due <n> overdue <n> rows <n> forks running <n> gone <n> fixrounds <n> deferred <n> questions <n> waiting <n> next-reset <epoch>|- movable <n> timer running|none'
 need 'sh <skill dir>/beat.sh <ledger dir> timer <seconds>'
 need 'the exit of a timer you stopped is not a beat'
 need 'Then run one beat (`## Supervision`, Heartbeat), which starts the heartbeat timer if anything can move'
@@ -313,14 +313,19 @@ need "\`Delivers row <row id>\`"
 need '`Task <N>: complete (commits <base7>..<head7>`'
 need 'but only while no amending fork runs and no ruling is being routed'
 need 'A `question` line: a file in `<ledger dir>/questions/` with no `## Questions` line'
-need 'A `resend` line: a `- restarted` or `- relaunched` line'
+need '`restart pending`: its newest `restarted` or `relaunched` line has no'
+need 'also when there was nothing to send: that line is what marks the restart seen through'
+# N1: an unreadable session list handles no death.
+need 'On a beat whose summary says `sessions unknown`, handle neither'
+need 'Handle no death and no stall on this beat'
 need 'append `- resent to <session name>`'
 # I6: fix rounds are watched, restarted and resent.
 need 'and the fix-round message of its open `fix round` line'
 need 'or whose fix round is open'
 need 'the restart'"'"'s resends carry the fix round'
 need 'Your own commands.'
-need '`kill` (a hung process an investigation names)'
+forbid '`kill` (a hung process'
+forbid 'kill <pid>'
 # notify_when_idle is an optimisation, never the only detection.
 need 'It is an optimisation only'
 forbid 'Learn of idle with `notify_when_idle`, never by polling'
@@ -328,7 +333,12 @@ forbid 'Learn of idle with `notify_when_idle`, never by polling'
 need 'Ledger `- fork <fork name> started <date-time>` under `## Forks`, then run its command line'
 need 'the time limit, `env -C "<package worktree>"`'
 need 'exit status 124'
-need 'this is a stale notice from an earlier attempt: do nothing'
+# I2/N3: attempts are named apart; staleness is read from the ledger, not the process group.
+need 'if the newest line for that attempt'"'"'s name is already an `exited` line, this is a stale notice: do nothing'
+need 'Each attempt after the first appends `@<k>` (`rule-q7@2`)'
+need 'The fork'"'"'s exit is decided by the fork process'
+forbid 'still shows its group running, this is a'
+need 'fork … unstarted'
 need 'No output, first time:'
 need 'No output, second time'
 need 'a fork that failed twice'
@@ -339,25 +349,36 @@ need 'holds while the fork'"'"'s watchdog'
 forbid 'holds even when no conductor is running'
 need 'If it failed twice, append `- build graph for <id> @ none`'
 need '`checkpoint-<n>`, whose output is a session id'
-# P2/P3/I1: the escalation ladder, counted since the newest merge; no stopped on a restart.
-need '**Rung 1: restart.**'
+# P2/P3/I1/C1/N2: the escalation ladder. beat.sh is the one place the rung is computed and the
+# restart line written; the prose says what each rung does, not how to count.
+need '**Rung 1: restart**, with cause `death` or `stall`.'
 need '**Rung 2: investigate, apply the remedy, restart.**'
-need '**Rung 3: stop.** Do not restart.'
+need '**Rung 3: stop.** Do not restart. If its name is listed (a stall), stop it'
 need 'claude logs <short id>'
-need 'cause: denied command <command> | usage limit | hung process <pid> <command> | defect <the task and what it keeps hitting> | unknown'
+need 'cause: denied command <command> | usage limit | hung process <command> | defect <the task and what it keeps hitting> | unknown'
 need 'It reads only, so a death mid-investigation just dispatches it again'
-need 'A merge resets the ladder'
+need 'the report'"'"'s `rung` field is the rung this one is on'
+need 'so you never count lines or copy a key yourself'
+need 'sh <skill dir>/beat.sh <ledger dir> restart <unit-slug> <cause>'
+need 'launch it again from step 4 below, with no new rung'
 need 'Ledger the unit `stopped` only when it will not be restarted'
-need 'A restart the last conductor ledgered but never saw through is not a new rung'
-need 'Ledger the restart under `## Supervision` before the launch'
 forbid 'second consecutive'
 forbid 'Ledger it as `stopped`.'
+forbid 'one more than the `- restarted'
+# N4: a usage limit waits for the reset, unwatched, and restarts with no rung.
+need 'sh <skill dir>/beat.sh <ledger dir> wait <unit-slug> <minutes>'
+need 'At `wait over`, restart it with cause `usage-limit`, which climbs no rung'
+# m3: strays are found again when killed, never by a remembered pid.
+need 'kill-strays <unit-slug>`, which stops every process without a terminal whose working directory is in the unit'"'"'s worktree, found again at the time it runs, never by a remembered pid'
+# m7: the worktree comes from the Units line.
+need 'worktree <absolute path>, start <sha>'
 for s in '- fork <fork name> started <date-time>' '- fork <fork name> exited [<status>]: output | no output | stopped at resume' \
          '- status asked <unit-slug>' '- stalled <unit-slug>' \
-         '- restarted <unit-slug>: <death|stall|cause>, rung <n>, since <sha|start>' \
-         '- restarted <unit-slug>: usage limit, since <sha|start>' \
-         '- investigated <unit-slug>: <cause> — <remedy>, since <sha|start>' \
-         '- stopped <unit-slug>: rung 3, since <sha|start>' '- plan <unit-slug>: <plan path> at <sha>' \
+         '- restarted <unit-slug>: <cause>, rung <n>, since <sha|start> gen <k>' \
+         '- restarted <unit-slug>: usage-limit, since <sha|start> gen <k>' \
+         '- waiting reset <unit-slug> until <epoch>' \
+         '- investigated <unit-slug>: <cause> — <remedy>' \
+         '- stopped <unit-slug>: rung 3' '- plan <unit-slug>: <plan path> at <sha>' \
          '- resent to <session name>' '- notified <session name>: sibling <sibling name>' \
          '- fix round <unit-slug> @ <sha>: <one line>; output <path>' '- build graph for <id> @ <sha|none>'; do
   printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \

@@ -4,16 +4,20 @@
 # and decides nothing the skill does not define here as arithmetic. Stock macOS: sh + perl.
 #
 # Usage (<dir> is the ledger dir, <project>/.superpowers/superconductor/<design-slug>):
-#   beat.sh <dir>                     report: unit, row, fork, question, resend and timer lines, then "beat:"
-#   beat.sh <dir> seen <unit-slug>    progress seen (a message handled, a restart): rewrite its beat file
-#   beat.sh <dir> asked <unit-slug>   a status ask was sent: record it
-#   beat.sh <dir> resume              Phase 0: stop the old timer, restart every beat file, drop asks
-#   beat.sh <dir> timer <seconds>     the heartbeat timer; run it in the background
-#   beat.sh <dir> stop-timer          stop the timer, if one runs
-#   beat.sh <dir> fork <name> <cmd>   run a fork under FORK_LIMIT in its own process group
-#   beat.sh <dir> stop-fork <name>    stop a fork's process group (TERM, then KILL)
-#   beat.sh changed <marker>          operator: print one file under the cwd changed since
-#                                     <marker> (none: print nothing), then touch <marker>
+#   beat.sh <dir>                       report: unit, row, fork, question and timer lines, then "beat:"
+#   beat.sh <dir> seen <unit-slug>      progress seen (a message handled, a restart): rewrite its beat file
+#   beat.sh <dir> asked <unit-slug>     a status ask was sent: record it
+#   beat.sh <dir> resume                Phase 0: stop the old timer, restart every beat file, drop asks
+#   beat.sh <dir> restart <unit> <cause>  ledger a restart; the script writes its rung and key
+#   beat.sh <dir> wait <unit> <minutes> ledger a unit waiting for a usage reset that far ahead
+#   beat.sh <dir> strays <unit>         list processes left running in the unit's worktree
+#   beat.sh <dir> kill-strays <unit>    stop them (TERM, then KILL)
+#   beat.sh <dir> timer <seconds>       the heartbeat timer; run it in the background
+#   beat.sh <dir> stop-timer            stop the timer, if one runs
+#   beat.sh <dir> fork <name> <cmd>     run a fork under FORK_LIMIT in its own process group
+#   beat.sh <dir> stop-fork <name>      stop a fork's process group (TERM, then KILL)
+#   beat.sh changed <marker>            operator: print one file under the cwd changed since
+#                                       <marker> (none: print nothing), then touch <marker>
 set -u
 BEAT=600
 STALL_BEATS=1
@@ -34,29 +38,28 @@ fi
 
 dir=$(cd "$1" 2>/dev/null && pwd -P) || die "no ledger dir: $1"
 shift
-design=$(basename "$dir")
-project=$(cd "$dir/../../.." && pwd -P)
-wt() { echo "$project/.claude/worktrees/$design-$1"; }
+self=$0
+pl() { exec perl -x -MJSON::PP "$self" "$@"; }
+# The package worktree's index lock, which a KILLed git commit leaves behind.
+pkglock() {
+  pkg=$(sed -n 's/^Package worktree: //p' "$dir/ledger.md" 2>/dev/null | head -n 1)
+  [ -n "$pkg" ] && git -C "$pkg" rev-parse --path-format=absolute --git-path index.lock 2>/dev/null
+}
 
 case "${1:-report}" in
-report) ;;
-seen)
-  [ $# -eq 2 ] || die "usage: beat.sh <dir> seen <unit-slug>"
-  mkdir -p "$dir/assignments"
-  git -C "$(wt "$2")" rev-parse HEAD > "$dir/assignments/$2.beat" 2>/dev/null || : > "$dir/assignments/$2.beat"
-  exit 0 ;;
-asked)
-  [ $# -eq 2 ] || die "usage: beat.sh <dir> asked <unit-slug>"
-  mkdir -p "$dir/assignments"; touch "$dir/assignments/$2.asked"; exit 0 ;;
+report)
+  agents=$(claude agents --json 2>/dev/null) && sessions=ok || { agents=; sessions=unknown; }
+  timer=none; deadline=-
+  if [ -f "$dir/timer" ] && pgrep -F "$dir/timer" -x sleep >/dev/null 2>&1; then
+    timer=running; deadline=$(cut -d' ' -f2 "$dir/timer")
+  fi
+  AGENTS=$agents SESSIONS=$sessions pl report "$dir" "$BEAT" "$STALL_BEATS" "$timer" "$deadline" ;;
+seen|asked|restart|wait|strays|kill-strays)
+  [ $# -ge 2 ] || die "usage: beat.sh <dir> $1 <unit-slug> ..."
+  pl "$@" "$dir" ;;
 resume)
   [ -f "$dir/timer" ] && pkill -F "$dir/timer" -x sleep 2>/dev/null
-  for b in "$dir"/assignments/*.beat; do
-    [ -f "$b" ] || continue
-    u=$(basename "$b" .beat)
-    git -C "$(wt "$u")" rev-parse HEAD > "$b" 2>/dev/null || : > "$b"
-    rm -f "$dir/assignments/$u.asked"
-  done
-  exit 0 ;;
+  pl resume x "$dir" ;;
 timer)
   [ $# -eq 2 ] || die "usage: beat.sh <dir> timer <seconds>"
   exec perl -e '($f,$s)=@ARGV; open(T,q(>),$f) or die; print T $$, q( ), time+$s, qq(\n); close T; exec(q(sleep),$s)' "$dir/timer" "$2" ;;
@@ -66,23 +69,32 @@ fork)
   [ $# -ge 3 ] || die "usage: beat.sh <dir> fork <name> <command...>"
   name=$2; shift 2
   mkdir -p "$dir/prompts"
-  exec perl -e '($t,$f)=splice(@ARGV,0,2); $p=fork; if(!$p){setpgrp; exec(@ARGV) or exit 127} open(P,q(>),$f); print P qq($p\n); close P; $k=sub{kill(TERM=>-$p); sleep 5; kill(KILL=>-$p); exit $_[0]}; $SIG{ALRM}=sub{$k->(124)}; $SIG{$_}=sub{$k->(143)} for qw(TERM HUP INT); alarm $t; waitpid($p,0); exit($?&127 ? 128+($?&127) : $?>>8)' \
-    "$FORK_LIMIT" "$dir/prompts/$name.pid" "$@" ;;
+  # Only an amending fork may hold the package worktree's lock; clear it if KILL was needed.
+  case "$name" in rule-*|graph-*) lock=$(pkglock) ;; *) lock= ;; esac
+  # The fork runs in its own process group. On the limit or a signal the whole group is
+  # stopped (exit 124 / 143); on the fork's own exit any leftover member is stopped too,
+  # and the fork's status is kept (128 + n for a death by signal n).
+  exec perl -e '
+    ($t, $f, $lock) = splice(@ARGV, 0, 3);
+    $p = fork; if (!$p) { setpgrp; exec(@ARGV) or exit 127 }
+    open(P, q(>), $f); print P qq($p\n); close P;
+    sub sweep { return unless kill(0, -$p); kill(TERM => -$p);
+      for (1..5) { last unless kill(0, -$p); sleep 1 }
+      if (kill(0, -$p)) { kill(KILL => -$p); unlink $lock if length $lock } }
+    $SIG{ALRM} = sub { sweep(); exit 124 };
+    $SIG{$_} = sub { sweep(); exit 143 } for qw(TERM HUP INT);
+    alarm $t; waitpid($p, 0); my $st = $?; alarm 0; sweep();
+    exit($st & 127 ? 128 + ($st & 127) : $st >> 8)' \
+    "$FORK_LIMIT" "$dir/prompts/$name.pid" "$lock" "$@" ;;
 stop-fork)
   [ $# -eq 2 ] || die "usage: beat.sh <dir> stop-fork <name>"
-  pf="$dir/prompts/$2.pid"
-  pg=$(cat "$pf" 2>/dev/null)
+  pg=$(cat "$dir/prompts/$2.pid" 2>/dev/null)
   if [ -z "$pg" ] || ! pgrep -g "$pg" >/dev/null 2>&1; then echo "not running $2"; exit 0; fi
   pkill -TERM -g "$pg"
   i=0; while pgrep -g "$pg" >/dev/null 2>&1 && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
   if pgrep -g "$pg" >/dev/null 2>&1; then
     pkill -KILL -g "$pg"; sleep 1
-    # A KILLed git commit leaves the package worktree's index lock behind.
-    pkg=$(sed -n 's/^Package worktree: //p' "$dir/ledger.md" | head -n 1)
-    if [ -n "$pkg" ]; then
-      lock=$(git -C "$pkg" rev-parse --path-format=absolute --git-path index.lock 2>/dev/null)
-      [ -n "$lock" ] && rm -f "$lock"
-    fi
+    case "$2" in rule-*|graph-*) lock=$(pkglock); [ -n "$lock" ] && rm -f "$lock" ;; esac
     echo "killed $2"
   else
     echo "stopped $2"
@@ -90,144 +102,247 @@ stop-fork)
   exit 0 ;;
 *) die "unknown command: $1" ;;
 esac
+exit 0
 
-# --- report ---------------------------------------------------------------------------
-agents=$(claude agents --json 2>/dev/null) || agents='[]'
-timer=none; deadline=-
-if [ -f "$dir/timer" ] && pgrep -F "$dir/timer" -x sleep >/dev/null 2>&1; then
-  timer=running; deadline=$(cut -d' ' -f2 "$dir/timer")
-fi
-AGENTS=$agents exec perl -MJSON::PP -e '
+# The perl half: `perl -x` starts at the next line; sh reads it as an unused here-document.
+: <<'PERL'
+#!perl
 use strict; use warnings;
-my ($dir, $project, $design, $beat, $stall, $timer, $deadline) = @ARGV;
-my $now = time;
-my %sess;
-my $list = eval { JSON::PP->new->decode($ENV{AGENTS} || "[]") } || [];
-$list = [] unless ref $list eq "ARRAY";
-for my $a (@$list) { next unless ref $a eq "HASH" && defined $a->{name};
-  $sess{$a->{name}} = join("/", grep { defined && length } $a->{status}, $a->{state}) || "-"; }
-
-open(my $L, "<", "$dir/ledger.md") or die "beat.sh: no ledger.md in $dir\n";
-my (%sec, $cur); my @order;
-while (my $l = <$L>) { chomp $l;
-  if ($l =~ /^## (.+)$/) { $cur = $1; next }
-  next unless defined $cur; push @{ $sec{$cur} }, $l; }
-close $L;
+use File::Glob qw(bsd_glob);
+my $mode = shift @ARGV;
 my $w = qr/(?![a-z0-9-])/;
+# Run a command without a shell, stderr discarded; return its output lines.
+sub run { my $pid = open(my $F, "-|"); return () unless defined $pid;
+  if (!$pid) { open(STDERR, ">", "/dev/null"); exec(@_) or exit 127 }
+  my @o = <$F>; close $F; chomp @o; @o }
 
-# Units: newest entry per slug, continuation lines folded in.
-my (%unit, @slugs, $last);
-for my $l (@{ $sec{Units} || [] }) {
-  if ($l =~ /^- ([a-z0-9-]+):/) { $last = $1; push @slugs, $1 unless exists $unit{$1}; $unit{$1} = $l; }
-  elsif (defined $last && $l =~ /^\s+\S/) { $unit{$last} .= " " . ($l =~ s/^\s+//r); }
+# ---- the ledger ----------------------------------------------------------------------
+my ($dir, $design, $project, %sec, @order);
+sub load {
+  $dir = shift;
+  ($design = $dir) =~ s{.*/}{};
+  ($project = $dir) =~ s{/[^/]+/[^/]+/[^/]+$}{};
+  open(my $L, "<", "$dir/ledger.md") or die "beat.sh: no ledger.md in $dir\n";
+  my $cur;
+  while (my $l = <$L>) { chomp $l;
+    if ($l =~ /^## (.+)$/) { $cur = $1; push @order, $cur; next }
+    push @{ $sec{$cur // "" } }, $l; }
+  close $L;
 }
-my @sup = @{ $sec{Supervision} || [] };
-my @int = @{ $sec{Integration} || [] };
-
-sub mtime { my @s = stat $_[0]; return @s ? $s[9] : undef }
-sub newest_merged { my $u = shift; my $sha = "start";
-  for (@int) { $sha = $1 if /^- merged \Q$u\E$w.*?@ ([0-9a-f]+)/ } return $sha }
-sub fixround_open { my $u = shift; my $open = 0;
-  for (@int) { $open = 1 if /^- fix round \Q$u\E$w/; $open = 0 if /^- merged \Q$u\E$w/ } return $open }
-
-# Rows merged so far, in ledger order.
-my %rowmerged;
-my %produces;
-for my $u (@slugs) { my ($p) = $unit{$u} =~ /produces: ([^)]*)/;
-  $produces{$u} = [ grep { length && $_ ne "none" } map { s/^\s+|\s+$//gr } split /,/, ($p // "") ]; }
-for (@int) {
-  if (/^- merged ([a-z0-9-]+) row (\S+) @/) { $rowmerged{$2} = 1 }
-  elsif (/^- merged ([a-z0-9-]+) @/) { $rowmerged{$_} = 1 for @{ $produces{$1} || [] } }
-  elsif (/^- unmerged row (\S+?):/) { $rowmerged{$1} = 0 }
-}
-
-my %n = map { $_ => 0 } qw(watched absent evidence due overdue rows forks_running forks_gone fixrounds deferred questions resends);
-for my $u (@slugs) {
-  my ($st) = $unit{$u} =~ /status: ([a-z]+)/; $st //= "-";
-  $n{deferred}++ if $st eq "deferred";
-  my $fix = fixround_open($u);
-  next unless $st eq "planning" || $st eq "admitted" || $fix;
-  $n{watched}++; $n{fixrounds}++ if $fix;
-  my $name = "$design-$u"; my $wt = "$project/.claude/worktrees/$name";
-  my $alive = exists $sess{$name}; $n{absent}++ unless $alive;
-  my $state = $alive ? $sess{$name} : "-";
-  my $plan = (grep { /^- plan \Q$u\E$w/ } @sup) ? "yes" : "no";
-  my $progress = !($st eq "planning" && $plan eq "yes");
-  my $bf = "$dir/assignments/$u.beat"; my $af = "$dir/assignments/$u.asked";
-  my $head = `git -C "$wt" rev-parse HEAD 2>/dev/null`; chomp $head;
-  my $evidence = "no";
-  if (!-e $bf) { $evidence = "new" }
-  else {
-    open(my $B, "<", $bf); my $old = <$B> // ""; close $B; chomp $old;
-    if ($head ne $old) { $evidence = "yes" }
-    elsif (-d $wt) {
-      my $hit = `find "$wt" \\( -name .git -o -name node_modules \\) -prune -o -type f -newer "$bf" -print -quit 2>/dev/null`;
-      $evidence = "yes" if length $hit;
-    }
-  }
-  if ($evidence ne "no") { mkdir "$dir/assignments"; open(my $B, ">", $bf); print $B "$head\n"; close $B; $n{evidence}++; }
-  my $quiet = int(($now - mtime($bf)) / 60);
-  my $ask = "none"; my $asked = "-";
-  my ($bm, $am) = (mtime($bf), mtime($af));
-  if (defined $am && $am > $bm) {
-    my $age = $now - $am; $asked = int($age / 60);
-    my $busy = $state =~ /\bbusy\b/;
-    $ask = ($age >= 2 * $beat || ($age >= $beat && !$busy)) ? "overdue" : "open";
-  } elsif ($progress && $evidence eq "no" && $now - $bm >= $stall * $beat) { $ask = "due" }
-  $n{due}++ if $ask eq "due"; $n{overdue}++ if $ask eq "overdue";
-  my $since = newest_merged($u);
-  my $rung = 1 + scalar grep { /^- restarted \Q$u\E$w.*rung \d+, since \Q$since\E$/ } @sup;
-  printf "unit %s status %s session %s state %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d\n",
-    $u, $st, ($alive ? "alive" : "absent"), $state, $evidence, $quiet, $ask, $asked, $plan, ($fix ? "open" : "none"), $rung;
-
-  # Rows the SDD ledger shows passed review that no merge has delivered.
-  for my $pp (glob("$wt/.superpowers/sdd/*/plan-path")) {
-    open(my $P, "<", $pp) or next; my $rel = <$P> // ""; close $P; chomp $rel;
-    my $planf = $rel =~ m{^/} ? $rel : "$wt/$rel";
-    (my $prog = $pp) =~ s/plan-path$/progress.md/;
-    open(my $PF, "<", $planf) or next; my @pl = <$PF>; close $PF;
-    my @done = -f $prog ? do { open(my $G, "<", $prog); <$G> } : ();
-    for my $r (@{ $produces{$u} }) {
-      next if $rowmerged{$r};
-      my ($task, $cand);
-      for (@pl) { $cand = $1 if /^#+\s*Task\s+(\d+)\b/;
-        if (/Delivers row \Q$r\E(?![A-Za-z0-9-])/) { $task = $cand; last } }
-      next unless defined $task;
-      for (@done) { if (/^Task \Q$task\E: complete \(commits [0-9a-f]+\.\.([0-9a-f]+)/) {
-        print "row $u $r task $task head $1\n"; $n{rows}++; last } }
-    }
+my (%unit, @slugs);
+sub units {
+  my $last;
+  for my $l (@{ $sec{Units} || [] }) {
+    if ($l =~ /^- ([a-z0-9-]+):/) { $last = $1; push @slugs, $1 unless exists $unit{$1}; $unit{$1} = $l }
+    elsif (defined $last && $l =~ /^\s+\S/) { $unit{$last} .= " " . ($l =~ s/^\s+//r) }
   }
 }
+sub status { my ($st) = ($unit{$_[0]} // "") =~ /status: ([a-z]+)/; $st // "-" }
+# The unit's worktree: the Units line's `worktree <path>, start` field, else the convention.
+sub wt { my $u = shift;
+  return $1 if ($unit{$u} // "") =~ /\bworktree (\/.+?), start /;
+  return "$project/.claude/worktrees/$design-$u"; }
+sub head { my ($h) = run("git", "-C", shift, "rev-parse", "HEAD"); $h // "" }
+sub writebeat { my ($u, $h) = @_; mkdir "$dir/assignments";
+  open(my $B, ">", "$dir/assignments/$u.beat") or die; print $B "$h\n"; close $B }
+sub mtime { my @s = stat $_[0]; @s ? $s[9] : undef }
+my @sup; my @int;
+# The ladder's key: the unit's newest merge (the sha exactly as its merged line has it) and
+# how many times it has been replaced. A merge or a replacement starts the ladder again.
+sub key { my $u = shift; my $sha = "start";
+  for (@int) { $sha = $1 if /^- merged \Q$u\E$w.*?@ ([0-9a-f]+)/ }
+  my $gen = () = grep { /^- \Q$u\E$w:.*status: replaced/ } @{ $sec{Units} || [] };
+  ("$sha", $gen) }
+sub rung { my $u = shift; my ($sha, $gen) = key($u);
+  1 + scalar grep { /^- restarted \Q$u\E$w: .*, rung \d+, since (\S+) gen (\d+)\s*$/ && $1 eq $sha && $2 == $gen } @sup }
+# A restart or relaunch is seen through once a `resent to <session>` line follows it.
+sub pending { my $u = shift; my $s = "$design-$u"; my $p = 0;
+  for (@sup) { $p = 1 if /^- (?:restarted|relaunched) \Q$u\E$w/; $p = 0 if /^- resent to \Q$s\E\s*$/ } $p }
+# Waiting for a usage reset: the newest `waiting reset` line with no later `restarted` line.
+sub waiting { my $u = shift; my $until;
+  for (@sup) { $until = $1 if /^- waiting reset \Q$u\E$w until (\d+)/; undef $until if /^- restarted \Q$u\E$w/ } $until }
+# Insert a line at the end of ## Supervision (created before ## Questions if missing).
+sub append_sup { my $line = shift;
+  open(my $L, "<", "$dir/ledger.md") or die; my @l = <$L>; close $L;
+  my ($in, $at) = (0, undef);
+  for my $i (0..$#l) {
+    if ($l[$i] =~ /^## (.+)$/) { if ($in) { $at = $i; last } $in = ($1 eq "Supervision") }
+  }
+  if ($in && !defined $at) { $at = @l }
+  if (defined $at) { $at-- while $at > 0 && $l[$at-1] =~ /^\s*$/; splice(@l, $at, 0, "$line\n") }
+  else { my ($q) = grep { $l[$_] =~ /^## Questions$/ } 0..$#l; $q //= scalar @l;
+    splice(@l, $q, 0, "## Supervision\n", "$line\n", "\n") }
+  open(my $O, ">", "$dir/ledger.md.tmp") or die; print $O @l; close $O;
+  rename("$dir/ledger.md.tmp", "$dir/ledger.md") or die; print "$line\n" }
+# Processes left in a unit's worktree: cwd inside it and no controlling terminal.
+sub strays { my $wt = shift; my @r; my ($pid, $cwd);
+  require Cwd; $wt = Cwd::abs_path($wt) // $wt;
+  my %cwd; for (run("lsof", "-w", "-a", "-d", "cwd", "-Fpn")) {
+    if (/^p(\d+)/) { $pid = $1 } elsif (/^n(.*)/ && $pid) { $cwd{$pid} = $1 } }
+  for my $p (sort { $a <=> $b } keys %cwd) {
+    next unless $cwd{$p} eq $wt || index($cwd{$p}, "$wt/") == 0;
+    next if $p == $$;
+    my ($o) = run("ps", "-o", "tty=,command=", "-p", $p); $o //= "";
+    my ($tty, $cmd) = $o =~ /^\s*(\S+)\s+(.*)$/ or next;
+    next unless $tty eq "??" || $tty eq "?";
+    push @r, [$p, $cmd] }
+  @r }
 
-# Forks started and not yet seen to exit.
-my (%fork, %fail, @fnames);
-for (@{ $sec{Forks} || [] }) {
-  next unless /^- fork (\S+) (started|exited)/;
-  my ($f, $ev) = ($1, $2);
-  push @fnames, $f unless exists $fork{$f}; $fork{$f} = $ev;
-  $fail{$f}++ if $ev eq "exited" && /: no output\s*$/;
+if ($mode eq "report") {
+  my ($d, $beat, $stall, $timer, $deadline) = @ARGV; load($d); units();
+  @sup = @{ $sec{Supervision} || [] }; @int = @{ $sec{Integration} || [] };
+  my $now = time;
+  my $known = ($ENV{SESSIONS} // "") eq "ok";
+  my %sess;
+  if ($known) {
+    my $list = eval { JSON::PP->new->decode($ENV{AGENTS}) };
+    if (ref $list eq "ARRAY") {
+      for my $a (@$list) { next unless ref $a eq "HASH" && defined $a->{name};
+        $sess{$a->{name}} = join("/", grep { defined && length } $a->{status}, $a->{state}) || "-" }
+    } else { $known = 0 }
+  }
+  my %fixopen; for my $u (@slugs) { my $o = 0;
+    for (@int) { $o = 1 if /^- fix round \Q$u\E$w/; $o = 0 if /^- merged \Q$u\E$w/ } $fixopen{$u} = $o }
+  my (%produces, %needs, %rowmerged);
+  for my $u (@slugs) {
+    for ([\%produces, "produces"], [\%needs, "needs"]) { my ($h, $k) = @$_;
+      my ($v) = $unit{$u} =~ /\b$k: (.*?)(?:,\s*[a-z]+:|\)|$)/;
+      $h->{$u} = [ grep { length && $_ ne "none" } map { s/^\s+|\s+$//gr } split /,/, ($v // "") ] } }
+  for (@int) {
+    if (/^- merged [a-z0-9-]+ row (\S+) @/) { $rowmerged{$1} = 1 }
+    elsif (/^- merged ([a-z0-9-]+) @/) { $rowmerged{$_} = 1 for @{ $produces{$1} || [] } }
+    elsif (/^- unmerged row (\S+?):/) { $rowmerged{$1} = 0 }
+  }
+  my %n = map { $_ => 0 } qw(watched absent evidence due overdue rows forks_running forks_gone
+    fixrounds deferred questions waiting movable);
+  my $next = "-";
+  for my $u (@slugs) {
+    my $st = status($u); $n{deferred}++ if $st eq "deferred";
+    my $fix = $fixopen{$u};
+    next unless $st eq "planning" || $st eq "admitted" || $fix;
+    $n{watched}++; $n{fixrounds}++ if $fix;
+    my $name = "$design-$u"; my $wt = wt($u);
+    my $session = !$known ? "unknown" : exists $sess{$name} ? "alive" : "absent";
+    my $state = $session eq "alive" ? $sess{$name} : "-";
+    my $until = waiting($u);
+    my $wait = !defined $until ? "none" : $until > $now ? "until-$until" : "over";
+    if (defined $until && $until > $now) { $n{waiting}++; $next = $until if $next eq "-" || $until < $next }
+    $n{absent}++ if $session eq "absent" && $wait eq "none";
+    my $plan = (grep { /^- plan \Q$u\E$w/ } @sup) ? "yes" : "no";
+    my $progress = !($st eq "planning" && $plan eq "yes") && $wait eq "none";
+    my $bf = "$dir/assignments/$u.beat"; my $af = "$dir/assignments/$u.asked";
+    my $head = head($wt); my $evidence = "no";
+    if (!-e $bf) { $evidence = "new" }
+    else {
+      open(my $B, "<", $bf); my $old = <$B> // ""; close $B; chomp $old;
+      if ($head ne $old) { $evidence = "yes" }
+      elsif (-d $wt) {
+        my ($hit) = run("find", $wt, "(", "-name", ".git", "-o", "-name", "node_modules", ")",
+          "-prune", "-o", "-type", "f", "-newer", $bf, "-print", "-quit");
+        $evidence = "yes" if defined $hit && length $hit } }
+    if ($evidence ne "no") { writebeat($u, $head); $n{evidence}++ }
+    my ($bm, $am) = (mtime($bf), mtime($af));
+    my $quiet = int(($now - $bm) / 60);
+    my $ask = "none"; my $asked = "-";
+    if (defined $am && $am > $bm && $wait eq "none") {
+      my $age = $now - $am; $asked = int($age / 60);
+      my $busy = $state =~ /\bbusy\b/;
+      $ask = ($age >= 2 * $beat || ($age >= $beat && !$busy)) ? "overdue" : "open";
+    } elsif ($progress && $evidence eq "no" && $now - $bm >= $stall * $beat) { $ask = "due" }
+    $n{due}++ if $ask eq "due"; $n{overdue}++ if $ask eq "overdue";
+    # Can it move without the partner? Waiting on a reset, or planned and waiting on rows
+    # that no live unit produces, it cannot.
+    my $movable = "yes";
+    if ($wait =~ /^until/) { $movable = "no" }
+    elsif ($st eq "planning" && $plan eq "yes" && !$fix) {
+      my @open = grep { !$rowmerged{$_} } @{ $needs{$u} };
+      my %live = map { my $s = status($_); ($s eq "planning" || $s eq "admitted") ? ($_ => 1) : () } @slugs;
+      $movable = (grep { my $r = $_; grep { $live{$_} && grep { $_ eq $r } @{ $produces{$_} } } @slugs } @open) ? "yes" : "no" }
+    $n{movable}++ if $movable eq "yes";
+    my ($sha, $gen) = key($u);
+    printf "unit %s status %s session %s state %s evidence %s quiet %d ask %s asked %s plan %s fixround %s rung %d restart %s wait %s movable %s\n",
+      $u, $st, $session, $state, $evidence, $quiet, $ask, $asked, $plan, ($fix ? "open" : "none"),
+      rung($u), (pending($u) ? "pending" : "none"), $wait, $movable;
+
+    # Rows the SDD ledger shows passed review that no merge has delivered.
+    for my $pp (bsd_glob("$wt/.superpowers/sdd/*/plan-path")) {
+      open(my $P, "<", $pp) or next; my $rel = <$P> // ""; close $P; chomp $rel;
+      my $planf = $rel =~ m{^/} ? $rel : "$wt/$rel";
+      (my $prog = $pp) =~ s/plan-path$/progress.md/;
+      open(my $PF, "<", $planf) or next; my @pl = <$PF>; close $PF;
+      my @done = -f $prog ? do { open(my $G, "<", $prog); <$G> } : ();
+      for my $r (@{ $produces{$u} }) {
+        next if $rowmerged{$r};
+        my ($task, $cand);
+        for (@pl) { $cand = $1 if /^#+\s*Task\s+(\d+)\b/;
+          if (/Delivers row \Q$r\E(?![A-Za-z0-9-])/) { $task = $cand; last } }
+        next unless defined $task;
+        for (@done) { if (/^Task \Q$task\E: complete \(commits [0-9a-f]+\.\.([0-9a-f]+)/) {
+          print "row $u $r task $task head $1\n"; $n{rows}++; last } }
+      }
+    }
+  }
+  # Forks started and not yet seen to exit. An attempt after the first is named <name>@<k>.
+  my (%fork, %fail, @fnames);
+  for (@{ $sec{Forks} || [] }) {
+    next unless /^- fork (\S+) (started|exited)/;
+    my ($f, $ev) = ($1, $2); (my $base = $f) =~ s/@\d+$//;
+    push @fnames, $f unless exists $fork{$f}; $fork{$f} = $ev;
+    $fail{$base}++ if $ev eq "exited" && /: no output\s*$/;
+  }
+  for my $f (@fnames) {
+    next unless $fork{$f} eq "started";
+    (my $base = $f) =~ s/@\d+$//;
+    my $pg = ""; my $state;
+    if (open(my $P, "<", "$dir/prompts/$f.pid")) { $pg = <$P> // ""; close $P; chomp $pg }
+    if ($pg !~ /^\d+$/) { $state = "unstarted" }
+    else { $state = system("pgrep -g $pg >/dev/null 2>&1") == 0 ? "running" : "gone" }
+    printf "fork %s %s failures %d\n", $f, $state, $fail{$base} // 0;
+    $n{ $state eq "running" ? "forks_running" : "forks_gone" }++;
+  }
+  # Question files with no ## Questions line.
+  my @q = @{ $sec{Questions} || [] };
+  for my $qf (sort(bsd_glob("$dir/questions/*.md"))) {
+    (my $id = $qf) =~ s{.*/}{}; $id =~ s/\.md$//;
+    next if grep { /(?<![a-z0-9-])\Q$id\E(?![a-z0-9-])/ } @q;
+    print "question $id\n"; $n{questions}++;
+  }
+  print "timer $timer deadline $deadline\n";
+  printf "beat: sessions %s watched %d absent %d evidence %d due %d overdue %d rows %d forks running %d gone %d fixrounds %d deferred %d questions %d waiting %d next-reset %s movable %d timer %s\n",
+    ($known ? "ok" : "unknown"), @n{qw(watched absent evidence due overdue rows forks_running forks_gone fixrounds deferred questions waiting)},
+    $next, $n{movable}, $timer;
+  exit 0;
 }
-for my $f (@fnames) {
-  next unless $fork{$f} eq "started";
-  my $pg = ""; if (open(my $P, "<", "$dir/prompts/$f.pid")) { $pg = <$P> // ""; close $P; chomp $pg; }
-  my $run = ($pg =~ /^\d+$/ && system("pgrep -g $pg >/dev/null 2>&1") == 0);
-  printf "fork %s %s failures %d\n", $f, ($run ? "running" : "gone"), $fail{$f} // 0;
-  $n{ $run ? "forks_running" : "forks_gone" }++;
-}
-# Question files with no ## Questions line, and sessions owed resends after a restart.
-my @q = @{ $sec{Questions} || [] };
-for my $qf (sort glob("$dir/questions/*.md")) {
-  (my $id = $qf) =~ s{.*/}{}; $id =~ s/\.md$//;
-  next if grep { /(?<![a-z0-9-])\Q$id\E(?![a-z0-9-])/ } @q;
-  print "question $id\n"; $n{questions}++;
-}
-my (%owe, @owed);
-for (@sup) {
-  if (/^- (?:restarted|relaunched) ([a-z0-9-]+)(?![a-z0-9-])/) { my $s = "$design-$1"; push @owed, $s unless exists $owe{$s}; $owe{$s} = 1 }
-  elsif (/^- resent to (\S+)\s*$/) { $owe{$1} = 0 }
-}
-for (@owed) { if ($owe{$_}) { print "resend $_\n"; $n{resends}++ } }
-print "timer $timer deadline $deadline\n";
-printf "beat: watched %d absent %d evidence %d due %d overdue %d rows %d forks running %d gone %d fixrounds %d deferred %d questions %d resends %d timer %s\n",
-  @n{qw(watched absent evidence due overdue rows forks_running forks_gone fixrounds deferred questions resends)}, $timer;
-' "$dir" "$project" "$design" "$BEAT" "$STALL_BEATS" "$timer" "$deadline"
+
+my $u = shift @ARGV;
+die "beat.sh: bad unit slug: $u\n" unless $u =~ /^[a-z0-9-]+$/ || $mode eq "resume";
+if ($mode eq "restart") {
+  my ($cause, $d) = @ARGV; load($d); units(); @sup = @{ $sec{Supervision} || [] }; @int = @{ $sec{Integration} || [] };
+  die "beat.sh: bad cause: $cause\n" unless $cause =~ /^(death|stall|usage-limit|denied-command|hung-process|defect|unknown)$/;
+  my ($sha, $gen) = key($u);
+  # A usage-limit restart climbs no rung; every other restart takes the unit's next rung.
+  append_sup($cause eq "usage-limit" ? "- restarted $u: usage-limit, since $sha gen $gen"
+                                     : "- restarted $u: $cause, rung " . rung($u) . ", since $sha gen $gen");
+} elsif ($mode eq "wait") {
+  my ($min, $d) = @ARGV; die "beat.sh: minutes must be a number\n" unless $min =~ /^\d+$/;
+  load($d); append_sup("- waiting reset $u until " . (time + 60 * $min));
+} elsif ($mode eq "seen" || $mode eq "asked") {
+  my ($d) = @ARGV; load($d); units(); mkdir "$dir/assignments";
+  if ($mode eq "seen") { writebeat($u, head(wt($u))) }
+  else { my $f = "$dir/assignments/$u.asked"; open(my $A, ">>", $f); close $A; utime(undef, undef, $f) }
+} elsif ($mode eq "resume") {
+  my ($d) = @ARGV; load($d); units();
+  for my $bf (bsd_glob("$dir/assignments/*.beat")) {
+    (my $s = $bf) =~ s{.*/}{}; $s =~ s/\.beat$//;
+    writebeat($s, head(wt($s))); unlink "$dir/assignments/$s.asked" }
+} elsif ($mode eq "strays" || $mode eq "kill-strays") {
+  my ($d) = @ARGV; load($d); units();
+  my $wt = wt($u); my @s = strays($wt);
+  if ($mode eq "strays") { print "stray $_->[0] $_->[1]\n" for @s; exit 0 }
+  my @p = map { $_->[0] } @s; kill(TERM => @p) if @p;
+  for (1..5) { @p = grep { kill(0, $_) } @p; last unless @p; sleep 1 }
+  kill(KILL => @p) if @p;
+  print "stopped ", scalar(@s), " in $wt\n";
+} else { die "beat.sh: unknown command: $mode\n" }
+__END__
+PERL
