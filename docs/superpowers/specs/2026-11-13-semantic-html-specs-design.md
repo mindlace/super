@@ -337,11 +337,15 @@ that switch is deliberately not part of this project.
 
 - This project adds `docs/spec-format.md`: the format section above as a
   standalone reference an agent can be pointed at, with one complete example.
-- It does **not** touch `~/.claude/CLAUDE.md`. Specs and plans keep being
-  written in markdown until this has shipped. Turning HTML on afterwards is
-  one override there, pointing the spec-writing skills at
-  `~/Projects/spec_reader/docs/spec-format.md`; whether plans follow is
-  decided then.
+- Specs and plans keep being written in markdown until this has shipped.
+- Turning HTML on afterwards is a follow-on piece of work, not part of this
+  plan. It is to be baked into superpowers rather than added to
+  `~/.claude/CLAUDE.md`: a SessionStart hook injects the instruction to write
+  design docs as `.html` per the format reference, the way the
+  `superpowers-jev` plugin injects its own session context. Whether plans
+  follow is decided then.
+- So `docs/spec-format.md` must stand alone: an agent given only that file
+  can write a valid spec.
 - Until then the reader is exercised with hand-converted specs, starting with
   the saved mockup's `article`.
 
