@@ -108,12 +108,17 @@ subagent cache.
                                                       implementer -> reviewer -> fix loop
 ```
 
-- **Composer checkpoint.** The composer co-designs the package with the partner as today. When
-  the package is committed it stops and records its session id in the ledger. From then on it
-  is never resumed in place and never receives a result.
+- **Composer.** Co-designs the package with the partner as today, commits it, and ends. It
+  must write the partner's reasons into the design doc, because nothing after this point sees
+  the conversation.
+- **Composer checkpoint.** **(call)** A fresh session that cold-reads the committed package
+  and the codebase survey notes, then stops. Its session id goes in the ledger. It is never
+  resumed in place and never receives a result. It is deliberately not the co-design session:
+  that conversation is also a path, every checkpoint is then the same kind of thing, and a
+  package that cannot be understood cold is a defect worth finding early.
 - **Composer fork.** Each escalation and each merge review runs in a fresh fork of the
-  checkpoint. A fork reads the current package from disk before doing anything, because the
-  checkpoint's in-context copy may be stale.
+  checkpoint. A fork reads the current package from disk before doing anything. Where disk and
+  its inherited context disagree, disk wins; the fork's prompt says so.
 - **Conductor.** A session. Admits specs, starts operators, merges, starts composer forks.
   It no longer issues rulings on the design: anything the specs do not answer goes to a fork.
   **(call)** It keeps purely mechanical rulings, such as "which branch do I rebase on".
@@ -131,8 +136,22 @@ subagent cache.
 4. If the ruling changes the design, the fork rewrites the design doc, specs and contracts as
    current-state text and commits. No "previously", no "changed from", no changelog section in
    the package. Git holds the history.
-5. The fork messages the asker and the conductor: the commit, which sections to re-read, and
-   whether any running spec's approach or interface changed. Then it ends.
+5. The fork writes its ruling to `rulings/<n>.md` beside the question and ends. The ruling
+   gives the commit, the sections to re-read, and, for each running spec whose approach or
+   interface changed, the first task that no longer holds.
+6. The conductor started the fork as a background command, so it is told when the fork exits.
+   It relays a pointer to the ruling to each affected operator. **(call)** Forks do not send
+   messages themselves; messaging from a one-shot fork was not verified.
+
+Mechanics **(call)**:
+
+- The package lives on the integration branch. The conductor keeps one worktree of that
+  branch for the package. Forks run there, and operators read the package from that path, not
+  from the copy in their own older branch.
+- Forks that may amend the package run one at a time. Merge-review forks write nothing to the
+  package and run in parallel; "filing a question" means writing a question file.
+- `rulings/` is the partner's record of what was decided and why. No agent loads it as
+  context. This is where drift is noticed and corrected after the fact.
 
 The operator that asked continues anything that does not depend on the answer while it waits,
 as the operator briefing already requires.
@@ -142,9 +161,12 @@ as the operator briefing already requires.
 - A ruling reaches an operator as "the spec now says X, re-read section Y". Never as a diff
   from the old approach.
 - When a ruling changes a spec's approach or interface, the conductor stops that operator and
-  starts a fresh one on the amended spec; completed tasks that still hold are kept on the
-  branch. Clarifications go to the warm operator. **(call)** This overrides the current
-  "keep operators warm, a cold fix round costs about 3.7x" guidance for approach changes only.
+  starts a fresh one on the amended spec. The ruling names the first task that no longer
+  holds; the branch is cut back to the commit before it and the fresh operator writes a new
+  plan from there. Later tasks are discarded even if some might have survived, so no
+  old-approach code or comments carry over. Clarifications go to the warm operator.
+  **(call)** This overrides the current "keep operators warm, a cold fix round costs about
+  3.7x" guidance for approach changes only.
 - Implementer and reviewer briefs are built from the current spec, never from the message
   thread.
 
@@ -157,17 +179,30 @@ line. A fork that finds drift files it as a question, which goes through adjudic
 
 ### Re-checkpointing
 
-The checkpoint's context holds the original design and goes stale as amendments land.
-**(call)** After any amendment that changes a contract, or after five amendments of any kind,
-the conductor starts a fresh composer session that cold-reads the current package and the
-codebase survey notes, and records it as the new checkpoint. The old one is abandoned.
+The checkpoint's context holds the package as it was when read and goes stale as amendments
+land. **(call)** After any amendment that changes a contract, or after five amendments of any
+kind, the conductor builds a new checkpoint the same way as the first and records it. Forks
+already running finish on the old one. The frame-defect tally stays, kept by the conductor in
+the ledger; a third defect of one class triggers a re-checkpoint and a line to the partner
+instead of a stop.
 
 ### Admission without waves
 
 Waves go away. A spec is admitted as soon as every deliverable it depends on has merged,
 whether that arrived with a finished spec or at a milestone part-way through one. With
 contracts landed first (below), most specs depend only on the contracts commit and are
-admitted at once. The budget gate stays and is applied per admission.
+admitted at once.
+
+What still involves the partner **(open, see the budget question)**: nothing waits on the
+partner except, possibly, the budget gate. The comprehension gate runs once before the first
+admission. Cost calibration is recorded per spec instead of per wave. The conductor posts a
+short summary at each merge instead of at each wave boundary.
+
+Milestones **(call)**: a milestone is a point in the spec's serial task order, so everything
+merged at a milestone has passed its per-task reviews. A merge-review fork runs on it like any
+other merge. The spec's own final review still runs at the end over the whole spec. If a later
+ruling changes a merged milestone, the consumers are affected specs like any other and go
+through the same replacement rule.
 
 ### What the composer does differently when cutting a package
 
@@ -186,8 +221,10 @@ Proposed **(call)**:
 - **A spec that still must produce something mid-way marks it as a milestone.** The operator
   reports the milestone, the conductor merges the branch up to that commit, and the consumers
   are admitted then. The producing operator carries on.
-- **Contracts first.** The interface table becomes a commit of real types, schemas and stubs
-  that lands before any operator starts. Consumers build against the stub.
+- **Contracts first.** The interface table becomes real types, schemas and stubs that land
+  before anything else. **(call)** The composer writes this as a "contracts" spec; one
+  operator builds it with the normal review loop, and every other spec depends on it. Stubs
+  throw "not implemented"; consumers test against the types with their own fakes.
 - **Cut by what gets written.** Each spec lists the files it writes. No two specs that could
   run together write the same file. Shared hotspots (`schema.ts`, migrations, route indexes)
   go into the contracts commit or to one owner spec.
