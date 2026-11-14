@@ -8,7 +8,7 @@
   color-scheme: light;
   background: var(--bg);
   color: var(--fg);
-  font: 17px/1.6 var(--sans);
+  font: 15.5px/1.55 var(--sans);
 }
 @media (prefers-color-scheme: dark) {
   .spec-doc {
@@ -18,15 +18,18 @@
   }
 }
 .spec-doc *, .spec-doc *::before, .spec-doc *::after { box-sizing: border-box; }
-.spec-doc article { max-width: 46rem; margin: 0 auto; padding: 1.5rem 16px 4rem; }
+/* Wide column for tables, code and figures; prose keeps a readable measure inside it. */
+.spec-doc article { max-width: 78rem; margin: 0 auto; padding: 1.25rem clamp(16px, 3vw, 40px) 4rem; }
+.spec-doc :is(p, ul, ol, blockquote, aside, dl) { max-width: 52rem; }
+.spec-doc :is(li, dd, td, aside) :is(p, ul, ol) { max-width: none; }
 
 .spec-doc h1, .spec-doc h2, .spec-doc h3, .spec-doc h4, .spec-doc h5, .spec-doc h6,
 .spec-doc th, .spec-doc caption, .spec-doc figcaption, .spec-doc dt, .spec-doc nav,
 .spec-doc button { font-family: var(--sans); }
 .spec-doc h1, .spec-doc h2, .spec-doc h3, .spec-doc h4, .spec-doc h5, .spec-doc h6 { font-weight: 700; }
-.spec-doc h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .4rem; letter-spacing: -.01em; text-wrap: balance; }
-.spec-doc h2 { font-size: 1.25rem; margin: 2.6rem 0 .6rem; }
-.spec-doc h3 { font-size: 1rem; margin: 1.8rem 0 .4rem; }
+.spec-doc h1 { font-size: 1.75rem; line-height: 1.2; margin: 0 0 .4rem; letter-spacing: -.01em; text-wrap: balance; }
+.spec-doc h2 { font-size: 1.2rem; margin: 2.2rem 0 .5rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+.spec-doc h3 { font-size: 1.02rem; margin: 1.6rem 0 .4rem; }
 .spec-doc h4, .spec-doc h5, .spec-doc h6 { font-size: .95rem; margin: 1.4rem 0 .3rem; }
 .spec-doc header { padding-bottom: 1.2rem; border-bottom: 1px solid var(--rule); }
 .spec-doc header p { color: var(--muted); font: 14px var(--sans); margin: 0; }
@@ -41,7 +44,7 @@
 .spec-doc ul, .spec-doc ol { margin: .7rem 0; padding-left: 1.5rem; }
 .spec-doc ul { list-style: disc; }
 .spec-doc ol { list-style: decimal; }
-.spec-doc li { margin: .25rem 0; }
+.spec-doc li { margin: .2rem 0; }
 .spec-doc li > input[type='checkbox']:first-child { margin: 0 .5em 0 0; vertical-align: baseline; accent-color: var(--ok); }
 .spec-doc ol:has(> li > input[type='checkbox']),
 .spec-doc ul:has(> li > input[type='checkbox']) { list-style: none; padding-left: .25rem; }
@@ -57,10 +60,11 @@
 .spec-doc figure > :is(img, video) { display: block; }
 
 .spec-doc kbd, .spec-doc samp { font: .86em var(--mono); }
-.spec-doc code { font:.86em var(--mono); background: var(--panel); padding: .1em .3em; border-radius: 3px; }
-.spec-doc pre { background: var(--panel); padding: .9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.45; }
+.spec-doc code { font: .88em var(--mono); background: var(--panel); padding: .1em .3em; border-radius: 3px; }
+.spec-doc pre { background: var(--panel); padding: .8rem 1rem; border-radius: 6px; overflow-x: auto;
+  font-size: 13.5px; line-height: 1.6; tab-size: 2; margin: .8rem 0; border: 1px solid var(--rule); }
 .spec-doc pre { font-family: var(--mono); }
-.spec-doc pre code { background: none; padding: 0; }
+.spec-doc pre code { background: none; padding: 0; font-size: inherit; }
 .spec-doc pre.shiki { background: var(--panel) !important; }
 @media (prefers-color-scheme: dark) {
   .spec-doc .shiki, .spec-doc .shiki span { color: var(--shiki-dark) !important; }
@@ -82,9 +86,9 @@
 .spec-doc figure:has(> table) { overflow-x: auto; }
 .spec-doc figcaption, .spec-doc caption { font-size: 13px; color: var(--muted); text-align: left;
   padding: .5rem 0; caption-side: top; }
-.spec-doc table { border-collapse: collapse; width: 100%; font: 14.5px/1.45 var(--sans); }
-.spec-doc th, .spec-doc td { text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
-.spec-doc thead th { border-bottom: 2px solid var(--fg); font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; }
+.spec-doc table { border-collapse: collapse; width: 100%; font: 14px/1.45 var(--sans); }
+.spec-doc th, .spec-doc td { text-align: left; padding: .45rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+.spec-doc thead th { border-bottom: 2px solid var(--fg); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .spec-doc tbody th { font-weight: 600; white-space: nowrap; }
 .spec-doc details { margin: .6rem 0 0; font: 13px var(--sans); color: var(--muted); }
 .spec-doc details pre { font-size: 12px; }
@@ -104,3 +108,4 @@
 .spec-doc svg .edge path { fill: none; stroke: var(--fg); stroke-width: 1.2; marker-end: url(#arrow); }
 .spec-doc svg .edge text { fill: var(--muted); font-size: 11.5px; text-anchor: middle; }
 .spec-doc svg #arrow path { fill: var(--fg); }
+.spec-doc header + section > h2:first-child { border-top: 0; padding-top: 0; }

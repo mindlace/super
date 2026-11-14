@@ -33,7 +33,7 @@ describe('docs/spec-format.md', () => {
   });
 
   it('the plan example has checkboxes, at least one checked', () => {
-    const plan = examples[1];
+    const plan = examples.find((e) => e.includes('<h1>Targeted watches plan</h1>'))!;
     expect(plan).toContain('type="checkbox"');
     expect(plan).toMatch(/<input type="checkbox" checked>/);
   });

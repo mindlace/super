@@ -109,19 +109,22 @@ each piece can be found and checked on its own.
      replaces or keeps an existing one.
 
 ```html
-<section id="sec-if-s14">
-  <h3>S14 Timeline worker messages</h3>
-  <pre><code data-lang="ts">type ToWorker =
+<article>
+  <header><h1>Timeline worker</h1></header>
+  <section id="sec-if-s14">
+    <h2>S14 Timeline worker messages</h2>
+    <pre><code data-lang="ts">type ToWorker =
   | { type: 'setPolicy'; rev: number; policy: SimPolicy4 }
   | { type: 'viewMonth'; month: number };</code></pre>
-  <dl>
-    <dt><code>rev</code></dt><dd>The page's count of policy edits.</dd>
-  </dl>
-  <ul>
-    <li>The worker drops work for an older <code>rev</code>.</li>
-    <li>A rejected document is answered with <code>bad-request</code> at its <code>rev</code>.</li>
-  </ul>
-</section>
+    <dl>
+      <dt><code>rev</code></dt><dd>The page's count of policy edits.</dd>
+    </dl>
+    <ul>
+      <li>The worker drops work for an older <code>rev</code>.</li>
+      <li>A rejected document is answered with <code>bad-request</code> at its <code>rev</code>.</li>
+    </ul>
+  </section>
+</article>
 ```
 
 ## Callouts
