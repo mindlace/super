@@ -95,18 +95,25 @@ need '`Produces rows others wait on:` the rows from step 1'
 need 'Re-read'
 forbid 'ruling ready'
 
-# Jev section (Task 9 adjusts the bounce and citation lines).
+# Composer forks: questions, rulings, merge review, re-checkpoint, replacement.
+for s in 'composer-forks.md' '--fork-session' 'questions/<id>.md' 'rulings/<id>.md' \
+         'first task that no longer holds' 'five' 'Changes contract' 'one writer' 'No agent loads'; do
+  need "$s"
+done
+for s in 'Bounce rule' 'jev ask bounce' '**bounce**' 'Adjudicate yourself' 'exact delta'; do
+  forbid "$s"
+done
+
+# Jev section: bounce is retired; citation runs inside the adjudication fork.
 grep -q '^## Optional Jev judgments' "$skill" \
   || { echo "FAIL: SKILL.md missing the Optional Jev judgments section"; exit 1; }
-for pt in defect-class bounce surface-route citation; do
+for pt in defect-class surface-route; do
   grep -qF "**$pt**" "$skill" || { echo "FAIL: SKILL.md never names Jev point $pt"; exit 1; }
 done
-for s in 'superpowers-jev:jev' 'jev record' 'jev ask defect-class' 'jev ask bounce' \
-         'jev ask surface-route' 'jev ask citation' \
+for s in 'superpowers-jev:jev' 'jev record' 'jev ask defect-class' \
+         'jev ask surface-route' \
          '"enabled": false'; do
   grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md Jev section missing: $s"; exit 1; }
 done
-# The citation ask uses a saved state file, never a pipe: recorded claims follow its order.
-need 'jev ask citation --state <state file>'
 need 'Surface to your partner'
 echo "PASS: SKILL.md structure"

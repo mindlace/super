@@ -22,9 +22,11 @@ re-reads.
 - **You never write or fix implementation code.** Not in fix rounds, not on
   integration breakage. Send it to an operator instead — controller fixes
   skip review and burn coordination context.
-- **You never design in this session.** A missing, incomplete, or defective
-  package goes back to supersonic:supercomposer; you may relay the defect
-  record, never author the amendment.
+- **You never design in this session.** A missing or incomplete package at
+  intake goes back to supersonic:supercomposer. Once the run starts,
+  anything the specs do not answer goes to a composer fork (`## Composer
+  forks`), which rules and amends the package; you file the question and
+  route the ruling, never author either.
 - **Append to the ledger after every state change.** A usage limit can end
   this session at any moment; the ledger plus git is the only memory that
   survives. On resume, trust the ledger, git and `claude agents --json` over
@@ -98,7 +100,8 @@ Anything missing → back to supersonic:supercomposer; do not patch it here.
 **Comprehension gate — once, before the first admission** (and again before
 any cutover-class step): dispatch a fresh agent to write an "explain the
 system the package describes" doc and diff it against the source model
-documents. Findings enter the frame-defect tally. Per-task review compares
+documents. Each finding is a question for a composer fork and enters the
+frame-defect tally. Per-task review compares
 work against briefs; only a whole-system reading catches the drift briefs
 inherit.
 
@@ -146,6 +149,9 @@ thresholds are set once, at the top of `budget.sh`: `LOWER=70`, `UPPER=90`,
   that stays warm for fix rounds does not count.
 - Composer forks are exempt: a ruling or merge review is small, and
   withholding it stalls operators already paid for.
+- Restarting a dead operator, or replacing a stopped one under the same
+  name, is not a new start: the running count stays the same, so it goes
+  ahead in every band, `high` included.
 - The band is applied, not proposed: never ask your partner to choose
   scope or approve a start. Units the band holds back are `deferred` in the
   ledger, and the next merge summary states the band.
@@ -224,10 +230,10 @@ the status ask.
 | Message | You do |
 |---|---|
 | `plan ready: <plan path> at <sha>` | Ledger the plan. Admit the unit when its rows have merged and the band allows. |
-| `row <row id> passed review at <sha> on <branch>` | Merge the branch up to `<sha>` (`## Integration`), start a merge-review fork, then re-derive admission (Phase 2) and admit every unit that was waiting only on rows now merged. The reporting operator keeps building. |
+| `row <row id> passed review at <sha> on <branch>` | Merge the branch up to `<sha>` (`## Integration`). Once the merge passes its tests, start a merge-review fork, then re-derive admission (Phase 2) and admit every unit that was waiting only on rows now merged. The reporting operator keeps building. |
 | `hand-back: tasks <numbers> of <plan path> at <sha>; files <paths>; needs rows <ids>` | Start a sibling operator for those tasks under the band (Hand-back siblings, below). |
-| `question <id>: <path>` | Ledger it under `## Questions`, then handle it per the items below. |
-| `complete: <branch>, ...` | Merge the branch (`## Integration`), start a merge-review fork, ledger `complete` and the `## Cost` finish, then re-derive admission. |
+| `question <id>: <path>` | Ledger it under `## Questions` and start an adjudication fork on it (`## Composer forks`). Send the operator nothing about the design until the ruling exists. |
+| `complete: <branch>, ...` | Merge the branch (`## Integration`). Once the merge passes its tests, start a merge-review fork, ledger `complete` and the `## Cost` finish, then re-derive admission. |
 
 **Hand-back siblings.** For each `hand-back` from unit `<unit-slug>`:
 
@@ -248,7 +254,7 @@ the status ask.
 
 **Mechanical rulings stay with you**: which branch to merge from or rebase
 on, which worktree to use, which test command to run. Answer them by
-message; everything about the design follows the items below.
+message. Everything about the design goes to a composer fork.
 
 **Messages you send** — current state only, each ending in its ask:
 
@@ -257,9 +263,9 @@ message; everything about the design follows the items below.
 | Admitting a planning operator | `You are admitted: rows <ids> merged into superconductor/<design-slug> at <sha>. Merge superconductor/<design-slug> into your branch, then build from step 6 of your briefing.` |
 | Sibling notice (after a hand-back) | `<sibling name> now runs tasks <numbers> of <plan path> and owns rows <ids, or none>; do not report those rows. Message <sibling name> by name when your lanes need to coordinate, and carry on with your own tasks.` |
 | Status ask (resume, or idle without a report) | `Status check from <design-slug>-conductor. Reply to <design-slug>-conductor by name with the last task that passed review, the task in progress, and anything held on a question.` |
-| A ruling that clarifies a running unit | `The spec now says: <the ruling's sentences>. Re-read <file> § <section> in <package worktree>, bring the tasks you have not started into line with it, and carry on.` |
+| Ruling relay (a unit listed as `clarification`, or the operator that asked) | `Ruling <id>: the spec now says <the ruling's ## Ruling sentences>. Re-read <file> § <section> in <package worktree>; the spec states the answer, so do not open the ruling file. Bring the tasks you have not started into line with it, release any task question <id> held, and carry on.` |
 | A mechanical ruling | `<the answer>. Go on with <task>.` |
-| A fix round | `Merging <branch> into superconductor/<design-slug> fails: <one line>; output at <path>. Fix it on your branch with the usual review, then send complete again.` |
+| A fix round | `Merging <branch> at <sha> into superconductor/<design-slug> fails: <one line>; output at <path>. Merge superconductor/<design-slug> into your branch, fix it with the usual review, then send the same report again.` |
 
 A ruling reaches an operator as what the spec says now and where to re-read
 it. Never write a diff from the old approach ("no longer", "instead of",
@@ -267,53 +273,156 @@ it. Never write a diff from the old approach ("no longer", "instead of",
 ruling file as its instruction: the spec in the package worktree is the
 authority.
 
-- **Adjudicate yourself** anything answerable from the design doc and
-  specs: reply to the operator by SendMessage, record the ruling in the
-  ledger. When a ruling touches an interface row, honor its marking: a
-  *decomposition choice* is yours; a *model commitment* changes only with
-  the partner.
-- **Interface change requests:** update the design doc and every affected
-  spec, commit, message each affected operator with the exact delta, record
-  in the ledger.
-- **Frame-defect tally.** Tag every escalation, workaround, and adjudication
-  with a short defect-class slug in the ledger. **The third same-class
-  instance is a tripwire**: stop issuing in-frame rulings for that class,
-  record the aggregate, and surface it to the partner as a candidate
-  supersonic:supercomposer bounce. Seven independent rediscoveries of one
-  missing declaration is a design defect wearing an implementation costume.
+- **Anything the specs do not answer goes to a composer fork**, however
+  obvious the answer looks: an operator's question, an interface change
+  request (any change to an interface row, model commitment or
+  decomposition choice), a requirement contradiction, a scope change (cut
+  or add), a BLOCKED task whose resolution changes the design, and a
+  drift a merge review finds. You hold the spine, not the package; the fork
+  holds the whole package and the reasons behind it. File what you hit
+  yourself as a question (`## Composer forks`). The operator holds only the
+  tasks the question blocks; you pause nothing.
 - **A discovered unmodeled subsystem is a frame event, never extra scope.**
-  If any agent surfaces a binding, store, table family, or consumer the
-  design doc does not model: pause the affected units, record it, surface
-  to the partner, and route to supersonic:supercomposer for an amended
-  package. Do not absorb it as additional tasks on a running unit.
+  A binding, store, table family, or consumer the design doc does not model
+  is a question for a fork, which amends the package to model it. Never
+  absorb it as additional tasks on a running unit.
+- **Frame-defect tally.** Tag every question with a short defect-class slug
+  in the ledger. **The third same-class instance is a tripwire**: build a
+  new checkpoint (`## Composer forks`, Re-checkpointing) and post your
+  partner one line, `Defect class <slug> has reached 3 (<ids>); rulings in
+  rulings/; new checkpoint <id>; nothing waits on you.` It is not a
+  stop: questions of that class keep going to forks. Seven independent
+  rediscoveries of one missing declaration is a design defect wearing an
+  implementation costume.
+- **A ruling that changes a unit's approach replaces its operator.** When a
+  ruling names a unit's first task that no longer holds, stop that operator
+  and start a fresh one on the amended spec (`## Composer forks`,
+  Replacing an operator). Never send the warm operator the change: an
+  operator that lived through the old approach writes it into the code. A
+  `clarification` goes to the warm operator as the ruling relay.
 - **Operators stay warm through review.** A completed operator is not
   stopped: fix rounds, review findings, and integration breakage on its
   unit go to it by name first (a cold fix round costs ~3.7× per line).
   Start a fresh one from its assignment file only when its name is absent
-  from `claude agents --json`.
+  from `claude agents --json`, or when a ruling changes its approach.
 - **Stopping an operator.** `claude stop <id>`, where `<id>` is the short
   `id` field of its entry in `claude agents --json`, found by name. Never
   pass the name or the full `sessionId`; neither works. Ledger it as
   `stopped`.
-- **Surface to your partner only:** requirement contradictions, scope
-  changes (cut/add), frame events and tripped tallies, a BLOCKED task whose
-  resolution implies a design change, a refused trust check, or two
-  consecutive operator deaths on the same unit.
+- **Surface to your partner** only a refused trust check and a second
+  consecutive operator death on one unit: those wait on them. Post a
+  one-line notice that asks nothing when a tripped tally re-checkpoints.
+  Rulings need no notice: your partner reads `rulings/` afterwards.
 - **Routine progress** reaches your partner as merge summaries
   (`## Integration`), not as questions.
 - **Operator death.** An operator whose ledger status is planning, admitted
   or running and whose name is absent from `claude agents --json` is dead.
   Ledger it, then restart it with the same name, worktree and assignment
   file (refreshed), and ledger the restart — SDD's ledger makes mid-plan
-  resume cheap. A second consecutive death on one unit: do not restart;
+  resume cheap. A restart keeps the running count, so it goes ahead in
+  every band. A second consecutive death on one unit: do not restart;
   surface to your partner.
 
 ## Composer forks
 
-Composer fork prompts and command lines are in this plugin's
-`skills/supercomposer/composer-forks.md`. After every merge, run its
-`## Merge-review fork` as a background command. Composer forks are exempt
-from the budget band.
+You rule on nothing the specs do not answer. Each such question goes to a
+one-shot fork of the composer checkpoint, which rules alone, rewrites the
+package as current state, writes its ruling file and exits; you route the
+outcome. The prompts and command lines are in this plugin's
+`skills/supercomposer/composer-forks.md`, under `## Checkpoint`,
+`## Adjudication fork`, `## Merge-review fork` and `## Build-graph fork`.
+
+**Starting a fork.** Copy the section's prompt into
+`<ledger dir>/prompts/`, fill every placeholder, and run its command line
+exactly as written there, `env -C "<package worktree>"` and the equals
+signs included: `claude -p --resume <checkpoint id> --fork-session ...`.
+Run it as a background Bash command, so you are told when it exits; never
+wait on it in the foreground. `<checkpoint id>` and `<model>` come from the
+last line under `## Checkpoints`. Forks are exempt from the budget band.
+
+**Questions.** A question is a file `<ledger dir>/questions/<id>.md` in the
+form `composer-forks.md` gives. Operators write theirs. Write your own, id
+`conductor-<k>`, for whatever you hit: a comprehension-gate finding, a
+merge conflict outside the unit's `writes` cell, an unmodeled subsystem.
+A merge review writes `merge-<unit-slug>-<short-sha>`. For each one, ledger
+it under `## Questions` with its defect class, then run `## Adjudication
+fork` on it. In that prompt's list of plans, name every live operator's
+unit and plan path (planning, admitted or running).
+
+**One writer.** Adjudication and build-graph forks amend the package, so at
+most one of them runs at a time, and you merge nothing while one runs: the
+package worktree has one writer at a time. Queue later questions in the
+order filed and start the next when the running one exits. Merge-review
+forks write nothing to the package: start each at once, beside any other
+fork.
+
+**Merge review.** After every merge that passes its tests (a row report's,
+a sibling's or a `complete`'s), run `## Merge-review fork` with the unit,
+the merged sha, and its needs and produces rows. When it exits: `No drift @
+<sha>` is one ledger line under `## Integration`; a question file path is a
+question like any other.
+
+**When an adjudication fork exits**, read `rulings/<id>.md` once, to route
+it: `Package commit`, `Changes design`, `Changes contract`, `## Ruling`,
+`## Re-read` and `## Affected units`. Complete the question's ledger line
+with the commit and `changes contract`. Then, in order:
+
+1. Each `clarification` unit, and the operator that asked if it is not
+   listed, gets the ruling relay (`## Supervision`) by name.
+2. Each unit whose line reads `first task that no longer holds: <task>`:
+   stop its operator and cut its branch now (Replacing an operator, steps
+   1-3).
+3. If `Changes design: yes` and `## Affected units` lists any unit, run
+   `## Build-graph fork` with "Units to write" set to those unit slugs. When
+   it exits, update the ledger's `Build graph:` line.
+4. Re-checkpoint if one is due (below).
+5. Start the fresh operators from step 2 (Replacing an operator, steps
+   4-5), re-derive admission (Phase 2), and start the next queued amending
+   fork.
+
+`rulings/` is the partner's record of what was decided and why. No agent
+loads it as design context: operators, forks and the checkpoint never open
+it, and you read each ruling file once, only to route it. The spec in the
+package worktree is the authority, and the ruling relay says so.
+
+**Replacing an operator.** A ruling that names a unit's first task that no
+longer holds changes that unit's approach. The warm operator never hears
+the change:
+
+1. `claude stop <id>` (`## Supervision`, Stopping an operator). Ledger the
+   unit `replaced`.
+2. Run `claude agents --json` again; start nothing under that name while it
+   is still listed.
+3. Cut the branch back to the commit before that task: find the task's
+   first commit in the unit's SDD ledger or `git -C <unit worktree> log
+   --oneline superconductor/<design-slug>..HEAD`, then `git -C <unit
+   worktree> reset --hard <the commit before it>`. Every later task goes,
+   even one that might have survived, and no branch keeps a copy: no
+   old-approach code or comment carries over. If the operator never reached
+   that task, nothing is cut.
+4. Refresh its assignment file: `Plan: none`, the `Implements`, `Writes` and
+   `Produces rows` cells from the build graph as it now reads, `Needs rows`
+   with current merge shas, `Admitted` unchanged. The fresh operator writes
+   a new plan for the rest of the unit against the amended spec, on top of
+   the tasks its branch keeps.
+5. Launch it with the same name, worktree and model (Phase 2, Starting an
+   operator, step 3), and ledger the start. It keeps the running count, so
+   it goes ahead in every band, `high` included.
+
+**Re-checkpointing.** The checkpoint holds the package as it was when read,
+and goes stale as amendments land. Build a new checkpoint, the same way as
+the first (`## Checkpoint`), when any of these holds after a fork exits:
+
+- the ruling says `Changes contract: yes`;
+- five rulings have committed to the package since the current
+  checkpoint: count `git -C <package worktree> log --first-parent --oneline
+  --grep='): rule ' <checkpoint package sha>..HEAD`;
+- the frame-defect tally reached three of one class (`## Supervision`).
+
+Build it after any build-graph fork that is due, and before the next
+amending fork starts. Append its id under `## Checkpoints`; every fork
+started after that resumes it. Forks already running finish on the old
+one: never stop or restart them.
 
 ## Optional Jev judgments
 
@@ -327,34 +436,23 @@ is not installed, skip this section: every rule above stands unchanged.
 - Act on Jev only for a point that `jev mode --point <point>` reports as
   `on`, and only on a `confident` answer.
 
-- **defect-class** (Frame-defect tally). Before tagging an escalation,
-  workaround, or adjudication, run `jev defect-state --ledger <ledger>
-  --escalation <file> | jev ask defect-class --state -`.
+- **defect-class** (Frame-defect tally). Before tagging a question, run
+  `jev defect-state --ledger <ledger> --escalation <question file> |
+  jev ask defect-class --state -`.
   - On: a confident existing class is the tag, which keeps the tripwire
     counts consistent. Otherwise, name the class yourself.
   - Record: `{"picks": {"class": "<class you tagged, or new_class>"}}`.
-- **bounce** (Bounce rule). For a message you cannot attribute at a glance,
-  run `jev bounce-state --ledger <ledger> --message <file> |
-  jev ask bounce --state -`.
-  - On: a confident operator pick means you relay the message verbatim to
-    that operator's session name. Otherwise, ledger the message and
-    take no action.
-  - Record: `{"picks": {"operator": "<slug or unattributable>"}}`.
-- **surface-route** (Supervision, "Surface to your partner only"). For each
+- **surface-route** (Supervision, "Surface to your partner"). For each
   escalation or event, run `jev state event=@<file>
   consecutive_deaths:=<n> | jev ask surface-route --state -`.
-  - On: a confident route other than `routine` means you surface the event
-    to your partner. `routine` goes into the next merge summary.
+  - On, with a confident route: `frame_event`, `requirement_contradiction`,
+    `scope_change` and `blocked_design_change` are a question for an
+    adjudication fork (`## Composer forks`); `repeated_death` goes to your
+    partner; `routine` goes into the next merge summary.
   - Record: `{"picks": {"route": "<route you took>"}}`.
-- **citation** (Supervision, "Adjudicate yourself"). Before ruling from an
-  operator report's verified-at claims, run `jev cite <report> --root
-  <operator worktree> > <state file>`, then `jev ask citation --state
-  <state file>`.
-  - On: ledger every claim in `detail.flagged` or `detail.also_flagged` as
-    *unverified*, and re-check it before it enters a ruling.
-  - Record: `{"items": ["<supports | contradicts | says_nothing>", ...]}`,
-    in the order of the state file's `claims` (`detail.labels` repeats
-    each claim). `jev cite` moves unreadable claims out of `claims`.
+
+The citation check on a question's verified-at claims runs inside the
+adjudication fork (its prompt in `composer-forks.md`), not here.
 
 ## Context economics
 
@@ -388,14 +486,22 @@ one merge after another.
    row report's commit (never the branch tip, which carries unreviewed
    tasks) or the `complete` branch's tip.
 2. Run the project's full test suite in the package worktree.
-3. On breakage, send the owning operator the fix-round message by name. If
+3. On a conflict, run `git -C <package worktree> merge --abort` at once:
+   never leave the shared worktree mid-merge. A conflict only in files the
+   unit's `writes` cell lists goes back to the producing operator as the
+   fix-round message. A conflict in a file another unit writes means two
+   units wrote one file: file it as a question (`## Composer forks`).
+4. On failing tests, take the merge back out with `git -C <package
+   worktree> reset --hard ORIG_HEAD` (nothing else has written there: one
+   writer) and send the owning operator the fix-round message by name. If
    its name is absent from `claude agents --json`, start a fresh operator
    from its assignment file with the failure output path added. Never fix
-   it yourself. A merge conflict means two units wrote the same file:
-   record it as a frame event.
-4. Ledger the merge under `## Integration`, start the merge-review fork
-   (`## Composer forks`), and re-derive admission (Phase 2).
-5. Post your partner a merge summary: `Merged <unit-slug> [row <id>] @ <sha>,
+   it yourself. A merge that fails its tests has not merged: its rows do
+   not count, its consumers are not admitted, and no merge review runs.
+5. Once the tests pass, ledger the merge under `## Integration`, start the
+   merge-review fork (`## Composer forks`), and re-derive admission
+   (Phase 2).
+6. Post your partner a merge summary: `Merged <unit-slug> [row <id>] @ <sha>,
    tests <result>. BAND: <band>. Running: <names>. Planning: <names>.
    Admitted now: <names>. Waiting: <unit: rows>.`
 
@@ -438,4 +544,6 @@ still listed (`claude stop <id>`).
 listing has no usage field, so tokens come from the session's transcript.
 Append a line after every state change: package accepted, band applied,
 operator started / admitted / complete / died / restarted / stopped,
-question filed, ruling relayed, merge done, deferral recorded.
+question filed, fork started / exited, ruling relayed, operator replaced,
+checkpoint built, merge done, merge aborted or taken back, deferral
+recorded.

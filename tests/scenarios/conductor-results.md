@@ -99,3 +99,101 @@ Every message is the template: "The spec now says: leaderboard ties break by asc
 RegionId ... Re-read specs/world-score.md § 4.2 ... in /Users/p/sim/.claude/worktrees/
 simstep-package ..., bring the tasks you have not started into line with it, and carry on."
 No rep quotes the old wording, says "no longer" or "supersedes", or points at the ruling file.
+
+# Composer forks, replacement and re-checkpoint scenarios (Task 9): results
+
+Runner: `sh tests/scenarios/run-scenario.sh <scenario> 3 <skill> <composer-forks.md>` (sonnet,
+no tools). Both files are context in RED and GREEN: the skill points the conductor at
+`skills/supercomposer/composer-forks.md`, so a real conductor reads it. Context for RED: the
+post-Task-8 `superconductor/SKILL.md` at 492bcb0 ("Adjudicate yourself", "exact delta", the
+stub `## Composer forks`). Context for GREEN: the Task 9 text.
+
+## RED
+
+### conductor-question-to-fork: 3/3 pass at baseline
+
+All reps ledger the question, fill the `## Adjudication fork` prompt and run its command line
+in the background with `env -C "<package worktree>"`, and answer nothing ("I don't rule on this
+myself, even though the 50:1 read ratio points to (A)"). The fork prompt in context carries
+most of this. Adjacent failures that the new text addresses: rep 1 plans to "surface it to the
+partner instead of relaying it" when a ruling names a first task that no longer holds; rep 2
+plans, if the fork finds an unmodeled store, to "pause the affected units and surface it to my
+partner". The rule stays in the text although the scenario passes at baseline: the spec says
+the conductor "no longer issues rulings on the design", and the HEAD text said "Adjudicate
+yourself".
+
+### conductor-approach-change-replaces: 0/3 pass
+
+First version (band `middle`, N = 2): 3/3 stop `5be2c0d1`, cut back to `c19d4b2` and relaunch
+`simstep-map-stream`, because the ruling format in `composer-forks.md` says so. But all three
+keep the discarded tasks on a `-old` / `-superseded` branch, reps 1 and 3 hand the fresh
+operator the old plan ("Plan: <plan path> at a8d12c4, tasks 1-3 already built"), and reps 1
+and 2 say they would defer the replacement in the `high` band. The scenario was changed to
+`BAND: high` to test the folded-in rule that a replacement keeps the running count. Results
+for that version:
+
+- Rep 1 FAIL: keeps the warm operator, "It is also not a new start, so the high band (92%)
+  doesn't block it. I keep the warm operator and send it the ruling by name": "Task 4 and
+  everything after it ... were built for a different wire format and have to be redone."
+- Rep 2 FAIL: "The band is `high`, so I can't start a fresh operator anyway", re-plans in
+  place on the warm operator, and would not restart it after a death until the reset.
+- Rep 3 FAIL: stops and cuts back, then "Do not start it. The last `budget.sh` said
+  `BAND: high` ... which means no new operators", ledgers it `deferred`, and names the
+  replacement `simstep-map-stream-2`.
+
+### conductor-recheckpoint: 3/3 pass at baseline
+
+All reps relay the clarification, count five committed rulings since `4f2a91c` and build a new
+checkpoint by the `## Checkpoint` command, append it under `## Checkpoints`, and leave the
+merge-review fork running ("It resumed the old checkpoint into its own session and finishes
+independently"). Adjacent failure the new text addresses: rep 3 says that at a third
+same-class defect "I stop issuing in-frame rulings for it and surface it to my partner". The
+re-checkpoint rule stays in the text although it passes at baseline: the spec states it as a
+(call) with a fixed threshold, and the HEAD skill had no rule, so the threshold was each
+rep's own guess at staleness.
+
+## GREEN
+
+Text: `## Composer forks` (starting a fork per `composer-forks.md`, questions, one writer,
+merge review, routing a ruling, `rulings/` as the partner's record, replacing an operator,
+re-checkpointing); Supervision (everything the specs do not answer goes to a fork; tripped
+tally re-checkpoints with a one-line notice; approach change replaces; ruling relay names the
+id and says not to open the ruling file; fix round sends the same report again; surface only
+the trust check and a second death); Phase 2 (a restart or replacement keeps the running
+count, in every band); Integration (abort a conflicted merge; take a failing merge back out;
+merge review only after tests pass); Jev (`bounce` and `citation` removed, `surface-route`
+remapped). Every scenario passed 3/3 on the first GREEN run; no refactor round.
+
+### conductor-question-to-fork: 3/3 pass
+
+All reps ledger the question and tally, fill the adjudication prompt, run the command line
+with `env -C "/Users/p/sim/.claude/worktrees/simstep-package"` and `run_in_background`, merge
+nothing while it runs, and send `simstep-world-score` nothing until the ruling exists. The
+planned relay uses the new template. Rep 1 plans the relay only "if the ruling lists it as
+`clarification`" and does not mention relaying to the asker when it is not listed (the text
+says to; not a fail for this scenario).
+
+### conductor-approach-change-replaces: 3/3 pass
+
+All reps: "A replacement keeps the running count, so the `high` band doesn't block it";
+`claude stop 5be2c0d1`; `claude agents --json` until the name is gone; `git -C
+<map-stream worktree> reset --hard c19d4b2` with "no branch keeps a copy"; the build-graph fork
+for `map-stream` (the ruling changed the design); `Plan: none` in the refreshed assignment; and
+relaunch as `simstep-map-stream` with the same model. No rep messages the warm operator.
+
+### conductor-recheckpoint: 3/3 pass
+
+All reps relay the clarification with the new template, run the build-graph fork for
+`world-score`, count the rulings with `git log --first-parent --grep='): rule '
+4f2a91c..HEAD` (five, `world-core-2` excluded as `commit none`), build the new checkpoint by
+the `## Checkpoint` command after the build-graph fork, append it under `## Checkpoints`, and
+leave the merge-review fork to finish on the old checkpoint. No partner notice (no tally at 3).
+
+### Regression: conductor-relay-has-ask and conductor-row-report-admits: 3/3 each
+
+Rerun against the Task 9 text because it changed the relay template and the merge flow. Every
+relay is "Ruling world-core-2: the spec now says ... Re-read ... in <package worktree>; the
+spec states the answer, so do not open the ruling file. ... and carry on." with no old
+wording. Every row-report rep merges `abc123`, runs the suite, starts the merge review and
+admits `world-funding` only after the tests pass, and notes that a failing merge would count
+nothing.
