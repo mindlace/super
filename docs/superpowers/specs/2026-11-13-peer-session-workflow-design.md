@@ -414,7 +414,11 @@ and a status field; a `SendMessage` to it while idle woke it and it replied by n
 `attach` and `stop` manage it. Its transcript is
 `~/.claude/projects/<project dir>/<sessionId>.jsonl` and stays there after the session is
 stopped, its tail readable JSON lines (live drill, round 3 rerun). A launch whose session
-never appears in `claude agents --json` within the bound in `beat.sh` is a failed start.
+never comes up within the bound in `beat.sh` is a failed start. A session that cannot
+start (for example with an invalid model) is listed at once and turns `idle`/`failed`
+within seconds, and stays listed (live drill, round 4); stopped sessions are not listed. So
+alive means listed and not `failed`, and a launch is confirmed only if the session is still
+alive at the end of the bound.
 It runs the partner's normal session hooks and
 permission mode.
 
