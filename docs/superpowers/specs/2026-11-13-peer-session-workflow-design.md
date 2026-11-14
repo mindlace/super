@@ -250,7 +250,7 @@ operator's planning step, not by the composer, so the composer cannot place a de
 early by itself. And once specs ran together they began duplicating a shared measurement
 step; the partner's ruling was that duplicated effort is worse than lost concurrency.
 
-**Two artifacts instead of one (partner's suggestion, under discussion).** The package keeps
+**Two artifacts instead of one (partner's suggestion, adopted).** The package keeps
 its domain specs: they are organised the way the system is understood, and they stay the
 truth that adjudication amends and merge review checks against. A second pass translates them
 into a **build graph**: the set of things that get built, in dependency order.
