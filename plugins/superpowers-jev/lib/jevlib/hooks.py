@@ -113,7 +113,8 @@ def _record_prompt_route(inp, env, entries):
         _clear_pending(path)
         return
     used = [s for s in transcript.skills_used_since_last_prompt(entries) if s.startswith("superpowers:")]
-    report.record(call_id, {"picks": {"skill": used[0] if used else "none"}}, env, inp.get("cwd"))
+    report.record(call_id, {"picks": {"skill": used[0] if used else "none"}}, env, inp.get("cwd"),
+                  source="auto_hook")
     _clear_pending(path)  # consumed: one prompt-route call is recorded at most once
 
 

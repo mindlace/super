@@ -82,6 +82,39 @@ class LabelTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIn("line 1", errors[0])
 
+    def test_apply_writes_blind_label_with_rule_and_labeler(self):
+        seed(self.env, self.base())
+        line = json.dumps({"call_id": "A", "verdict": "block"})
+        n, _ = label.apply([line], log.read_entries(self.env), self.env,
+                           rule_version="verify-stop.v1", labeler="subagent:x")
+        self.assertEqual(n, 1)
+        r = [e for e in log.read_entries(self.env) if e.get("type") == "record"
+             and e["call_id"] == "A"][0]
+        self.assertEqual((r["source"], r["rule_version"], r["labeler"]),
+                         ("blind_label", "verify-stop.v1", "subagent:x"))
+
+    def test_apply_default_rule_version_is_none_string(self):
+        seed(self.env, self.base())
+        label.apply([json.dumps({"call_id": "A", "verdict": "block"})],
+                    log.read_entries(self.env), self.env)
+        r = [e for e in log.read_entries(self.env) if e.get("type") == "record"
+             and e["call_id"] == "A"][0]
+        self.assertEqual(r["rule_version"], "none")
+
+    def test_apply_over_in_session_record_allowed(self):
+        seed(self.env, self.base())
+        n, errors = label.apply([json.dumps({"call_id": "B", "verdict": "block"})],
+                                log.read_entries(self.env), self.env)
+        self.assertEqual((n, errors), (1, []))
+
+    def test_relabel_under_new_rule_allowed(self):
+        seed(self.env, self.base())
+        line = json.dumps({"call_id": "A", "verdict": "block"})
+        self.assertEqual(label.apply([line], log.read_entries(self.env), self.env,
+                                     rule_version="v1")[0], 1)
+        self.assertEqual(label.apply([line], log.read_entries(self.env), self.env,
+                                     rule_version="v2")[0], 1)
+
     def test_apply_twice_no_duplicate(self):
         seed(self.env, self.base())
         line = json.dumps({"call_id": "A", "verdict": "block"})
@@ -108,10 +141,15 @@ class LabelTest(unittest.TestCase):
                 f.write(json.dumps({"call_id": "A", "verdict": "block"}) + "\n")
             err = io.StringIO()
             with contextlib.redirect_stderr(err):
-                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path], self.env), 0)
+                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path,
+                                          "--rule-version", "v1", "--labeler", "me"], self.env), 0)
             self.assertIn("recorded 1", err.getvalue())
             with contextlib.redirect_stderr(io.StringIO()):
-                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path], self.env), 1)
+                self.assertEqual(cli.main(["label", "verify-stop", "--apply", path,
+                                          "--rule-version", "v1"], self.env), 1)
+        r = [e for e in log.read_entries(self.env) if e.get("type") == "record"
+             and e["call_id"] == "A"][0]
+        self.assertEqual((r["rule_version"], r["labeler"]), ("v1", "me"))
         rows = report.build_report(log.read_entries(self.env), point="verify-stop")
         self.assertEqual(rows["verify-stop"]["recorded"], 2)
 

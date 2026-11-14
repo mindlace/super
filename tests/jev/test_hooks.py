@@ -261,7 +261,7 @@ class StopVerifyTest(unittest.TestCase):
             pending.write_text(json.dumps({"prompt_route_call_id": "pr-1"}))
             hooks.stop_verify(self.inp(), env)
         recs = [e for e in log.read_entries(env) if e["type"] == "record"]
-        self.assertEqual(recs, [dict(recs[0], call_id="pr-1",
+        self.assertEqual(recs, [dict(recs[0], call_id="pr-1", source="auto_hook",
                                      claude_verdict={"picks": {"skill": "superpowers:systematic-debugging"}})])
         self.assertFalse(pending.exists())
 

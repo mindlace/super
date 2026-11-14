@@ -35,10 +35,14 @@ def unlabeled(entries, point="verify-stop", since=None):
     return rows, missing
 
 
-def apply(lines, entries, env, cwd=None, point="verify-stop"):
-    """Record verdicts from JSONL `lines`. Returns (records written, error messages)."""
+def apply(lines, entries, env, cwd=None, point="verify-stop", rule_version="none", labeler=None):
+    """Record blind_label verdicts from JSONL `lines`. Returns (records written, error messages).
+
+    A line is a duplicate only if the call already has a blind_label record under the same
+    rule_version."""
     calls = {e.get("call_id"): e for e in entries if e.get("type") == "call"}
-    recorded = {e.get("call_id") for e in entries if e.get("type") == "record"}
+    recorded = {(e.get("call_id"), e.get("rule_version")) for e in entries
+                if e.get("type") == "record" and e.get("source") == "blind_label"}
     written, errors = 0, []
     for n, line in enumerate(lines, 1):
         if not line.strip():
@@ -59,11 +63,13 @@ def apply(lines, entries, env, cwd=None, point="verify-stop"):
         elif verdict not in VERDICTS:
             errors.append("line %d: call_id %s: verdict must be one of %s, got %r"
                           % (n, cid, "|".join(VERDICTS), verdict))
-        elif cid in recorded:
-            errors.append("line %d: call_id %s is already recorded" % (n, cid))
+        elif (cid, rule_version) in recorded:
+            errors.append("line %d: call_id %s is already labeled under rule_version %s"
+                          % (n, cid, rule_version))
         else:
-            report.record(cid, {"verdict": verdict}, env, cwd)
-            recorded.add(cid)
+            report.record(cid, {"verdict": verdict}, env, cwd, source="blind_label",
+                          rule_version=rule_version, labeler=labeler)
+            recorded.add((cid, rule_version))
             written += 1
     return written, errors
 
@@ -77,7 +83,8 @@ def cmd_label(args, env):
         except OSError as exc:
             sys.stderr.write("jev label: %s\n" % exc)
             return 2
-        written, errors = apply(lines, entries, env, args.root, args.point)
+        written, errors = apply(lines, entries, env, args.root, args.point,
+                               args.rule_version, args.labeler)
         sys.stderr.write("recorded %d\n" % written)
         for msg in errors:
             sys.stderr.write(msg + "\n")
@@ -95,5 +102,7 @@ def add_parser(sub):
     p.add_argument("point", choices=["verify-stop"])
     p.add_argument("--since", help="YYYY-MM-DD")
     p.add_argument("--apply", metavar="FILE", help="JSONL of {call_id, verdict}; records them")
+    p.add_argument("--rule-version", default="none", help="labeling rule version (with --apply)")
+    p.add_argument("--labeler", help="who labeled, e.g. subagent:x (with --apply)")
     p.add_argument("--root", help="repo root to resolve the log from")
     p.set_defaults(func=cmd_label)

@@ -22,11 +22,50 @@ import sys
 from . import ask, log
 
 
-def record(call_id, claude_verdict, env, cwd=None):
+SOURCES = ("in_session", "blind_label", "auto_hook", "import")
+# `import` records are written but excluded from every truth (adjudication/import scoring deferred).
+TRUTHS = {"in_session": ("in_session",), "auto_hook": ("auto_hook",), "blind": ("blind_label",),
+          "best": ("blind_label", "in_session", "auto_hook")}
+
+
+def record(call_id, claude_verdict, env, cwd=None, source="in_session", rule_version=None,
+           labeler=None):
     if not isinstance(claude_verdict, dict):
         raise ValueError("claude verdict must be a JSON object")
-    log.append({"type": "record", "call_id": call_id, "ts": ask.now(),
-                "claude_verdict": claude_verdict}, env, cwd)
+    if source not in SOURCES:
+        raise ValueError("source must be one of %s, got %r" % ("|".join(SOURCES), source))
+    entry = {"type": "record", "call_id": call_id, "ts": ask.now(),
+             "claude_verdict": claude_verdict, "source": source}
+    if rule_version is not None:
+        entry["rule_version"] = rule_version
+    if labeler is not None:
+        entry["labeler"] = labeler
+    log.append(entry, env, cwd)
+
+
+def record_source(rec, calls):
+    """A record's source; a legacy record without one is auto_hook for prompt-route calls."""
+    if rec.get("source"):
+        return rec["source"]
+    point = (calls.get(rec.get("call_id")) or {}).get("point")
+    return "auto_hook" if point == "prompt-route" else "in_session"
+
+
+def select_truth(entries, truth="best"):
+    """{call_id: (source, claude_verdict)}: latest record per (call, source), then the first
+    source in TRUTHS[truth] order."""
+    calls = {e.get("call_id"): e for e in entries if e.get("type") == "call"}
+    latest = {}
+    for e in entries:
+        if e.get("type") == "record":
+            latest[(e.get("call_id"), record_source(e, calls))] = e.get("claude_verdict") or {}
+    out = {}
+    for cid in {k[0] for k in latest}:
+        for src in TRUTHS[truth]:
+            if (cid, src) in latest:
+                out[cid] = (src, latest[(cid, src)])
+                break
+    return out
 
 
 def _coverage_classes(v, n):
@@ -69,13 +108,12 @@ def units(call, claude):
     return []
 
 
-def build_report(entries, since=None, point=None):
-    calls, records = {}, {}
+def build_report(entries, since=None, point=None, truth="best"):
+    calls = {}
     for e in entries:
-        if e.get("type") == "record":
-            records[e.get("call_id")] = e.get("claude_verdict") or {}
-        elif e.get("type") == "call":
+        if e.get("type") == "call":
             calls[e.get("call_id")] = e
+    records = select_truth(entries, truth)
     rows = {}
     for cid, c in calls.items():
         if point and c.get("point") != point:
@@ -85,7 +123,7 @@ def build_report(entries, since=None, point=None):
         r = rows.setdefault(c.get("point"), {
             "calls": 0, "errors": 0, "recorded": 0, "units": 0, "agree": 0,
             "confident_units": 0, "confident_wrong": 0, "would_skip": 0, "unrecorded": [],
-            "acted_units": 0, "acted_agree": 0, "abstained": 0})
+            "acted_units": 0, "acted_agree": 0, "abstained": 0, "truth_mix": {}})
         r["calls"] += 1
         if c.get("error"):
             r["errors"] += 1
@@ -93,11 +131,13 @@ def build_report(entries, since=None, point=None):
         skip = c.get("on_skips")
         if skip and c.get("confident") and c.get("verdict") == skip.get("verdict"):
             r["would_skip"] += 1
-        claude = records.get(cid)
-        if claude is None:
+        picked = records.get(cid)
+        if picked is None:
             r["unrecorded"].append(cid)
             continue
+        src, claude = picked
         r["recorded"] += 1
+        r["truth_mix"][src] = r["truth_mix"].get(src, 0) + 1
         for jev_v, acted_v, claude_v, confident in units(c, claude):
             agree = jev_v == claude_v
             r["units"] += 1
@@ -126,19 +166,21 @@ def _frac(rate, num, den):
     return "-" if rate is None else "%.2f (%d/%d)" % (rate, num, den)
 
 
-def format_report(rows):
-    lines = ["%-18s %5s %4s %4s %-15s %-15s %-7s %-15s %s" % (
+def format_report(rows, truth="best"):
+    lines = ["%-18s %5s %4s %4s %-15s %-15s %-7s %-15s %-10s %s" % (
         "point", "calls", "err", "rec", "acted-agreement", "conf-wrong", "abstain",
-        "raw-agreement", "would-skip")]
+        "raw-agreement", "would-skip", "truth-mix")]
     for name in sorted(rows):
         r = rows[name]
-        lines.append("%-18s %5d %4d %4d %-15s %-15s %-7d %-15s %d" % (
+        mix = " / ".join("%s %d" % (k, r["truth_mix"][k]) for k in sorted(r["truth_mix"])) or "-"
+        lines.append("%-18s %5d %4d %4d %-15s %-15s %-7d %-15s %-10d %s" % (
             name, r["calls"], r["errors"], r["recorded"],
             _frac(r["acted_agreement"], r["acted_agree"], r["acted_units"]),
             _frac(r["confident_wrong_rate"], r["confident_wrong"], r["confident_units"]),
             r["abstained"],
             _frac(r["agreement"], r["agree"], r["units"]),
-            r["would_skip"]))
+            r["would_skip"], mix))
+    lines.append("truth: %s (%s)" % (truth, " > ".join(TRUTHS[truth])))
     return "\n".join(lines)
 
 
@@ -158,7 +200,8 @@ def cmd_record(args, env):
 
 
 def cmd_report(args, env):
-    rows = build_report(log.read_entries(env), since=args.since, point=args.point)
+    rows = build_report(log.read_entries(env), since=args.since, point=args.point,
+                        truth=args.truth)
     if args.json:
         sys.stdout.write(json.dumps(rows, indent=2, sort_keys=True) + "\n")
     elif args.unrecorded:
@@ -166,7 +209,7 @@ def cmd_report(args, env):
             for cid in rows[name]["unrecorded"]:
                 sys.stdout.write("%s %s\n" % (name, cid))
     else:
-        sys.stdout.write(format_report(rows) + "\n")
+        sys.stdout.write(format_report(rows, args.truth) + "\n")
     return 0
 
 
@@ -178,6 +221,8 @@ def add_parser(sub):
     p = sub.add_parser("report", help="per-point agreement table")
     p.add_argument("--since", help="YYYY-MM-DD")
     p.add_argument("--point")
+    p.add_argument("--truth", choices=sorted(TRUTHS), default="best",
+                   help="which record sources count as Claude's verdict (default best)")
     g = p.add_mutually_exclusive_group()
     g.add_argument("--json", action="store_true")
     g.add_argument("--unrecorded", action="store_true", help="list call ids with no Claude verdict")
