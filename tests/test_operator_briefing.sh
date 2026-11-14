@@ -58,6 +58,10 @@ require 'git commands, SDD scripts'
 require '`bash <the absolute path your assignment names> <args>`'
 require 'restart you with a longer list'
 
+# The spec may be markdown or HTML; the html-docs line lives in the superconductor's assignment.
+require '.html'
+forbid 'superpowers-html'
+
 forbid 'with a pointer to'
 forbid 'message `main`'
 forbid 'to `main`'

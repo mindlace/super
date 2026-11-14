@@ -1,5 +1,6 @@
 """A JSON-schema subset validator: type, required, properties,
 additionalProperties (false only), items, enum, minItems, description.
+`type` may be a list (any listed type matches) and "null" is a type.
 lint.py rejects any other keyword, so templates cannot rely on one silently."""
 
 KEYWORDS = {"type", "required", "properties", "additionalProperties", "items",
@@ -12,18 +13,23 @@ _TYPES = {
     "boolean": bool,
     "integer": int,
     "number": (int, float),
+    "null": type(None),
 }
+
+
+def _type_ok(name, value):
+    if name in ("integer", "number") and isinstance(value, bool):
+        return False
+    return isinstance(value, _TYPES[name])
 
 
 def validate(schema, value, path="$"):
     """Return a list of error strings; empty means valid."""
     expected = schema.get("type")
     if expected:
-        ok = isinstance(value, _TYPES[expected])
-        if expected in ("integer", "number") and isinstance(value, bool):
-            ok = False
-        if not ok:
-            return ["%s: expected %s" % (path, expected)]
+        types = expected if isinstance(expected, list) else [expected]
+        if not any(_type_ok(t, value) for t in types):
+            return ["%s: expected %s" % (path, " or ".join(types))]
     errors = []
     if "enum" in schema and value not in schema["enum"]:
         errors.append("%s: %r not in %r" % (path, value, schema["enum"]))

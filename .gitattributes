@@ -7,3 +7,6 @@
 *.jsonl text eol=lf
 plugins/superpowers-jev/bin/jev text eol=lf
 plugins/superpowers-jev/hooks/jev-hook text eol=lf
+*.html text eol=lf
+plugins/superpowers-html/bin/* text eol=lf
+plugins/superpowers-html/hooks/html-hook text eol=lf

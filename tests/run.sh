@@ -10,4 +10,7 @@ done
 if [ -d "$root/tests/jev" ]; then
   python3 -m unittest discover -s "$root/tests/jev" -t "$root/tests/jev" || status=1
 fi
+if [ -d "$root/tests/html" ]; then
+  python3 -m unittest discover -s "$root/tests/html" -t "$root/tests/html" || status=1
+fi
 exit $status

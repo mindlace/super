@@ -28,6 +28,12 @@ for s in 'superpowers-jev:jev' 'jev ask citation' 'jev coverage' 'still runs eve
 done
 tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state file>' \
   || { echo "FAIL: supercomposer citation must ask with --state <state file>"; exit 1; }
+for s in 'docs/superpowers/design/YYYY-MM-DD-HHMM-<topic>.html' 'docs/superpowers/specs/YYYY-MM-DD-<slug>-design.html' \
+         'spec-format.md' 'tbl-traceability' 'tbl-interfaces' 'tbl-coverage'; do
+  grep -qF -- "$s" "$skill" || { echo "FAIL: supercomposer SKILL.md missing HTML package text: $s"; exit 1; }
+done
+grep -qF -- '-<topic>.md' "$skill" && { echo "FAIL: supercomposer still names a .md design doc"; exit 1; }
+grep -qF -- '-design.md`' "$skill" && { echo "FAIL: supercomposer still names a .md spec"; exit 1; }
 # Package cutting: contracts first, write sets, row edges, the build graph, the partner's reasons.
 flat=$(tr '\n' ' ' < "$skill" | tr -s ' ')
 for s in 'Contracts' 'Write sets' 'build graph' 'Longest chain' 'names interface rows' "partner's reasons" 'never a spec' 'its own unit' 'as fine as the dependencies allow'; do

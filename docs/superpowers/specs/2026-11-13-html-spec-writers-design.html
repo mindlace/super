@@ -1,0 +1,226 @@
+<article>
+  <header>
+    <h1>HTML spec writers</h1>
+    <p>supercomposer, and superpowers through a new overlay plugin, write specs and plans in the semantic HTML format.</p>
+  </header>
+  <section id="sec-intent">
+    <h2>Intent</h2>
+    <p>The semantic HTML format (<code>docs/spec-format.md</code>) and the superspec reader that
+      renders it have landed, but nothing writes the format yet. Every design doc, spec and plan
+      the plugins produce is still markdown. This change makes the writers produce the format, so
+      documents get stable <code>#id</code> anchors, diagrams, callouts and step checklists that
+      superspec renders as intended.</p>
+  </section>
+  <section id="sec-goals">
+    <h2>Goals, non-goals, anti-goals</h2>
+    <section id="sec-goals-yes">
+      <h3>Goals</h3>
+      <ul>
+        <li><code>supersonic:supercomposer</code> writes its design doc and every spec as an HTML
+          fragment that follows the format.</li>
+        <li>A new plugin, <code>superpowers-html</code>, makes <code>superpowers:brainstorming</code>
+          write specs and <code>superpowers:writing-plans</code> write plans in the format.</li>
+        <li>HTML plans still execute: <code>superpowers:subagent-driven-development</code> and
+          <code>superpowers:executing-plans</code> get the brief for one task out of an
+          <code>.html</code> plan.</li>
+        <li>The jev checks that read design docs and specs keep working on HTML.</li>
+      </ul>
+    </section>
+    <section id="sec-goals-no">
+      <h3>Non-goals</h3>
+      <ul>
+        <li>Converting existing markdown specs and plans. Old documents stay as they are and keep
+          working.</li>
+        <li>Changing superspec or the format itself.</li>
+        <li>The superconductor ledger, operator reports and other working files under
+          <code>.superpowers/</code>. They are not specs and stay markdown.</li>
+      </ul>
+    </section>
+    <section id="sec-goals-anti">
+      <h3>Anti-goals</h3>
+      <ul>
+        <li>Editing or forking superpowers' own files. The new plugin overlays superpowers the way
+          superpowers-jev does; it never patches the installed copy.</li>
+        <li>Making supersonic depend on superpowers-html. Each plugin works without the other.</li>
+        <li>Breaking markdown plans. A <code>.md</code> plan runs exactly as it does today.</li>
+        <li>A check that turns itself off silently on HTML. If a jev builder can't read a file it
+          says so.</li>
+      </ul>
+    </section>
+  </section>
+  <section id="sec-constraints">
+    <h2>Constraints</h2>
+    <ul>
+      <li>Plugins ship standalone, but a symlink inside a plugin is copied into the installed
+        plugin when the marketplace is cloned. So each plugin that writes the format holds a
+        symlink to <code>docs/spec-format.md</code>, the one and only copy. No duplicates are
+        maintained.</li>
+      <li>The superpowers version these notes were written against is 7.0.2. The overlay names the
+        upstream steps it changes by section heading and checks the installed version, as
+        superpowers-jev does with <code>jev compat</code>.</li>
+      <li>Hooks fail open: an error in the overlay never blocks a session.</li>
+      <li>Python stays stdlib-only (<code>html.parser</code>), matching superpowers-jev.</li>
+      <li>Each changed plugin bumps its version in <code>plugin.json</code>; installed copies
+        update only on a version change.</li>
+    </ul>
+  </section>
+  <section id="sec-approaches">
+    <h2>Approaches</h2>
+    <p>The open question was plans. superpowers' plan executors find tasks with an awk script that
+      matches markdown <code>### Task N</code> headings, so an HTML plan stops them with "no task
+      headings found".</p>
+    <dl>
+      <dt>A. Plans become HTML too, with an HTML-aware task extractor (picked)</dt>
+      <dd>superpowers-html ships its own <code>task-brief</code> and tells the executors to use it
+        for <code>.html</code> plans. Plans get the format's step ids and checkboxes, which the
+        format was designed around. Cost: the overlay depends on how the upstream scripts work
+        today, guarded by the version check.</dd>
+      <dt>B. Specs only; plans stay markdown</dt>
+      <dd>Nothing can break, but plans miss the format, and superspec shows half of each pair
+        in the old style.</dd>
+    </dl>
+    <aside data-kind="decision"><strong>Decision</strong> Approach A, chosen by Ethan.</aside>
+  </section>
+  <section id="sec-design">
+    <h2>Design</h2>
+    <section id="sec-supersonic">
+      <h3>supersonic 0.4.0</h3>
+      <ul>
+        <li><code>supercomposer/SKILL.md</code>: the design doc moves to
+          <code>docs/superpowers/design/YYYY-MM-DD-HHMM-&lt;topic&gt;.html</code> and specs to
+          <code>docs/superpowers/specs/YYYY-MM-DD-&lt;slug&gt;-design.html</code>. Both follow the
+          format. The required sections keep their names and become <code>section</code>s with
+          stable ids; the interface, traceability and coverage tables become captioned
+          <code>table</code>s with ids (for example <code>tbl-traceability</code>). The skill
+          points at the format reference, reached through a symlink in the plugin, instead of
+          restating it.</li>
+        <li><code>superconductor/SKILL.md</code> and <code>operator-briefing.md</code>: accept a
+          design package in either format, so a run composed before this change still resumes.
+          Operators are named <code>claude --bg</code> sessions launched with a fixed tool
+          list. When superconductor writes an operator's assignment, it checks whether
+          <code>superpowers-html:html-docs</code> is among its available skills. If it is, it adds
+          one line telling the operator to load that skill before
+          <code>superpowers:writing-plans</code>, and allows the plugin's <code>task-brief</code>
+          and <code>superpowers-html</code> scripts beside SDD's (resolved at intake as the
+          ledger's <code>HTML scripts:</code> line). If it isn't, the assignment stays as it is.
+          The briefing file itself stays static.</li>
+      </ul>
+    </section>
+    <section id="sec-jev">
+      <h3>superpowers-jev 0.8.0</h3>
+      <ul>
+        <li><code>builders/spec.py</code> (<code>jev coverage --design</code>) reads the
+          traceability table from an HTML design doc: the <code>table</code> whose
+          <code>caption</code> or enclosing section heading contains "traceability".</li>
+        <li>It chooses the parser by file extension and keeps the markdown path. When an HTML
+          design doc has no traceability table, it reports that instead of returning
+          nothing.</li>
+        <li>Jev gets each spec as structured sections, not text. The fidelity-coverage
+          question moves to version 2: its state replaces <code>spec_text</code> with
+          <code>spec_sections</code>, one entry per section holding its <code>id</code> (null for
+          markdown), its <code>heading</code>, the <code>path</code> of enclosing headings
+          (outermost first, ending with its own) and its prose <code>text</code>. A section's tables
+          come as <code>tables</code>, each with its <code>id</code>, <code>caption</code>,
+          <code>header</code> and <code>rows</code> of cells, and table text is not repeated in
+          <code>text</code>. An SVG diagram contributes only its <code>title</code> and its edges
+          as "from → to", named by the nodes' text. Markdown specs are split on headings into
+          the same shape, with pipe tables parsed into rows, so both formats share one schema
+          (still closed with <code>additionalProperties: false</code>). The question is still one
+          noul per requirement, asked once per spec. The extracted-text path is gone.</li>
+      </ul>
+    </section>
+    <section id="sec-overlay">
+      <h3>New plugin: superpowers-html 0.1.0</h3>
+      <figure id="fig-overlay">
+        <svg class="diagram" viewBox="0 0 640 170" role="img" aria-labelledby="fig-overlay-t">
+          <title id="fig-overlay-t">How superpowers-html reaches into a superpowers session</title>
+          <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs>
+          <g class="node missing" id="n-hook"><rect x="10" y="20" width="150" height="44"/><text x="85" y="42">SessionStart note</text></g>
+          <g class="node missing" id="n-skill"><rect x="240" y="20" width="150" height="44"/><text x="315" y="42">html-docs skill</text></g>
+          <g class="node external" id="n-writers"><rect x="470" y="20" width="160" height="44"/><text x="550" y="42">brainstorming, writing-plans</text></g>
+          <g class="node missing" id="n-brief"><rect x="240" y="110" width="150" height="44"/><text x="315" y="132">task-brief (HTML)</text></g>
+          <g class="node external" id="n-exec"><rect x="470" y="110" width="160" height="44"/><text x="550" y="132">SDD, executing-plans</text></g>
+          <g class="edge" data-from="n-hook" data-to="n-skill"><path d="M160 42H238"/><text x="199" y="34">load</text></g>
+          <g class="edge" data-from="n-skill" data-to="n-writers"><path d="M390 42H468"/><text x="429" y="34">format</text></g>
+          <g class="edge" data-from="n-skill" data-to="n-exec"><path d="M390 54L468 120"/></g>
+          <g class="edge" data-from="n-exec" data-to="n-brief"><path d="M470 132H392"/><text x="431" y="124">.html plan</text></g>
+        </svg>
+        <figcaption>Figure 1. The overlay changes what superpowers writes and how it reads plans back; superpowers itself is untouched.</figcaption>
+      </figure>
+      <ul>
+        <li><strong>SessionStart hook</strong>, built like superpowers-jev's (polyglot launcher, a
+          10&#160;s timeout, fails open). It injects one note: superpowers-html is active; before
+          writing a spec or a plan, or executing an <code>.html</code> plan, load
+          <code>superpowers-html:html-docs</code>.</li>
+        <li><strong><code>html-docs</code> skill</strong>, an overlay that never reorders a
+          superpowers step. It says:
+          <ul>
+            <li>brainstorming: write the spec to <code>…/specs/YYYY-MM-DD-&lt;topic&gt;-design.html</code>
+              in the format (brainstorming lets the user's preference override the path and
+              format).</li>
+            <li>writing-plans: write the plan to <code>…/plans/YYYY-MM-DD-&lt;feature&gt;.html</code>.
+              The required header becomes the <code>header</code> plus a section with the Goal,
+              Architecture, Tech Stack and Spec lines; Global Constraints is a section with id
+              <code>sec-global-constraints</code>. Each task is a <code>section</code> with id
+              <code>sec-task-N</code> and an <code>h2</code> starting "Task N:"; each step is a
+              checklist <code>li</code> with id <code>tN-sK</code>. The handoff messages name the
+              <code>.html</code> path.</li>
+            <li>subagent-driven-development: for an <code>.html</code> plan, run superpowers-html's
+              <code>task-brief</code> where the upstream skill runs its own. executing-plans: run
+              superpowers-html's <code>task-start</code> in place of upstream's.</li>
+            <li>Progress stays where upstream keeps it, in the workspace ledger. Nobody ticks
+              plan checkboxes during execution, just as nobody ticks <code>- [ ]</code> in a
+              markdown plan today, so plan edits never land in a task's review diff.</li>
+            <li>It reaches the format reference through a symlink to
+              <code>docs/spec-format.md</code> and runs a version check against the installed
+              superpowers; on a version it doesn't know, it warns once and carries on.</li>
+          </ul>
+        </li>
+        <li><strong><code>bin/task-brief</code></strong>, the same command line, output line and
+          exit codes as upstream's (<code>[-C DIR] PLAN_FILE TASK_NUMBER [OUTFILE]</code>; 2 usage,
+          3 not found). For a non-<code>.html</code> plan it hands off to the installed upstream
+          script unchanged. For an <code>.html</code> plan it finds the <code>section</code> whose
+          first heading starts with "Task &lt;id&gt;", matching ids as whole strings as upstream
+          does, and writes that section's HTML verbatim. The default output path comes from the
+          upstream <code>sdd-workspace</code>, so both skills share one workspace. The upstream
+          install is found the way <code>jev compat</code> finds it, through
+          <code>~/.claude/plugins/installed_plugins.json</code>. A deeper task section whose id
+          extends the requested one (Task 7a inside Task 7) stays in the brief, as upstream.</li>
+        <li><strong><code>bin/task-start</code></strong>, the same command line and
+          <code>brief:</code>/<code>base:</code> output as upstream's executing-plans script, built
+          on superpowers-html's <code>task-brief</code>.</li>
+      </ul>
+    </section>
+    <section id="sec-marketplace">
+      <h3>Marketplace and tests</h3>
+      <ul>
+        <li><code>.claude-plugin/marketplace.json</code> and the README list superpowers-html.</li>
+        <li><code>tests/test_manifests.sh</code> expects three plugins. New tests cover: each
+          plugin's format-reference symlink resolves to <code>docs/spec-format.md</code>; supercomposer names
+          <code>.html</code> paths; <code>task-brief</code> on an HTML plan fixture (found, not
+          found, Task 6 vs 6b, markdown pass-through); the hook emits its note and exits 0 on
+          error; the jev builders on HTML fixtures.</li>
+      </ul>
+    </section>
+  </section>
+  <section id="sec-calls">
+    <h2>Calls made without asking</h2>
+    <ul>
+      <li>Operator plans are HTML when superpowers-html is installed (see supersonic 0.4.0).</li>
+      <li>executing-plans gets its own <code>task-start</code> instead of instructions to stitch
+        one together.</li>
+      <li>Checkboxes are never ticked during execution; the ledger stays the progress record.</li>
+      <li>Jev receives every spec, markdown or HTML, as structured sections
+        (fidelity-coverage version 2).</li>
+      <li>The version check accepts superpowers 7.x and warns on anything else, as
+        <code>jev compat</code> does.</li>
+    </ul>
+  </section>
+  <section id="sec-builder">
+    <h2>Left to the builder</h2>
+    <ul>
+      <li>Wording of the skill texts and the injected note.</li>
+      <li>Internal layout of superpowers-html beyond the parts named here.</li>
+    </ul>
+  </section>
+</article>

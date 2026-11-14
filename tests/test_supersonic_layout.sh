@@ -4,7 +4,7 @@ set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
 d="$root/plugins/supersonic/skills"
 fail() { echo "FAIL: $1"; exit 1; }
-for f in superconductor/SKILL.md superconductor/operator-briefing.md superconductor/budget.sh supercomposer/SKILL.md supercomposer/composer-forks.md; do
+for f in superconductor/SKILL.md superconductor/operator-briefing.md superconductor/budget.sh supercomposer/SKILL.md supercomposer/composer-forks.md supercomposer/spec-format.md; do
   test -f "$d/$f" || fail "missing $f"
 done
 test ! -e "$d/superconductor/executable_budget.sh" || fail "chezmoi executable_ prefix must be gone"

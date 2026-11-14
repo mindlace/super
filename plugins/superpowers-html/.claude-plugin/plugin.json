@@ -1,0 +1,10 @@
+{
+  "name": "superpowers-html",
+  "version": "0.1.0",
+  "description": "Overlays superpowers 7.x so specs and plans are written as HTML in the supersonic spec format. Keep superpowers installed; fails open.",
+  "author": { "name": "mindlace", "url": "https://github.com/mindlace" },
+  "homepage": "https://github.com/mindlace/super",
+  "repository": "https://github.com/mindlace/super",
+  "license": "MIT",
+  "keywords": ["superpowers", "html", "specs", "plans"]
+}
