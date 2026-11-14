@@ -1,3 +1,5 @@
+import { extname } from 'node:path';
+
 export const ASSET_TYPES: Record<string, string> = {
   png: 'image/png',
   jpg: 'image/jpeg',
@@ -7,6 +9,16 @@ export const ASSET_TYPES: Record<string, string> = {
   mp4: 'video/mp4',
   webm: 'video/webm'
 };
+
+/**
+ * The content type a path is served with, from its extension; null when it is
+ * not a served asset type. A file named only by its extension (`.png`) has none.
+ * The one derivation of an asset's extension, for the path check and the route.
+ */
+export function assetType(path: string): string | null {
+  const ext = extname(path).slice(1).toLowerCase();
+  return Object.hasOwn(ASSET_TYPES, ext) ? ASSET_TYPES[ext] : null;
+}
 
 /** Parse a single `bytes=` Range header. null = absent/ignored -> serve the full body. */
 export function parseRange(

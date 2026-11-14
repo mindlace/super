@@ -2,9 +2,8 @@ import { error } from '@sveltejs/kit';
 import { stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
-import { extname } from 'node:path';
 import { assertAssetPath } from '$lib/server/paths';
-import { ASSET_TYPES, parseRange } from '$lib/server/assets';
+import { assetType, parseRange } from '$lib/server/assets';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, request }) => {
@@ -27,7 +26,9 @@ export const GET: RequestHandler = async ({ url, request }) => {
   }
 
   const headers: Record<string, string> = {
-    'Content-Type': ASSET_TYPES[extname(path).slice(1).toLowerCase()],
+    // assertAssetPath only passes a path with a served asset type.
+    'Content-Type': assetType(path)!,
+    'X-Content-Type-Options': 'nosniff',
     'Accept-Ranges': 'bytes'
   };
   const range = parseRange(request.headers.get('range'), size);

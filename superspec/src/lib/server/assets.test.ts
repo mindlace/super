@@ -1,5 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { parseRange, ASSET_TYPES } from './assets';
+import { parseRange, ASSET_TYPES, assetType } from './assets';
+
+describe('assetType', () => {
+  it('maps a served extension to its content type, any case', () => {
+    expect(assetType('/a/b/shot.png')).toBe('image/png');
+    expect(assetType('/a/b/SHOT.JPG')).toBe('image/jpeg');
+    expect(assetType('/a/b.c/clip.webm')).toBe('video/webm');
+  });
+
+  it('is null for anything else', () => {
+    for (const p of ['/a/.png', '/a/png', '/a/b.png/x', '/a/x.svg', '/a/x.toString', '/a/x.'])
+      expect(assetType(p)).toBeNull();
+  });
+});
 
 describe('ASSET_TYPES', () => {
   it('lists exactly the served extensions', () => {

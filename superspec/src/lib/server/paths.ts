@@ -1,7 +1,7 @@
 import { resolve, sep } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
 import { isSpecFile } from '../specfile';
-import { ASSET_TYPES } from './assets';
+import { assetType } from './assets';
 
 function bad(message: string): never {
   const err = new Error(message) as Error & { status: number };
@@ -38,8 +38,7 @@ export function assertAssetPath(p: string, root: string = PROJECTS_ROOT): string
   if (parts.length < 3 || parts[0] === 'assets' || parts[1] !== 'assets') {
     bad(`path is not under docs/superpowers/<type>/assets/: ${p}`);
   }
-  const ext = resolved.slice(resolved.lastIndexOf('.') + 1).toLowerCase();
-  if (!Object.hasOwn(ASSET_TYPES, ext)) {
+  if (assetType(resolved) === null) {
     bad(`not a served asset type: ${p}`);
   }
   return resolved;

@@ -76,7 +76,9 @@ describe('assertAssetPath', () => {
     ['not in assets/', join(ROOT, 'p/docs/superpowers/specs/a.png')],
     ['not under docs/superpowers', join(ROOT, 'p/src/assets/a.png')],
     ['svg', join(ROOT, 'p/docs/superpowers/specs/assets/x/a.svg')],
-    ['html', join(ROOT, 'p/docs/superpowers/specs/assets/x/mock.html')]
+    ['html', join(ROOT, 'p/docs/superpowers/specs/assets/x/mock.html')],
+    ['a file named only by its extension', join(ROOT, 'p/docs/superpowers/specs/assets/x/.png')],
+    ['a prototype key as extension', join(ROOT, 'p/docs/superpowers/specs/assets/x/a.constructor')]
   ])('rejects %s', (_n, p) => {
     expect(() => assertAssetPath(p, ROOT)).toThrow();
   });
