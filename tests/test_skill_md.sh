@@ -49,4 +49,7 @@ done
 # The citation ask uses a saved state file, never a pipe: recorded claims follow its order.
 tr '\n' ' ' < "$skill" | tr -s ' ' | grep -qF 'jev ask citation --state <state file>' \
   || { echo "FAIL: SKILL.md citation must ask with --state <state file>"; exit 1; }
+for s in 'superpowers-html:html-docs' 'among your available skills' '.html'; do
+  grep -qF -- "$s" "$skill" || { echo "FAIL: SKILL.md missing HTML-format text: $s"; exit 1; }
+done
 echo "PASS: SKILL.md structure"

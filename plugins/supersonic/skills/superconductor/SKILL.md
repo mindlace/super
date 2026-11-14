@@ -57,6 +57,8 @@ Continue from whichever phase the ledger shows incomplete.
 The package comes from a supersonic:supercomposer session, committed. Before
 any dispatch, verify it is complete:
 
+- Design doc and specs may be markdown (`.md`, composed before supersonic
+  0.3.0) or HTML (`.html`); check the required sections by heading in either.
 - Design doc with every required section, including the **traceability
   table** (every model-doc claim → interface row / spec, or a
   dropped/narrowed/deferred entry bearing partner sign-off) and the
@@ -148,6 +150,10 @@ prompt = the full verbatim contents of `operator-briefing.md`, then:
       each already landed>
     - Session task id: <task id> — claim it and keep it current.
     - Worktree base: <integration branch if it exists, else the spec commit>
+
+If `superpowers-html:html-docs` is among your available skills, add the line
+`- Before superpowers:writing-plans, load superpowers-html:html-docs.` to the
+assignment. Otherwise the prompt is unchanged.
 
 Tell each operator its worktree base explicitly: the integration branch
 `superconductor/<design-slug>` if it exists, else the commit where the specs

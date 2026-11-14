@@ -11,4 +11,6 @@ grep -qF 'superpowers:writing-plans' "$briefing" || { echo "FAIL: missing writin
 grep -qF 'superpowers:subagent-driven-development' "$briefing" || { echo "FAIL: missing SDD handoff"; exit 1; }
 grep -qF 'SendMessage' "$briefing" || { echo "FAIL: missing SendMessage escalation channel"; exit 1; }
 grep -qF 'superpowers-jev:jev-gates' "$briefing" || { echo "FAIL: briefing must load superpowers-jev:jev-gates alongside SDD"; exit 1; }
+grep -qF '.html' "$briefing" || { echo "FAIL: briefing must accept an .html spec"; exit 1; }
+grep -qF 'superpowers-html' "$briefing" && { echo "FAIL: briefing must stay static; the html-docs line lives in the superconductor"; exit 1; }
 echo "PASS: operator briefing"
