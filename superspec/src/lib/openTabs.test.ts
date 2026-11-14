@@ -12,7 +12,8 @@ function entry(path: string, type: SpecEntry['type'] = 'spec'): SpecEntry {
     worktree: 'wt',
     type,
     mtime: 1000,
-    recency: 1000
+    created: 1000,
+    updated: 1000
   };
 }
 
@@ -20,7 +21,8 @@ function group(parentPath: string, childPaths: string[] = []): DisplayGroup {
   return {
     parent: entry(parentPath),
     children: childPaths.map((p) => entry(p, 'plan')),
-    recency: 1000
+    created: 1000,
+    updated: 1000
   };
 }
 

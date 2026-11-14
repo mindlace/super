@@ -4,7 +4,10 @@ import { stripSpecExt } from './specfile';
 export interface DisplayGroup {
   parent: SpecEntry;
   children: SpecEntry[];
-  recency: number;
+  /** the parent's created: a plan's activity never reorders groups */
+  created: number;
+  /** max updated over parent and children: drives the visibility window */
+  updated: number;
 }
 
 const DATE_PREFIX = /^\d{4}-\d{2}-\d{2}(?:-\d{4})?-/;
@@ -18,6 +21,15 @@ export function normalizedSlug(filename: string): string {
 
 function pairKey(e: SpecEntry): string {
   return `${e.project}::${normalizedSlug(e.filename)}`;
+}
+
+export function soloGroup(e: SpecEntry): DisplayGroup {
+  return { parent: e, children: [], created: e.created, updated: e.updated };
+}
+
+/** Newest-created first; parent path keeps equal times in a stable order. */
+export function byCreatedDesc(a: DisplayGroup, b: DisplayGroup): number {
+  return b.created - a.created || a.parent.path.localeCompare(b.parent.path);
 }
 
 export function pairAndGroup(specs: SpecEntry[]): DisplayGroup[] {
@@ -35,7 +47,7 @@ export function pairAndGroup(specs: SpecEntry[]): DisplayGroup[] {
   const titleToSpec = new Map<string, SpecEntry>();
   const indexNewest = (map: Map<string, SpecEntry>, k: string, e: SpecEntry) => {
     const cur = map.get(k);
-    if (!cur || e.recency > cur.recency) map.set(k, e);
+    if (!cur || e.created > cur.created || (e.created === cur.created && e.updated > cur.updated)) map.set(k, e);
   };
   for (const s of parents) {
     indexNewest(keyToSpec, pairKey(s), s);
@@ -59,14 +71,14 @@ export function pairAndGroup(specs: SpecEntry[]): DisplayGroup[] {
   for (const s of parents) {
     const children = (childrenBySpec.get(s) ?? [])
       .slice()
-      .sort((a, b) => b.recency - a.recency);
+      .sort((a, b) => b.created - a.created);
     if (s.onMain && children.length === 0) continue;
-    const recency = children.reduce((m, c) => Math.max(m, c.recency), s.recency);
-    groups.push({ parent: s, children, recency });
+    const updated = children.reduce((m, c) => Math.max(m, c.updated), s.updated);
+    groups.push({ parent: s, children, created: s.created, updated });
   }
-  for (const p of standalonePlans) groups.push({ parent: p, children: [], recency: p.recency });
-  for (const o of others) groups.push({ parent: o, children: [], recency: o.recency });
+  for (const p of standalonePlans) groups.push(soloGroup(p));
+  for (const o of others) groups.push(soloGroup(o));
 
-  groups.sort((a, b) => b.recency - a.recency);
+  groups.sort(byCreatedDesc);
   return groups;
 }

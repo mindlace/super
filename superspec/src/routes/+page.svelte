@@ -24,7 +24,7 @@
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   const visibleGroups = $derived(
-    pairAndGroup(specs).filter((g) => g.recency >= Date.now() - DAY_MS)
+    pairAndGroup(specs).filter((g) => g.updated >= Date.now() - DAY_MS)
   );
 
   let openedGroups = $state<DisplayGroup[]>([]);

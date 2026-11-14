@@ -11,14 +11,15 @@ function entry(part: Partial<SpecEntry> & { filename: string }): SpecEntry {
     project: part.project ?? 'proj',
     worktree: part.worktree ?? null,
     type: part.type ?? 'spec',
-    mtime: part.recency ?? 1000,
-    recency: part.recency ?? 1000,
+    mtime: part.updated ?? 1000,
+    created: part.created ?? 1000,
+    updated: part.updated ?? part.created ?? 1000,
     onMain: part.onMain
   };
 }
 
 function group(parent: SpecEntry, children: SpecEntry[] = []): DisplayGroup {
-  return { parent, children, recency: parent.recency };
+  return { parent, children, created: parent.created, updated: parent.updated };
 }
 
 describe('planLabel', () => {

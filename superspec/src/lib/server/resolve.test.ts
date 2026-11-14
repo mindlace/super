@@ -25,7 +25,7 @@ beforeAll(async () => {
   const bMainSpecs = join(root, 'projB/docs/superpowers/specs');
   await write(bMainSpecs, '2026-06-10-onmain-design.md', '# On Main\n');
 
-  // Same basename in two projects, different recency -> newest must win.
+  // Same basename in two projects, different mtime (tmp dirs are not repos) -> greatest updated must win.
   const cWtSpecs = join(root, 'projC/.claude/worktrees/wtc/docs/superpowers/specs');
   const dWtSpecs = join(root, 'projD/.claude/worktrees/wtd/docs/superpowers/specs');
   await write(cWtSpecs, 'dupe.md', '# Older Dupe\n');
