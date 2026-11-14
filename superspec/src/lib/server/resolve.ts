@@ -41,7 +41,15 @@ async function collectCandidates(root: string): Promise<Candidate[]> {
     for (const sub of await listDirs(superDir)) {
       const dir = join(superDir, sub);
       for (const filename of await listSpecFiles(dir)) {
-        out.push({ dir, filename, project, worktree, subdir: sub, path: join(dir, filename), checkout });
+        out.push({
+          dir,
+          filename,
+          project,
+          worktree,
+          subdir: sub,
+          path: join(dir, filename),
+          checkout
+        });
       }
     }
   };

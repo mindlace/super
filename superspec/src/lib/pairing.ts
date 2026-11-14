@@ -47,7 +47,9 @@ export function pairAndGroup(specs: SpecEntry[]): DisplayGroup[] {
   const titleToSpec = new Map<string, SpecEntry>();
   const indexNewest = (map: Map<string, SpecEntry>, k: string, e: SpecEntry) => {
     const cur = map.get(k);
-    if (!cur || e.created > cur.created || (e.created === cur.created && e.updated > cur.updated)) map.set(k, e);
+    if (!cur || e.created > cur.created || (e.created === cur.created && e.updated > cur.updated)) {
+      map.set(k, e);
+    }
   };
   for (const s of parents) {
     indexNewest(keyToSpec, pairKey(s), s);
