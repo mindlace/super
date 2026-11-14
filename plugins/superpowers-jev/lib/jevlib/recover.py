@@ -12,7 +12,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import log
+from . import ctx, log
 from .builders import transcript
 
 HOOK_MARK = "stop-verify"
@@ -29,9 +29,7 @@ def parse_ts(s):
     return dt if dt.tzinfo else dt.astimezone()
 
 
-def slug(path):
-    """Claude Code's project-dir name for a cwd: every non-alphanumeric char becomes `-`."""
-    return re.sub(r"[^A-Za-z0-9]", "-", str(path))
+slug = ctx.project_slug
 
 
 def _project_dirs(projects_dir, root):
