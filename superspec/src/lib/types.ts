@@ -1,9 +1,9 @@
 export interface SpecEntry {
   /** absolute path on disk */
   path: string;
-  /** basename, e.g. 2026-06-22-foo-design.md */
+  /** basename, e.g. 2026-06-22-foo-design.md or .html */
   filename: string;
-  /** first markdown heading (stripped) / first non-empty line / filename */
+  /** first markdown heading / first non-empty line, or an HTML spec's first h1; else filename */
   title: string;
   /** project directory name */
   project: string;

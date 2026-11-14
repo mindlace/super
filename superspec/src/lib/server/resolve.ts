@@ -1,6 +1,7 @@
 import { resolve as resolvePath, join, sep } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
-import { listDirs, listMarkdown } from './fswalk';
+import { listDirs, listSpecFiles } from './fswalk';
+import { isSpecFile } from '../specfile';
 import { listWorktrees, makeEntry } from './discovery';
 import { pairAndGroup, type DisplayGroup } from '../pairing';
 import type { SpecEntry } from '../types';
@@ -21,7 +22,7 @@ async function collectCandidates(root: string): Promise<Candidate[]> {
   const addSuperdir = async (superDir: string, project: string, worktree: string | null) => {
     for (const sub of await listDirs(superDir)) {
       const dir = join(superDir, sub);
-      for (const filename of await listMarkdown(dir)) {
+      for (const filename of await listSpecFiles(dir)) {
         out.push({ dir, filename, project, worktree, subdir: sub, path: join(dir, filename) });
       }
     }
@@ -45,14 +46,19 @@ export async function resolveDoc(
   const q = query.trim();
   if (!q) return null;
 
-  const qMd = q.endsWith('.md') ? q : `${q}.md`;
-  const abs = resolvePath(qMd);
+  const forms = isSpecFile(q) ? [q] : [`${q}.md`, `${q}.html`];
 
   const candidates = await collectCandidates(root);
-  let matches = candidates.filter((c) => c.path === abs || c.path.endsWith(sep + qMd));
-  if (matches.length === 0 && isWorktreePath(abs)) {
-    const mainEq = mainEquivalent(abs);
-    if (mainEq) matches = candidates.filter((c) => c.path === mainEq);
+  let matches = candidates.filter((c) =>
+    forms.some((f) => c.path === resolvePath(f) || c.path.endsWith(sep + f))
+  );
+  if (matches.length === 0) {
+    for (const f of forms) {
+      const abs = resolvePath(f);
+      if (!isWorktreePath(abs)) continue;
+      const mainEq = mainEquivalent(abs);
+      if (mainEq) matches.push(...candidates.filter((c) => c.path === mainEq));
+    }
   }
   if (matches.length === 0) return null;
 

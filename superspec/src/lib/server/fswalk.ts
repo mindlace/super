@@ -1,6 +1,7 @@
 import { readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { SUPERPOWERS_SEGMENT } from './config';
+import { isSpecFile } from '../specfile';
 
 // A branch name with slashes ("support/foo") nests its worktree that many levels
 // below .claude/worktrees, so we can't assume worktrees are direct children.
@@ -24,10 +25,10 @@ export async function listDirs(path: string): Promise<string[]> {
   }
 }
 
-export async function listMarkdown(dir: string): Promise<string[]> {
+export async function listSpecFiles(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
-    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+    return entries.filter((e) => e.isFile() && isSpecFile(e.name)).map((e) => e.name);
   } catch {
     return [];
   }

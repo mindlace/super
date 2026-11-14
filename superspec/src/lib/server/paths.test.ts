@@ -18,6 +18,16 @@ describe('assertSpecPath', () => {
     expect(assertSpecPath(goodWorktree, ROOT)).toBe(goodWorktree);
   });
 
+  it('accepts an .html spec path', () => {
+    const html = join(ROOT, 'planafoot/docs/superpowers/specs/2026-06-22-x-design.html');
+    expect(assertSpecPath(html, ROOT)).toBe(html);
+  });
+
+  it('rejects an .htm file', () => {
+    const htm = join(ROOT, 'p/docs/superpowers/specs/x.htm');
+    expect(() => assertSpecPath(htm, ROOT)).toThrow();
+  });
+
   it('rejects a path outside the root', () => {
     expect(() => assertSpecPath('/etc/passwd', ROOT)).toThrow();
   });

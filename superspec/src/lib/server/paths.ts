@@ -1,5 +1,6 @@
 import { resolve, sep } from 'node:path';
 import { PROJECTS_ROOT, SUPERPOWERS_SEGMENT } from './config';
+import { isSpecFile } from '../specfile';
 
 function bad(message: string): never {
   const err = new Error(message) as Error & { status: number };
@@ -15,8 +16,8 @@ export function assertSpecPath(p: string, root: string = PROJECTS_ROOT): string 
   if (!resolved.includes(sep + SUPERPOWERS_SEGMENT + sep)) {
     bad(`path is not inside a docs/superpowers directory: ${p}`);
   }
-  if (!resolved.endsWith('.md')) {
-    bad(`path is not a markdown file: ${p}`);
+  if (!isSpecFile(resolved)) {
+    bad(`path is not a spec file (.md or .html): ${p}`);
   }
   return resolved;
 }
