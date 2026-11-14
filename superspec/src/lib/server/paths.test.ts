@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-import { assertSpecPath } from './paths';
+import { assertSpecPath, assertAssetPath } from './paths';
 
 const ROOT = '/tmp/projects-root';
 const good = join(ROOT, 'planafoot/docs/superpowers/specs/2026-06-22-x-design.md');
@@ -50,5 +50,34 @@ describe('assertSpecPath', () => {
   it('accepts a plans path (any superpowers subdir)', () => {
     const plan = join(ROOT, 'planafoot/docs/superpowers/plans/2026-06-22-x.md');
     expect(assertSpecPath(plan, ROOT)).toBe(plan);
+  });
+});
+
+describe('assertAssetPath', () => {
+  const ok = join(
+    ROOT,
+    'p/.claude/worktrees/w/docs/superpowers/specs/assets/2026-11-13-foo-design/shot.png'
+  );
+
+  it('accepts assets under <type>/assets/', () => {
+    expect(assertAssetPath(ok, ROOT)).toBe(ok);
+    expect(
+      assertAssetPath(join(ROOT, 'p/docs/superpowers/plans/assets/x/v.webm'), ROOT)
+    ).toBeTruthy();
+    expect(
+      assertAssetPath(join(ROOT, 'p/docs/superpowers/specs/assets/x/SHOT.PNG'), ROOT)
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ['traversal', join(ROOT, 'p/docs/superpowers/specs/assets/../../../../../etc/x.png')],
+    ['outside root', '/etc/x.png'],
+    ['assets directly under superpowers', join(ROOT, 'p/docs/superpowers/assets/x/a.png')],
+    ['not in assets/', join(ROOT, 'p/docs/superpowers/specs/a.png')],
+    ['not under docs/superpowers', join(ROOT, 'p/src/assets/a.png')],
+    ['svg', join(ROOT, 'p/docs/superpowers/specs/assets/x/a.svg')],
+    ['html', join(ROOT, 'p/docs/superpowers/specs/assets/x/mock.html')]
+  ])('rejects %s', (_n, p) => {
+    expect(() => assertAssetPath(p, ROOT)).toThrow();
   });
 });
