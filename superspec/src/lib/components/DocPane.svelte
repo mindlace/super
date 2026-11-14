@@ -19,10 +19,12 @@
     caretToEnd,
     collectRenderedEditables,
     editedInner,
-    editingAligned,
+    editingOffReason,
     isEmptyItem,
+    isImeEnter,
     pastedText,
-    toggleInline
+    toggleInline,
+    type EditingOff
   } from '$lib/inplaceDom';
 
   let {
@@ -82,8 +84,8 @@
   let domSource: { path: string; text: string } | null = null;
   let renderPending = false;
   let editables: HTMLElement[] = [];
-  // The path whose in-place editing is off (removed markup or a misaligned DOM).
-  let editingOffFor = $state<string | null>(null);
+  // The path whose in-place editing is off, and why (removed markup or a misaligned DOM).
+  let editingOffFor = $state<{ path: string; reason: EditingOff } | null>(null);
   // After a list item is added or removed: the editable (by index) that gets the
   // caret once the re-render lands and editing re-arms.
   let pendingCaret: { path: string; index: number } | null = null;
@@ -188,11 +190,12 @@
     const found = collectRenderedEditables(root);
     const caret = pendingCaret;
     pendingCaret = null;
-    if (r.removed.length || !editingAligned(found, source)) {
-      editingOffFor = path;
+    const off = editingOffReason(r.removed, found, source);
+    if (off) {
+      editingOffFor = { path, reason: off };
       return;
     }
-    if (editingOffFor === path) editingOffFor = null;
+    if (editingOffFor?.path === path) editingOffFor = null;
     editables = found;
     found.forEach((el, i) => {
       if (!source[i].range) return;
@@ -223,10 +226,10 @@
     // Re-locate against the current source every time, so earlier splices never
     // leave stale offsets.
     const source = locateEditables(content);
-    if (!source[i]?.range || !editingAligned(editables, source)) {
+    if (!source[i]?.range || editingOffReason([], editables, source, i)) {
       disarm();
       domSource = null;
-      editingOffFor = path;
+      editingOffFor = { path, reason: 'misaligned' };
       renderNonce++;
       return null;
     }
@@ -307,7 +310,7 @@
     } else if (mod && key === 'u') {
       // No underline in a spec.
       e.preventDefault();
-    } else if (e.key === 'Enter' && !e.isComposing) {
+    } else if (e.key === 'Enter' && !isImeEnter(e)) {
       // Enter that commits an IME composition is not a new line. Any other Enter
       // is refused, except plain Enter at the end of a list item.
       e.preventDefault();
@@ -362,7 +365,9 @@
     }
   }
 
-  const editingOff = $derived(editingOffFor === path && rendered?.kind === 'html');
+  const editingOff = $derived(
+    editingOffFor?.path === path && rendered?.kind === 'html' ? editingOffFor.reason : null
+  );
   const noticeCount = $derived(
     rendered ? rendered.removed.length + rendered.problems.length + (editingOff ? 1 : 0) : 0
   );
@@ -399,8 +404,17 @@
           {#each rendered.problems as item, i (i)}
             <li>{item}</li>
           {/each}
-          {#if editingOff}
-            <li>In-place editing is off for this file: use the Source view to edit it.</li>
+          {#if editingOff === 'removed'}
+            <li>
+              In-place editing is off for this file because markup was removed from it (listed
+              above): use the Source view to edit it.
+            </li>
+          {:else if editingOff}
+            <li>
+              In-place editing is off for this file because its rendered and source text blocks
+              don't line up, for example an HTML comment or stray markup inside a paragraph: use
+              the Source view to edit it.
+            </li>
           {/if}
         </ul>
       </details>

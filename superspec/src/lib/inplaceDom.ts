@@ -5,6 +5,7 @@ import {
   collectEditables,
   cleanInline,
   isEmptyInner,
+  normText,
   type Editable,
   type TreeAdapter
 } from './inplace';
@@ -55,6 +56,50 @@ export function editingAligned(rendered: HTMLElement[], source: Editable[]): boo
   return (
     rendered.length === source.length && rendered.every((el, i) => el.localName === source[i].tag)
   );
+}
+
+/** The element's visible text as the source side computes it: reader additions left out. */
+function renderedText(el: HTMLElement): string {
+  const copy = el.cloneNode(true) as HTMLElement;
+  for (const added of copy.querySelectorAll('[data-sr-added]')) added.remove();
+  if (copy.localName === 'li') copy.querySelector(':scope > input')?.remove();
+  return normText(copy.textContent ?? '');
+}
+
+/**
+ * Why in-place editing is off: markup was removed from the render, or the
+ * rendered editables do not line up with the source's.
+ */
+export type EditingOff = 'removed' | 'misaligned';
+
+/**
+ * Whether the rendered editables may be edited against `source`; null when they
+ * may, else why not. They must list the same elements in the same order with
+ * the same visible text, so a keystroke is never spliced into the wrong element
+ * (a removal that drops an editable can leave the tags lined up, see the tests).
+ * `editing` is the index of the element being typed into, whose text runs one
+ * edit ahead of the source; the other elements still pin the alignment.
+ */
+export function editingOffReason(
+  removed: readonly string[],
+  rendered: HTMLElement[],
+  source: Editable[],
+  editing?: number
+): EditingOff | null {
+  if (removed.length) return 'removed';
+  if (!editingAligned(rendered, source)) return 'misaligned';
+  const textMatches = rendered.every(
+    (el, i) => i === editing || renderedText(el) === source[i].text
+  );
+  return textMatches ? null : 'misaligned';
+}
+
+/**
+ * A keydown that belongs to an IME composition (Safari reports the Enter that
+ * commits one with `isComposing` false and keyCode 229).
+ */
+export function isImeEnter(e: { isComposing: boolean; keyCode: number }): boolean {
+  return e.isComposing || e.keyCode === 229;
 }
 
 /**

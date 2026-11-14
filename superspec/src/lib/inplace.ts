@@ -13,10 +13,25 @@ export interface Range {
   start: number;
   end: number;
 }
-/** `range` null: the element has no end tag in the source, so it is not editable. */
+/**
+ * `range` null: the element has no end tag in the source, so it is not editable.
+ * `text`: the element's visible text, whitespace-normalised (see `normText`), so
+ * the rendered side can be checked against it.
+ */
 export interface Editable {
   tag: string;
   range: Range | null;
+  text: string;
+}
+
+/** Visible text with every whitespace run collapsed to one space and the ends trimmed. */
+export function normText(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
+}
+
+function textOf(n: Node): string {
+  if (n.nodeName === '#text') return (n as { value: string }).value;
+  return 'childNodes' in n ? n.childNodes.map(textOf).join('') : '';
 }
 /**
  * `tag` returns null for a text node and any non-null string for everything else.
@@ -100,7 +115,8 @@ export function locateEditables(source: string): Editable[] {
   return collectEditables<Node>(root, parse5Adapter).map((n) => {
     const el = n as Element;
     const loc = el.sourceCodeLocation;
-    if (!loc || !loc.startTag || !loc.endTag) return { tag: el.tagName, range: null };
+    const text = normText(textOf(el));
+    if (!loc || !loc.startTag || !loc.endTag) return { tag: el.tagName, range: null, text };
     let start = loc.startTag.endOffset;
     if (el.tagName === 'li') {
       const first = el.childNodes.find((c) => c.nodeName !== '#text') as Element | undefined;
@@ -109,7 +125,7 @@ export function locateEditables(source: string): Editable[] {
         start = (l?.startTag ?? l)?.endOffset ?? start;
       }
     }
-    return { tag: el.tagName, range: { start, end: loc.endTag.startOffset } };
+    return { tag: el.tagName, range: { start, end: loc.endTag.startOffset }, text };
   });
 }
 

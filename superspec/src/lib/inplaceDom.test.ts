@@ -12,7 +12,9 @@ import {
   collectRenderedEditables,
   editedInner,
   editingAligned,
+  editingOffReason,
   isEmptyItem,
+  isImeEnter,
   pastedText,
   toggleInline
 } from './inplaceDom';
@@ -81,6 +83,79 @@ describe('editingAligned', () => {
     const src = fixture('sample-spec.html');
     const root = container((await renderSpecHtml(src, SPEC)).html);
     expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toBe(true);
+  });
+});
+
+describe('editingOffReason', () => {
+  const decide = async (src: string, except?: number) => {
+    const out = await renderSpecHtml(src, SPEC);
+    const root = container(out.html);
+    return {
+      out,
+      root,
+      reason: (removed: string[]) =>
+        editingOffReason(removed, collectRenderedEditables(root), locateEditables(src), except)
+    };
+  };
+
+  it('allows editing the sample spec and plan', async () => {
+    for (const name of ['sample-spec.html', 'sample-plan.html']) {
+      const { out, reason } = await decide(fixture(name));
+      expect(reason(out.removed)).toBeNull();
+    }
+  });
+
+  it('refuses when markup was removed', async () => {
+    const { out, reason } = await decide(
+      '<article><header><h1>T</h1></header><p>a</p><button>b</button></article>'
+    );
+    expect(out.removed).not.toEqual([]);
+    expect(reason(out.removed)).toBe('removed');
+  });
+
+  it('refuses when the tags line up but the text does not', async () => {
+    // The comment makes the source p non-editable and leaves the rendered one
+    // editable; the audio and its p are removed from the render only. Both
+    // sides list one p, holding different text.
+    const src = '<article><header><h1>T</h1></header><p>x<!--c--></p><audio><p>z</p></audio></article>';
+    const { out, root, reason } = await decide(src);
+    expect(editingAligned(collectRenderedEditables(root), locateEditables(src))).toBe(true);
+    expect(out.removed).not.toEqual([]);
+    // Even with no removal reported, the text cross-check refuses.
+    expect(reason([])).toBe('misaligned');
+  });
+
+  it('refuses when the tags differ', async () => {
+    const src = '<article><header><h1>T</h1></header><p>a<!--c--></p><p>b</p></article>';
+    expect((await decide(src)).reason([])).toBe('misaligned');
+  });
+
+  it('ignores the text of the element being edited', async () => {
+    const src = fixture('sample-plan.html');
+    const { root } = await decide(src);
+    const eds = collectRenderedEditables(root);
+    const i = eds.findIndex((e) => e.id === 't1-s3');
+    eds[i].lastChild!.textContent = 'typed';
+    const source = locateEditables(src);
+    expect(editingOffReason([], eds, source)).toBe('misaligned');
+    expect(editingOffReason([], eds, source, i)).toBeNull();
+  });
+
+  it('compares whitespace-normalised text without reader additions', async () => {
+    const src =
+      '<article><header><h1>T</h1></header><section id="s"><h2>Head  &amp;\n  more</h2>' +
+      '<ol><li id="c">\n <input type="checkbox">  step&nbsp;<code>x</code></li></ol></section></article>';
+    const { reason } = await decide(src);
+    expect(reason([])).toBeNull();
+    expect(locateEditables(src).map((e) => e.text)).toEqual(['T', 'Head & more', 'step x']);
+  });
+});
+
+describe('isImeEnter', () => {
+  it('treats a composing Enter, and Safari keyCode 229, as an IME commit', () => {
+    expect(isImeEnter({ isComposing: true, keyCode: 13 })).toBe(true);
+    expect(isImeEnter({ isComposing: false, keyCode: 229 })).toBe(true);
+    expect(isImeEnter({ isComposing: false, keyCode: 13 })).toBe(false);
   });
 });
 
