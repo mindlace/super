@@ -1,9 +1,9 @@
 # Peer-session workflow for supercomposer / superconductor
 
 Status: approved by the partner 2026-11-13. Items marked **(call)** were choices made while
-drafting that the partner approved with the document. One item is still **(open)**: starting
-the next task during the previous task's review. It is outside the first plan until the
-ledger measurement is in.
+drafting that the partner approved with the document. Starting the next task during the
+previous task's review was measured after approval and not adopted (see Parallelism at each
+layer).
 
 ## Intent
 
@@ -313,7 +313,7 @@ subagent-driven-development can stay unchanged and still nothing waits needlessl
 | Tasks | An operator's plan is itself a graph. Where it contains task groups that do not depend on each other and write different files, the operator keeps one group and hands the others back; the conductor starts a sibling operator for each, with that slice of the already-written plan. **(call)** | Same rules as units. Siblings message each other by name. Each lane keeps per-task review. |
 | Planning | Operators for units that cannot start yet are still started, to write their plan against the contracts while their dependencies are being built. **(call)** | A plan is cheap to redo if a ruling changes its unit; no code is written until admission. |
 | Review | Merge-review forks and adjudication forks run beside the operators and beside each other. | Read-only, or one amending fork at a time. |
-| Review inside a lane | Starting task N+1 while task N's review is still running. **(open)** | Not adopted yet. It is the one item here that changes the subagent-driven-development loop, and it only pays if first reviews usually pass clean. Being measured from existing ledgers. |
+| Review inside a lane | Starting task N+1 while task N's review is still running. | **Not adopted.** Measured 2026-11-13 over 56 reviewed tasks in six sfhousing ledgers: 57% passed first review clean (10% to 86% by project); of ten sampled fixes about six changed behaviour the next task would build on; and a review took roughly 1 to 5 minutes against 15 to 30 or more for an implementer. The saving is a few minutes per task and the next task would often be built on something about to change. |
 
 The budget bands are the only cap. In the middle band, operators that are only planning count
 toward N.
