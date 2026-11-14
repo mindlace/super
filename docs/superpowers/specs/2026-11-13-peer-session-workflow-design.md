@@ -76,7 +76,7 @@ Observed on Claude Code 2.1.325 (spike, 2026-11-13) unless marked as from the do
 | A fork's first call reads the original's cached prefix (about 39k tokens read, under 300 written). | spike |
 | A forked or spawned session obeys the global "all work in a worktree" rule and may refuse to write otherwise. | spike |
 | `claude --bg` refuses to start in a directory that has not accepted the workspace trust prompt interactively, including `~/Projects/super`. A prior `-p` run does not grant trust. | spike |
-| Headless `-p` sessions skip the trust prompt, appear in `claude agents --json`, and can be messaged while their stdin is held open, but `claude logs` / `claude stop` do not manage them. | spike |
+| Headless `-p` sessions skip the trust prompt, appear in `claude agents --json`, and can be messaged while their stdin is held open, but `claude stop` does not manage them. | spike |
 | On this machine `claude` is a cmux shim that adds a permission-request hook; an unapproved tool call in a headless session is denied only after about 2 minutes. `--permission-mode acceptEdits` plus explicit `--allowedTools` runs unattended. | spike |
 | Main sessions get a 1-hour cache on a subscription. Subagents, forks and teammates get 5 minutes unless `subagentPromptCacheTtl` is set to `1h`. | docs |
 | A peer message never counts as the partner's consent and cannot answer a permission prompt. | docs |
@@ -362,8 +362,11 @@ question files and `claude agents --json`.
   SDD ledger included. A message from an operator counts as progress the moment it is
   handled. An operator with no evidence for one beat (`STALL_BEATS` = 1) gets one status
   request, so it is asked 10 to 20 minutes after its last evidence; with no evidence and no
-  reply a beat later it is stalled. The session list's status fields read `busy` for idle
-  and working sessions alike (live drill), so nothing reads them. The high-band
+  reply a beat later it is stalled. The session list's status field does tell idle from
+  busy (live drill: `busy`/`working` in 28 of 29 samples while an operator worked,
+  `idle`/`done` in 5 of 5 after it finished), but an operator that ended its turn to wait
+  on a background child also reads idle, so neither value means stuck or healthy, and
+  nothing reads it. The high-band
   reset wait shares the timer. This is the one piece of code in the workflow, because a
   beat written as separate commands cost several tool calls per unit every ten minutes; as
   one script a quiet beat is two tool calls.
@@ -371,7 +374,8 @@ question files and `claude agents --json`.
   ladder, counted from its newest merge, so a merged row resets it. The first is restarted.
   The second is investigated before the restart: a subagent reads the tail of the
   operator's session transcript, found by the session id recorded when its launch was
-  confirmed (or, if there is none, its worktree and SDD ledger), and
+  confirmed and copied, bounded, into the ledger dir (or, if there is none, its worktree
+  and SDD ledger), and
   names one cause from a fixed list (denied command, usage limit, hung process, a plan or
   spec defect it keeps hitting, unknown); the conductor applies that cause's remedy and
   ledgers both. A usage limit is not a death: the unit waits, unwatched, until the reset,
@@ -407,7 +411,11 @@ with the unit's worktree as the working directory. Verified 2026-11-13: once the
 accepted the trust prompt in the repo, `--bg` starts in the repo and in its
 `.claude/worktrees/*` children; the session appears in `claude agents --json` with its name
 and a status field; a `SendMessage` to it while idle woke it and it replied by name; and
-`claude logs`, `attach` and `stop` manage it. It runs the partner's normal session hooks and
+`attach` and `stop` manage it. Its transcript is
+`~/.claude/projects/<project dir>/<sessionId>.jsonl` and stays there after the session is
+stopped, its tail readable JSON lines (live drill, round 3 rerun). A launch whose session
+never appears in `claude agents --json` within the bound in `beat.sh` is a failed start.
+It runs the partner's normal session hooks and
 permission mode.
 
 - The repo must be trusted once, by the partner, before a first run. The conductor checks
@@ -415,7 +423,7 @@ permission mode.
 - The conductor learns an operator's state from its heartbeat (Supervision, above);
   `SendMessage`'s `notify_when_idle` only brings a status request forward.
 - Headless `claude -p` with a held-open input stream also works without trust, but it is not
-  managed by `claude logs` / `claude stop`. Not used.
+  managed by `claude stop`. Not used.
 
 Composer forks are one-shot (`claude -p --resume <checkpoint> --fork-session`), run by the
 conductor as a background command under a time limit.
