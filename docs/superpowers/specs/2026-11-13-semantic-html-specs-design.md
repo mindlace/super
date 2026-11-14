@@ -18,12 +18,13 @@ rule is untouched: a spec belongs to its worktree and becomes canon on merge.
 
 This is the first of three projects, in this order:
 
-1. **Format and single-pane reading** (this document).
-2. **WYSIWYM editing** in that pane (see "What the next project needs").
-3. **A feedback loop**: comments anchored to parts of a spec that the agent
+1. **Format, single-pane reading, and in-place text editing** (this document).
+2. **A feedback loop**: comments anchored to parts of a spec that the agent
    can read.
+3. **Structural editing**, if it ever turns out to be wanted.
 
-This project must leave the next two what they need.
+Ethan's edits to specs have so far been small and textual, never structural.
+The editing in this project is sized to that.
 
 ## Goals
 
@@ -39,18 +40,25 @@ This project must leave the next two what they need.
 5. A spec can embed images and video stored beside it in the worktree.
 6. The raw file is at least as clear to an agent as the markdown it replaces.
 7. Existing markdown specs keep working, and get the same stylesheet.
+8. The text of an HTML spec can be corrected where it is read, without
+   switching to the source, and such an edit changes nothing else in the file.
+
+**Stretch:** bold, italic and underline on a selection, and adding or removing
+list items, in the same in-place editor.
 
 ## Non-goals
 
-- WYSIWYM editing (project 2). Until then, edits are made in the HTML source.
-- The feedback loop (project 3).
+- Structural editing in place: adding, removing or reordering blocks, rows,
+  columns, sections, callouts or figures; changing a block's type; drawing or
+  rearranging a diagram. All of that is done in the source or by an agent.
+- The feedback loop (project 2).
 - Publishing to Claude artifacts. The format should not rule it out: the
   stylesheet is a standalone file so a spec can later be wrapped and
   published.
 - Converting existing markdown specs.
 - Rendering Mermaid.
-- Moving plans to HTML. The reader renders any `.html` file it finds, but only
-  specs are *written* in HTML for now (see Open questions).
+- Switching what gets written. Specs and plans, including this project's own,
+  stay in markdown until this has shipped and been used (see Rollout).
 
 ## Anti-goals
 
@@ -103,7 +111,7 @@ doctype, `html`, `head`, `body`, `style`, `script` or `link`.
 |---|---|
 | Structure | `article`, `header`, `section`, `h1`–`h4`, `hr` |
 | Prose | `p`, `ul`, `ol`, `li`, `dl`, `dt`, `dd`, `blockquote`, `details`, `summary` |
-| Inline | `a`, `em`, `strong`, `code`, `kbd`, `mark`, `sub`, `sup`, `br` |
+| Inline | `a`, `em`, `strong`, `u`, `code`, `kbd`, `mark`, `sub`, `sup`, `br` |
 | Callouts | `aside` with `data-kind` = `note`, `warning`, `decision` or `question` |
 | Code | `pre` > `code`, language in `data-lang` |
 | Tables | `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `th`, `td` |
@@ -262,40 +270,78 @@ rendered pane, for both `.html` and `.md`.
 - The toggle remembers its state per session, not per file, and a file on
   main (read-only) can still be toggled to view its source.
 - Autosave, the mtime conflict flow, external reload and read-only-on-main
-  behave as they do today; they apply in source view, the only place edits
-  happen in this project.
+  behave as they do today, in both the source view and in-place editing.
 - Scroll position is carried across the toggle by the same scroll-ratio
   approach the two panes use to stay in sync today.
 
-## What the next project needs
+### Editing text in place
 
-Project 2 puts a WYSIWYM editor in the rendered pane. It is not designed
-here, but these decisions are recorded so this project does not block it:
+In the rendered pane of an `.html` spec, text can be edited where it stands.
+This is deliberately not a document editor: it changes the words inside
+existing elements and nothing else.
 
-- **Editor:** TipTap (ProseMirror underneath, HTML-native), with a schema
-  that is exactly the subset above, so the format has one definition. An
-  earlier idea of lifting planafoot's editor was dropped: it is Milkdown, a
-  markdown-in, markdown-out editor that shows unknown HTML as literal text.
-- **Sections** will be edited as a flat run of headings and blocks, wrapped
-  into nested `section` elements on save. So nothing in this project may
-  depend on a `section` carrying anything except its `id`.
-- **Diagrams** will be shown as one rendered block: movable and deletable,
-  not redrawn in place. The source toggle stays for that.
-- **Canonical formatting.** An editor rewrites the whole file on save. To
-  keep diffs small, `docs/spec-format.md` defines one canonical layout now
-  (one block element per line, two-space nesting, attributes in a fixed
-  order, `id` first) and agents write specs in it from the start.
+**What is editable.** The text-bearing elements of the subset: `p`, `li`,
+`h1`–`h4`, `dt`, `dd`, `td`, `th`, `caption`, `figcaption`, `summary`, and the
+text of an `aside` or `blockquote` through the `p` or bare text inside it.
+Inline markup already inside one (`code`, `a`, `strong`…) is kept and can be
+typed within.
 
-## Getting specs written this way
+**What is not.**
 
-The reader accepting HTML changes nothing until specs are written in it.
+- Code blocks. They are rendered with highlighting markup, so they are edited
+  in the source. *(My call.)*
+- Diagram text. Browsers do not support in-place editing of SVG `text`, so
+  this is not the straightforward case; it is edited in the source.
+- Markdown specs. Mapping an edit back into markdown source is a different
+  problem, and the format is being left behind; `.md` is edited in the source
+  as today. *(My call.)*
+- Files on main, which are read-only.
 
-- Add `docs/spec-format.md` to this repo: the format section above as a
+**Keys.** Enter does not create a new block. Paste inserts plain text.
+Undo is the browser's own, within the element being edited.
+
+**Saving changes only the edited element.** This is the rule that makes
+in-place editing safe on a file agents also read and diff. The rendered DOM
+is sanitised and post-processed, so it is never written back. Instead:
+
+1. The source is parsed with a parser that records where each element sits in
+   the source text (`parse5` with source locations is the suggested one; it
+   runs in the browser).
+2. Each editable element in the rendered pane is tied to its source element.
+3. On input, the edited element's inner content is cleaned to the inline
+   subset (dropping anything the browser injected, and normalising `b`/`i` to
+   `strong`/`em`) and spliced into the source text at that element's inner
+   range. Every other byte of the file is left as it was.
+4. The result goes through the existing debounced autosave and mtime check.
+
+A test must show that editing one paragraph of a multi-section spec with
+tables and a diagram yields a diff confined to that paragraph.
+
+**Stretch.** In the same editor: Cmd-B, Cmd-I and Cmd-U wrap or unwrap the
+selection in `strong`, `em` and `u`; Enter at the end of a list item adds a
+sibling item, and Backspace in an empty item removes it. List items are the
+one place the splice replaces a parent's (`ul`/`ol`) inner range rather than
+a leaf's. Turning a paragraph into a list, or the reverse, is not included.
+
+A full schema-driven editor (TipTap was considered) is not needed for this
+and is deferred. Planafoot's editor was looked at and set aside: it is
+Milkdown, which reads and writes markdown and shows unknown HTML as literal
+text.
+
+## Rollout
+
+The reader accepting HTML changes nothing until specs are written in it, and
+that switch is deliberately not part of this project.
+
+- This project adds `docs/spec-format.md`: the format section above as a
   standalone reference an agent can be pointed at, with one complete example.
-- Add an override to `~/.claude/CLAUDE.md` under "Superpowers Skill Overrides":
-  design docs are written as `.html` to
-  `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.html`, following
-  `~/Projects/spec_reader/docs/spec-format.md`.
+- It does **not** touch `~/.claude/CLAUDE.md`. Specs and plans keep being
+  written in markdown until this has shipped. Turning HTML on afterwards is
+  one override there, pointing the spec-writing skills at
+  `~/Projects/spec_reader/docs/spec-format.md`; whether plans follow is
+  decided then.
+- Until then the reader is exercised with hand-converted specs, starting with
+  the saved mockup's `article`.
 
 ## Testing
 
@@ -310,6 +356,9 @@ Pure unit tests, colocated, in the existing style:
 - Asset path assertion: accepts the layout above; rejects traversal, wrong
   directory, wrong extension.
 - `src` rewriting for relative paths.
+- In-place editing, as pure functions over a source string: locating an
+  element's inner range, cleaning edited content to the inline subset, and
+  the splice, including the confined-diff case above.
 
 ## Left to the builder
 
@@ -319,9 +368,5 @@ Pure unit tests, colocated, in the existing style:
 
 ## Open questions
 
-1. **Plans.** This spec keeps plans in markdown: agents tick their checkboxes
-   and edit them mid-run, and they are read by you far less than specs are.
-   Should plans move too?
-2. **`~/.claude/CLAUDE.md`.** The override above edits a file outside this
-   repo. Should the implementation make that edit, or leave the text for you
-   to add?
+None. Whether plans move to HTML, and when the override is switched on, are
+decided after this ships (see Rollout).
