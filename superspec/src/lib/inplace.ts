@@ -28,7 +28,7 @@ export interface TreeAdapter<N> {
   children(n: N): N[];
   skip?(n: N): boolean;
   /** Text of a text node; needed to tell whitespace before a checklist checkbox. */
-  text?(n: N): string;
+  text(n: N): string;
 }
 
 const OPAQUE = new Set(['pre', 'svg']);
@@ -58,7 +58,7 @@ export function collectEditables<N>(root: N, a: TreeAdapter<N>): N[] {
     }
     return -1;
   }
-  const isBlankText = (n: N): boolean => (a.text?.(n) ?? 'x').trim() === '';
+  const isBlankText = (n: N): boolean => a.text(n).trim() === '';
 
   function editable(n: N, t: string): boolean {
     if (!EDITABLE_TAGS.includes(t)) return false;
