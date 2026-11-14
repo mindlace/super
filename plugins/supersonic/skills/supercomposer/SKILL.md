@@ -210,8 +210,9 @@ indices in traceability-table order.
    `## Checkpoints`, so every fork reuses that model. It is deliberately not this session: a
    package that cannot be understood cold is a defect to find now.
 4. **Build graph.** Run the `## Build-graph fork` from `composer-forks.md`
-   and wait for it to exit with `Build graph @ <sha>` and its
-   `Longest chain:` line. Record it as the ledger's header line
+   (fork name `graph-all`) and wait for it to exit; its `.out` file holds
+   `Build graph @ <sha>` and its `Longest chain:` line. If it hit its time
+   limit or printed neither, run it once more. Record it as the ledger's header line
    `Build graph: <build-graph path> @ <sha>`, below `Package worktree:`;
    when a later fix reruns the fork, update the sha.
 5. **Fresh-eyes check of the chain.** One fresh-eyes agent challenges every

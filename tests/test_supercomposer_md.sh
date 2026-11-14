@@ -149,6 +149,22 @@ for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'
   section "$h" | grep -qF -- 'env -C "<package worktree>" claude -p' \
     || { echo "FAIL: ## $h command must launch with env -C \"<package worktree>\""; exit 1; }
 done
+# Every fork and the checkpoint run under the time limit, set once; output lines go to a file.
+n=$(grep -cF 'FORK_LIMIT=2700' "$forks" || true); [ "$n" -eq 1 ] || { echo "FAIL: FORK_LIMIT=2700 must be set exactly once (found $n)"; exit 1; }
+grep -qF 'setpgrp; exec(@ARGV) or exit 127' "$forks" || { echo "FAIL: time limit must run the fork in its own process group"; exit 1; }
+grep -qF 'kill(TERM=>-$p)' "$forks" || { echo "FAIL: time limit must stop the whole process group"; exit 1; }
+grep -qF '<fork limit> <ledger dir>/prompts/<fork name>.pid' "$forks" || { echo "FAIL: time limit must record the group in <fork name>.pid"; exit 1; }
+for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  section "$h" | grep -qF -- '<time limit> env -C "<package worktree>" claude -p' \
+    || { echo "FAIL: ## $h command must start with <time limit>"; exit 1; }
+  section "$h" | grep -qF 'as a background Bash command' \
+    || { echo "FAIL: ## $h must run as a background Bash command"; exit 1; }
+done
+for h in 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'; do
+  section "$h" | grep -qF -- '"$(cat <prompt file>)" > <ledger dir>/prompts/<fork name>.out 2>&1' \
+    || { echo "FAIL: ## $h must write its output to <fork name>.out"; exit 1; }
+done
+printf '%s\n' "$flat" | grep -qF '(fork name `graph-all`)' || { echo "FAIL: C5 must name its build-graph fork"; exit 1; }
 grep -qF 'No conversation found' "$forks" || { echo "FAIL: composer-forks.md must name the No conversation found failure"; exit 1; }
 grep -qF '/add-dir' "$forks" && { echo "FAIL: composer-forks.md must not ask the partner to /add-dir"; exit 1; }
 # C5 commits after branching land in the package worktree.

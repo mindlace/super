@@ -89,15 +89,18 @@ lexp='Package worktree:
 Build graph:
 ## Checkpoints
 ## Units
+## Supervision
 ## Questions
+## Forks
 ## Frame-defect tally
 ## Integration
 ## Cost'
 lgot=$(printf '%s\n' "$ledger" | sed -n -e 's/^    \(Package worktree:\).*/\1/p' -e 's/^    \(Build graph:\).*/\1/p' \
-  -e 's/^    \(## Checkpoints\)$/\1/p' -e 's/^    \(## Units\)$/\1/p' -e 's/^    \(## Questions\)$/\1/p' \
+  -e 's/^    \(## Checkpoints\)$/\1/p' -e 's/^    \(## Units\)$/\1/p' -e 's/^    \(## Supervision\)$/\1/p' \
+  -e 's/^    \(## Questions\)$/\1/p' -e 's/^    \(## Forks\)$/\1/p' \
   -e 's/^    \(## Frame-defect tally\)$/\1/p' -e 's/^    \(## Integration\)$/\1/p' -e 's/^    \(## Cost\)$/\1/p')
 [ "$lgot" = "$lexp" ] || { echo "FAIL: ledger format sections missing or out of order"; printf '%s\n' "$lgot"; exit 1; }
-for s in 'status: launching | planning | admitted | running | complete | stopped | replaced (ruling <id>) | deferred' \
+for s in 'status: launching | planning | admitted | complete | stopped | replaced (ruling <id>) | deferred' \
          '[defect-class: <slug>]' 'changes contract: yes|no' 'seven_day <pct>' 'session <id>'; do
   printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
     || { echo "FAIL: ledger format missing: $s"; exit 1; }
@@ -164,7 +167,6 @@ forbid 'If no plan was committed yet'
 need 'Reconcile the package worktree first'
 need 'revert --abort`, which takes out the reverts'
 need 'the untested merge at the branch'"'"'s head that Phase 0 takes out'
-need 'If that line gives no reset time you can read, start no wait'
 # Resume finishes a replacement the last conductor left unfinished, from ledgered steps.
 need 'Ledger every member `replaced (ruling <id>)` in one append, then stop'
 need '- cut <member> to <cut-to sha> for ruling <id>'
@@ -207,7 +209,6 @@ need "--grep='^docs(<design-slug>): unrule <id>\$' <that sha>..HEAD"
 need 'revert --no-commit <that sha>'
 need 'commit -m "docs(<design-slug>): unrule <id>"'
 need '- unruled <sha> for <id>: no ruling file'
-need 'file question `unrule-<id>`'
 need 'is not one: the Questions bullet ledgers it'
 forbid 'This reverts commit'
 need "--grep='^docs(<design-slug>): rule ' <checkpoint package sha>..HEAD"
@@ -273,6 +274,81 @@ need 'the most capable model available to this session'
 for s in 'Bounce rule' 'jev ask bounce' '**bounce**' 'Adjudicate yourself' 'exact delta'; do
   forbid "$s"
 done
+
+# Stall detection. Messages are hints; the heartbeat reconciles from state on a bounded timer.
+need 'Messages are hints; state is the truth.'
+once() { n=$(grep -cF -- "$1" "$skill" || true); [ "$n" -eq 1 ] || { echo "FAIL: SKILL.md must set $1 exactly once (found $n)"; exit 1; }; }
+once 'BEAT=600'
+once 'STALL_BEATS=2'
+need "perl -e '(\$f,\$s)=@ARGV; open(T,q(>),\$f); print T \$\$, q( ), time+\$s, qq(\\n); close T; exec(q(sleep),\$s)' <ledger dir>/timer <seconds>"
+need 'pgrep -F <ledger dir>/timer -x sleep'
+need 'pkill -F <ledger dir>/timer -x sleep'
+need 'The exit of a timer you stopped is not a beat'
+need 'Then run one beat (`## Supervision`, Heartbeat), which starts the heartbeat timer'
+need 'Ledger a beat only through the lines of what it changed'
+need 'The heartbeat is not a keep-warm ping: every beat does the whole reconcile'
+# Progress evidence is read mechanically, with commands the conductor is allowed to run.
+need 'git -C <unit worktree> rev-parse HEAD > <ledger dir>/assignments/<unit-slug>.beat'
+need "find <unit worktree> \\( -name .git -o -name node_modules \\) -prune -o -type f -newer <beat file> -print -quit"
+need '(`-mmin +19`)'
+need '(`-mmin +9`)'
+need 'touch <ledger dir>/assignments/<unit-slug>.asked'
+need 'The restart counts as a death'
+need "\`Delivers row <row id>\`"
+need '`Task <N>: complete (commits <base7>..<head7>` line'
+need 'A file in `<ledger dir>/questions/` with no `## Questions` line is a `question` message'
+need 'append `- resent to <session name>`'
+need 'Your own commands.'
+for c in perl pgrep pkill find touch; do need "\`$c\`"; done
+# notify_when_idle is an optimisation, never the only detection.
+need 'It is an optimisation only'
+forbid 'Learn of idle with `notify_when_idle`, never by polling'
+# Forks run under a time limit, are ledgered write-ahead, checked on exit, relaunched once.
+need 'Ledger `- fork <fork name> started <date-time>` under `## Forks`, then run its command line'
+need 'the time limit, `env -C "<package worktree>"`'
+need 'When a fork exits'
+need 'exit status 124'
+need 'No output, first time:'
+need 'No output, second time'
+need 'a fork that failed twice'
+need 'pkill -TERM -g <that number>'
+need 'exited: stopped at resume'
+need '`FORK_LIMIT` in `composer-forks.md`'
+need 'If it failed twice, append `- build graph for <id> @ none`'
+need '`checkpoint-<n>`, whose output is a session id'
+for s in '- fork <fork name> started <date-time>' '- fork <fork name> exited <status>: output | no output | stopped at resume' \
+         '- status asked <unit-slug>' '- stalled <unit-slug>' '- restarted <unit-slug>: death|stall' \
+         '- resent to <session name>' '- notified <session name>: sibling <sibling name>' \
+         '- fix round <unit-slug> @ <sha>: <one line>'; do
+  printf '%s\n' "$ledger" | tr '\n' ' ' | tr -s ' ' | grep -qF -- "$s" \
+    || { echo "FAIL: ledger format missing: $s"; exit 1; }
+done
+# Operators wait on leaves in the background, which the launch list must allow.
+need ',TaskStop,Bash(sleep:*),'
+need '- Allowed for waiting: sleep (run in the background), TaskStop'
+# Messages: status reply, denied command, anything else; repeats are idempotent.
+need '| `status: plan <plan path> at <sha> \| none;'
+need '| `need command: <command> for task <N>` |'
+need '| Anything else | Handled as a `question`.'
+need 'act on each only for what the ledger does not already show done'
+need 'never hold a task waiting on its reply'
+need 'Siblings may message each other by name, but nothing depends on it'
+# Bands: the heartbeat is the next event; a stopped unit frees its slot.
+need 'the next beat is the next event'
+need 'its slot goes to the next unit'
+forbid 'start no wait: run `budget.sh` again at the next event'
+# running was never set: it is not a status.
+forbid 'planning, admitted or running'
+# Resume of a launching unit keeps its assignment and finishes a sibling's hand-back steps (R2-1, R2-2).
+need 'Keep its assignment as written, except that `Plan:` names a plan its own SDD workspace already holds'
+need 'Launch no member of a family that a ruling still to be routed replaces'
+need 'also finish Hand-back siblings, steps 3-4'
+# The unrule conflict path files a real question and does not loop (R2-3).
+need 'or the ledger has a `routed unrule-<id>` line'
+need 'take its amendment out as current-state text'
+need 'before anything else merges in Phase 0'
+# Cut-work reverts get git's default subject whatever the config (R2-4).
+need 'git -c revert.reference=false -C <package worktree> revert --no-edit'
 
 # Jev section: bounce is retired; citation runs inside the adjudication fork.
 grep -q '^## Optional Jev judgments' "$skill" \

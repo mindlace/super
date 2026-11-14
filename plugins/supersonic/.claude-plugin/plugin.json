@@ -1,6 +1,6 @@
 {
   "name": "supersonic",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "superconductor (execute a multi-spec composition package through named claude --bg operator sessions) and supercomposer (compose that package).",
   "author": { "name": "mindlace", "url": "https://github.com/mindlace" },
   "homepage": "https://github.com/mindlace/super",

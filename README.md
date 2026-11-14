@@ -36,6 +36,7 @@ For local development, add the checkout as a directory marketplace instead:
 - A trusted repo. `claude --bg` refuses to start in a directory whose workspace trust prompt has never been accepted, so open `claude` in the repo once, accept the prompt and exit before the first run.
 - A named conductor. Operators message the conductor by name, so start it as an interactive session with `claude -n <design-slug>-conductor`, then invoke `supersonic:superconductor` in it. Under any other name, operator messages do not reach it.
 - On machines where `claude` adds a permission hook, launch lines carry `--permission-mode` and `--allowedTools`. The skills' launch lines already include both; keep them when you edit a line.
+- Conductor commands allowed without a prompt. The conductor's heartbeat and fork time limit run `perl`, `pgrep`, `pkill`, `find` and `touch`, beside `git`, `claude`, `env -C` and `budget.sh`. A permission prompt for one of them waits on you and holds every bound in the run, so allow them in the project's `.claude/settings.json`, for example `"Bash(perl:*)"`, `"Bash(pgrep:*)"`, `"Bash(pkill:*)"`, `"Bash(find:*)"` and `"Bash(touch:*)"`.
 
 ## Jev modes
 
