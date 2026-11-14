@@ -1,6 +1,7 @@
 import { codeToHtml } from 'shiki';
 
-const THEME = 'github-dark';
+// Default colour is light; spec.css selects the --shiki-dark variables by media query.
+const THEMES = { light: 'github-light', dark: 'github-dark' };
 
 function normalizeLang(lang: string): string {
   const l = (lang ?? '').trim().toLowerCase();
@@ -14,8 +15,8 @@ function normalizeLang(lang: string): string {
 export async function highlightToHtml(code: string, lang: string): Promise<string> {
   const language = normalizeLang(lang);
   try {
-    return await codeToHtml(code, { lang: language, theme: THEME });
+    return await codeToHtml(code, { lang: language, themes: THEMES });
   } catch {
-    return await codeToHtml(code, { lang: 'text', theme: THEME });
+    return await codeToHtml(code, { lang: 'text', themes: THEMES });
   }
 }
