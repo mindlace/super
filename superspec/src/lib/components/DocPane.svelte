@@ -1,12 +1,19 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import Editor from './Editor.svelte';
   import { renderMarkdown, renderSpecHtml } from '$lib/render';
   import { specKind, type SpecKind } from '$lib/specfile';
   import { scrollRatio, scrollTopFor } from '$lib/scrollratio';
   import { renderViewFor, type RenderOutcome } from '$lib/renderview';
   import { locateEditables, spliceRange } from '$lib/inplace';
-  import { collectRenderedEditables, editedInner, editingAligned } from '$lib/inplaceDom';
+  import {
+    blocksInput,
+    canArm,
+    collectRenderedEditables,
+    editedInner,
+    editingAligned,
+    pastedText
+  } from '$lib/inplaceDom';
 
   let {
     path,
@@ -55,13 +62,15 @@
   // even when the string matches a DOM the reader has since edited in place.
   let renderId = $state(0);
 
-  // In-place editing. `domSource` is the source text the rendered DOM on screen
-  // shows: the render's source when one lands, then each text emitted by an edit.
-  // An edit is applied only while that equals the current `content` of the same
-  // path, so a pending re-render (external reload, another file) never receives a
-  // splice meant for the DOM it is about to replace. Plain variables: nothing on
-  // screen depends on them.
+  // `domSource` is the source text the rendered DOM shows (or will show when the
+  // rendered view mounts), for every file kind and whether or not it is editable:
+  // a render's source when it lands, then each text an in-place edit emits. The
+  // render effect skips content it already matches. Editing is armed only while
+  // it equals the current `content` of the current path and no render is pending,
+  // so a splice is never applied to a DOM a pending render is about to replace.
+  // Plain variables: nothing on screen depends on them.
   let domSource: { path: string; text: string } | null = null;
+  let renderPending = false;
   let editables: HTMLElement[] = [];
   // The path whose in-place editing is off (removed markup or a misaligned DOM).
   let editingOffFor = $state<string | null>(null);
@@ -96,7 +105,14 @@
     const k = kind;
     void renderNonce;
     const version = ++renderVersion;
-    if (domSource && domSource.path === specPath && domSource.text === src) return;
+    if (domSource && domSource.path === specPath && domSource.text === src) {
+      renderPending = false;
+      return;
+    }
+    // Nothing typed now could be kept: this render replaces the DOM. Disarm at
+    // once so keystrokes are refused rather than shown and then lost.
+    renderPending = true;
+    untrack(disarm);
     renderDoc(src, specPath, k)
       .then(async (out) => {
         if (version !== renderVersion) return;
@@ -104,31 +120,58 @@
         // Another file: start at the top.
         const sameFile = last?.path === specPath;
         const keep = sameFile && renderedEl ? scrollRatio(renderedEl) : 0;
+        renderPending = false;
+        domSource = { path: specPath, text: out.source };
         last = { path: specPath, result: out };
         renderId++;
         await tick();
-        armEditing();
         if (renderedEl) renderedEl.scrollTop = scrollTopFor(keep, renderedEl);
       })
       .catch((err) => {
         console.error('render failed', err);
         if (version !== renderVersion) return;
+        renderPending = false;
+        domSource = null;
         last = { path: specPath, error: err instanceof Error ? err.message : String(err) };
       });
   });
 
-  // Make the rendered DOM editable where it is safe to: an `.html` file off main,
-  // shown in the rendered view, whose editables line up one-to-one with the source's.
-  function armEditing() {
+  // (Re)arm in-place editing after every DOM change that bears on it: a landed
+  // render, a view switch, a read-only or file change. Runs after the DOM updates.
+  $effect(() => {
+    void renderId;
+    void view;
+    void readOnly;
+    void path;
+    void shown;
+    void renderedEl;
+    untrack(armEditing);
+  });
+
+  function disarm() {
+    for (const el of renderedEl?.querySelectorAll('[contenteditable]') ?? []) {
+      el.removeAttribute('contenteditable');
+    }
     editables = [];
-    domSource = null;
+  }
+
+  // Make the rendered DOM editable where it is safe to: an `.html` file off main,
+  // shown in the rendered view, whose DOM shows the current content and whose
+  // editables line up one-to-one with the source's.
+  function armEditing() {
+    disarm();
     const root = renderedEl;
-    if (!root || view !== 'rendered' || shown.status !== 'ready') return;
-    for (const el of root.querySelectorAll('[contenteditable]')) el.removeAttribute('contenteditable');
-    const r = shown.result;
-    domSource = { path, text: r.source };
-    if (r.kind !== 'html' || readOnly) return;
-    const source = locateEditables(r.source);
+    const r = shown.status === 'ready' ? shown.result : null;
+    if (!root || !r) return;
+    const armable = canArm({
+      view,
+      kind: r.kind,
+      readOnly,
+      renderPending,
+      domCurrent: domSource?.path === path && domSource.text === content
+    });
+    if (!armable) return;
+    const source = locateEditables(content);
     const found = collectRenderedEditables(root);
     if (r.removed.length || !editingAligned(found, source)) {
       editingOffFor = path;
@@ -154,9 +197,8 @@
 
   function onEditInput(e: Event) {
     const i = editableAt(e.target);
-    if (i < 0 || readOnly || kind !== 'html') return;
-    // The DOM no longer shows the current content (a re-render is pending): drop
-    // the edit; that render replaces this DOM.
+    if (i < 0 || readOnly || kind !== 'html' || renderPending) return;
+    // Belt and braces: arming already guarantees the DOM shows the current content.
     if (!domSource || domSource.path !== path || domSource.text !== content) return;
     // Re-locate against the current source every time, so earlier splices never
     // leave stale offsets.
@@ -165,8 +207,7 @@
     if (!range || !editingAligned(editables, source)) {
       // The edit changed the file's structure: stop editing and re-render from
       // the content, which re-arms editing only if the two line up again.
-      for (const el of editables) el.removeAttribute('contenteditable');
-      editables = [];
+      disarm();
       domSource = null;
       editingOffFor = path;
       renderNonce++;
@@ -179,14 +220,25 @@
   }
 
   function onEditKeydown(e: KeyboardEvent) {
-    if (e.key === 'Enter' && editableAt(e.target) >= 0) e.preventDefault();
+    // Enter that commits an IME composition is not a new line.
+    if (e.key === 'Enter' && !e.isComposing && editableAt(e.target) >= 0) e.preventDefault();
+  }
+
+  // New lines and dropped content, however they arrive (Enter, Shift+Enter, the
+  // edit menu, drag and drop), never reach an editable element.
+  function onEditBeforeInput(e: InputEvent) {
+    if (blocksInput(e.inputType) && editableAt(e.target) >= 0) e.preventDefault();
+  }
+
+  function onEditDrop(e: DragEvent) {
+    if (editableAt(e.target) >= 0) e.preventDefault();
   }
 
   function onEditPaste(e: ClipboardEvent) {
     if (editableAt(e.target) < 0) return;
     e.preventDefault();
-    const text = e.clipboardData?.getData('text/plain') ?? '';
-    // Plain text only; execCommand keeps the browser's undo stack.
+    const text = pastedText(e.clipboardData?.getData('text/plain') ?? '');
+    // Plain text on one line; execCommand keeps the browser's undo stack.
     if (text) document.execCommand('insertText', false, text);
   }
 
@@ -194,10 +246,11 @@
     if (next === view) return;
     if (view === 'rendered' && renderedEl) ratio = scrollRatio(renderedEl);
     if (view === 'rendered') {
-      // The rendered DOM is about to go. If in-place edits left its last render
-      // behind the content, re-render now so the view comes back current.
+      // The rendered DOM is about to go; when the view comes back it is rebuilt
+      // from the last render. If in-place edits left that render behind the
+      // content, re-render now so the view comes back current.
       editables = [];
-      domSource = null;
+      domSource = rendered ? { path, text: rendered.source } : null;
       if (rendered && rendered.source !== content) renderNonce++;
     }
     view = next;
@@ -208,7 +261,6 @@
     }
     if (next === 'rendered') {
       await tick();
-      armEditing();
       if (renderedEl) renderedEl.scrollTop = scrollTopFor(ratio, renderedEl);
     }
   }
@@ -264,8 +316,10 @@
         bind:this={renderedEl}
         class="spec-doc h-full overflow-y-auto"
         oninput={onEditInput}
+        onbeforeinput={onEditBeforeInput}
         onkeydown={onEditKeydown}
         onpaste={onEditPaste}
+        ondrop={onEditDrop}
       >
         {#key renderId}
           {#if shown.status === 'error'}

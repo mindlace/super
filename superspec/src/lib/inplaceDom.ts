@@ -50,3 +50,35 @@ export function editingAligned(rendered: HTMLElement[], source: Editable[]): boo
     rendered.length === source.length && rendered.every((el, i) => el.localName === source[i].tag)
   );
 }
+
+/**
+ * Pasted text as one line: each run of line breaks, with the whitespace around
+ * it, becomes a single space. An editable element holds one line of text.
+ */
+export function pastedText(text: string): string {
+  return text.replace(/\s*[\r\n]\s*/g, ' ');
+}
+
+const BLOCKED_INPUT = new Set(['insertParagraph', 'insertLineBreak', 'insertFromDrop']);
+
+/** `beforeinput` types an editable refuses: new lines and dropped content. */
+export function blocksInput(inputType: string): boolean {
+  return BLOCKED_INPUT.has(inputType);
+}
+
+export interface ArmState {
+  view: 'rendered' | 'source';
+  kind: 'html' | 'markdown' | null;
+  readOnly: boolean;
+  /** A render of this file has started and not landed yet. */
+  renderPending: boolean;
+  /** The rendered DOM on screen shows the current content of the current file. */
+  domCurrent: boolean;
+}
+
+/** Whether the rendered pane may be made editable right now. */
+export function canArm(s: ArmState): boolean {
+  return (
+    s.view === 'rendered' && s.kind === 'html' && !s.readOnly && !s.renderPending && s.domCurrent
+  );
+}

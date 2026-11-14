@@ -4,7 +4,14 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderSpecHtml } from './render';
 import { locateEditables, spliceRange } from './inplace';
-import { collectRenderedEditables, editedInner, editingAligned } from './inplaceDom';
+import {
+  blocksInput,
+  canArm,
+  collectRenderedEditables,
+  editedInner,
+  editingAligned,
+  pastedText
+} from './inplaceDom';
 
 const fixture = (name: string) => readFileSync(join(__dirname, 'fixtures', name), 'utf8');
 const container = (html: string) => {
@@ -99,5 +106,47 @@ describe('editing flow', () => {
     );
     expect(expected).not.toBe(src);
     expect(twice).toBe(expected);
+  });
+});
+
+describe('pastedText', () => {
+  it('collapses each run of line breaks, with the whitespace around it, to one space', () => {
+    expect(pastedText('one\ntwo')).toBe('one two');
+    expect(pastedText('one  \r\n\n  two\rthree')).toBe('one two three');
+    expect(pastedText('plain text')).toBe('plain text');
+  });
+});
+
+describe('blocksInput', () => {
+  it('blocks new lines and drops, nothing else', () => {
+    expect(blocksInput('insertParagraph')).toBe(true);
+    expect(blocksInput('insertLineBreak')).toBe(true);
+    expect(blocksInput('insertFromDrop')).toBe(true);
+    expect(blocksInput('insertText')).toBe(false);
+    expect(blocksInput('deleteContentBackward')).toBe(false);
+    expect(blocksInput('formatBold')).toBe(false);
+  });
+});
+
+describe('canArm', () => {
+  const ok = {
+    view: 'rendered',
+    kind: 'html',
+    readOnly: false,
+    renderPending: false,
+    domCurrent: true
+  } as const;
+
+  it('arms an html file off main, rendered, whose DOM shows the current content', () => {
+    expect(canArm(ok)).toBe(true);
+  });
+
+  it('does not arm otherwise', () => {
+    expect(canArm({ ...ok, view: 'source' })).toBe(false);
+    expect(canArm({ ...ok, kind: 'markdown' })).toBe(false);
+    expect(canArm({ ...ok, kind: null })).toBe(false);
+    expect(canArm({ ...ok, readOnly: true })).toBe(false);
+    expect(canArm({ ...ok, renderPending: true })).toBe(false);
+    expect(canArm({ ...ok, domCurrent: false })).toBe(false);
   });
 });
