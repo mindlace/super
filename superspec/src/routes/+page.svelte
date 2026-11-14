@@ -142,12 +142,23 @@
     // selection, caption, and persistence all target the real file.
     if (effective !== path) await adoptPath(path, effective);
     persistSeen(markOpened(seenState, groupPathFor(effective), Date.now()));
-    localStorage.setItem(SELECTED_KEY, effective);
+    store(() => localStorage.setItem(SELECTED_KEY, effective));
     return true;
   }
 
+  /** Run a localStorage access; corrupt or unavailable storage must never throw. */
+  function store<T>(fn: () => T): T | null {
+    try {
+      return fn();
+    } catch {
+      return null;
+    }
+  }
+
   function persistOpened() {
-    localStorage.setItem(OPENED_KEY, JSON.stringify(openedGroups.map((g) => g.parent.path)));
+    store(() =>
+      localStorage.setItem(OPENED_KEY, JSON.stringify(openedGroups.map((g) => g.parent.path)))
+    );
   }
 
   async function pickDoc(query: string): Promise<boolean> {
@@ -177,7 +188,7 @@
       selectedPath = null;
       content = '';
       lastSelectedGroup = null;
-      localStorage.removeItem(SELECTED_KEY);
+      store(() => localStorage.removeItem(SELECTED_KEY));
     }
   }
 
@@ -197,6 +208,7 @@
     if (data.mtime > knownMtime) {
       content = data.content;
       knownMtime = data.mtime;
+      persistSeen(markOpened(seenState, groupPathFor(polledPath), Date.now()));
       showToast('Reloaded — file changed on disk');
     }
   }
@@ -204,7 +216,13 @@
   onMount(() => {
     loadSpecs();
 
-    const savedOpened: string[] = JSON.parse(localStorage.getItem(OPENED_KEY) ?? '[]');
+    let savedOpened: string[] = [];
+    try {
+      const raw = JSON.parse(localStorage.getItem(OPENED_KEY) ?? '[]');
+      if (Array.isArray(raw)) savedOpened = raw.filter((p): p is string => typeof p === 'string');
+    } catch {
+      // corrupt or unavailable storage: start with no opened docs
+    }
     Promise.all(
       savedOpened.map((p) =>
         fetch(`/api/resolve?q=${encodeURIComponent(p)}`)
@@ -217,10 +235,10 @@
     });
 
     const fromQuery = new URLSearchParams(window.location.search).get('path');
-    const toOpen = fromQuery ?? localStorage.getItem(SELECTED_KEY);
+    const toOpen = fromQuery ?? store(() => localStorage.getItem(SELECTED_KEY));
     if (toOpen) {
       selectSpec(toOpen).then((ok) => {
-        if (!ok && !fromQuery) localStorage.removeItem(SELECTED_KEY);
+        if (!ok && !fromQuery) store(() => localStorage.removeItem(SELECTED_KEY));
       });
       // Seed the retention cache so an out-of-window deep-link still gets a tab.
       fetch(`/api/resolve?q=${encodeURIComponent(toOpen)}`)
