@@ -68,6 +68,16 @@ class SectionsTest(unittest.TestCase):
         self.assertEqual(got[1]["text"], "```sh\n# not a heading\n| not | a table |\n```")
         self.assertNotIn("tables", got[1])
 
+    def test_markdown_table_starting_with_separator_has_empty_header(self):
+        got = spec.md_sections("# T\n## A\n| --- |\n")
+        self.assertEqual(got[1]["tables"][0]["header"], [])
+
+    def test_html_table_without_thead_takes_leading_th_row_as_header(self):
+        got = htmldoc.sections('<article><section id="a"><h2>A</h2><table><tr><th>Claim</th></tr>'
+                               '<tr><td>A</td></tr></table></section></article>')
+        t = got[0]["tables"][0] if got[0].get("tables") else got[1]["tables"][0]
+        self.assertEqual((t["header"], t["rows"]), (["Claim"], [["A"]]))
+
     def test_br_and_hr_break_lines_in_both_forms(self):
         for br, hr in (("<br>", "<hr>"), ("<br/>", "<hr/>")):
             got = htmldoc.sections('<article><section id="a"><h2>A</h2><p>one%stwo</p><p>x%sy</p></section></article>'
@@ -180,6 +190,11 @@ class SpecTest(unittest.TestCase):
         html = ('<article><section id="s"><h2>Traceability</h2><table id="t"><caption>Claims</caption>'
                 '<thead><tr><th scope="col">Claim</th></tr></thead><tbody><tr><td>A</td></tr></tbody>'
                 '</table></section></article>')
+        self.assertEqual(spec.html_traceability_requirements(html), ["A"])
+
+    def test_html_traceability_without_thead_skips_th_header_row(self):
+        html = ('<article><section id="s"><h2>Traceability</h2><table id="t"><caption>Claims</caption>'
+                '<tr><th scope="col">Claim</th></tr><tr><td>A</td></tr></table></section></article>')
         self.assertEqual(spec.html_traceability_requirements(html), ["A"])
 
     def test_html_design_without_traceability_table_reports(self):

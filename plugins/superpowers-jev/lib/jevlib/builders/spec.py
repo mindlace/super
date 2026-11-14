@@ -92,6 +92,9 @@ def md_sections(text):
                 cur["lines"].append(collapsed)
     result = []
     for k, e in enumerate(out):
+        for t in e["tables"]:
+            if t["header"] is None:
+                t["header"] = []
         item = {"id": None, "heading": e["heading"], "path": e["path"], "text": "\n".join(e["lines"])}
         if e["tables"]:
             item["tables"] = e["tables"]

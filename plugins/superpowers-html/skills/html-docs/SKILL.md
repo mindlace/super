@@ -13,7 +13,7 @@ The helpers live in `<this skill's base directory>/../../bin/` (the harness prin
 
 ## Version check
 
-Once per session, run `<this skill's base directory>/../../bin/superpowers-html compat`. If it prints `"compatible": false`, tell your human partner once: "superpowers-html was written against superpowers 7.0.2; the installed version is <superpowers_version>." Then carry on with this skill.
+Once per session, run `bash <absolute path of this skill's base directory>/../../bin/superpowers-html compat`. If it prints `"compatible": false`, tell your human partner once: "superpowers-html was written against superpowers 7.0.2; the installed version is <superpowers_version>." Then carry on with this skill.
 
 ## brainstorming
 
@@ -22,17 +22,17 @@ Once per session, run `<this skill's base directory>/../../bin/superpowers-html 
 ## writing-plans
 
 - **"## Overview":** "Save plans to" becomes `docs/superpowers/plans/YYYY-MM-DD-<feature>.html`.
-- **"## Plan Document Header":** the header is the format's `header` (the `h1` and a one-line `p`, with the "For agentic workers" line as an `aside data-kind="note"`), then a section with id `sec-overview` holding the Goal, Architecture, Tech Stack and Spec lines. Global Constraints is the section `sec-global-constraints`; Review Focus is the section `sec-review-focus`.
-- **"## Task Structure":** each task is a `section` with id `sec-task-N` whose `h2` starts `Task N:`. Files and Interfaces are lists inside it. Each step is a checklist `li` with id `tN-sK`. Code is `pre` > `code data-lang`.
+- **"## Plan Document Header":** the header is the format's `header` (the `h1` and a one-line `p`, with the "For agentic workers" line as an `aside data-kind="note"`). Carry the note over without upstream's closing sentence about markdown checkbox syntax and tracking by ticking; end it instead with: "Steps are checklist items; progress is kept in the workspace ledger, not in the plan." Then a a section with id `sec-overview` holding the Goal, Architecture, Tech Stack and Spec lines. Global Constraints is the section `sec-global-constraints`; Review Focus is the section `sec-review-focus`.
+- **"## Task Structure":** each task is a `section` with id `sec-task-N` whose `h2` starts `Task N:`. Files and Interfaces are lists inside it. Each step is a checklist `li` with id `tN-sK`. Write every step unchecked (no `checked` attribute), even though the format's plan example shows one step ticked; nobody ticks steps during execution. Code is `pre` > `code data-lang`.
 - **"## Execution Handoff":** the handoff messages name the plan's `.html` path.
 
 ## subagent-driven-development
 
-- **"### 1. Dispatch the implementer":** for an `.html` plan, run `<this skill's base directory>/../../bin/task-brief` (same arguments) instead of the skill's `scripts/task-brief`.
+- **"### 1. Dispatch the implementer":** for an `.html` plan, run `bash <absolute path of this skill's base directory>/../../bin/task-brief` (same arguments) instead of the skill's `scripts/task-brief`.
 
 ## executing-plans
 
-- **"### 1. Take the task":** for an `.html` plan, run `<this skill's base directory>/../../bin/task-start` (same arguments) instead of the skill's `scripts/task-start`.
+- **"### 1. Take the task":** for an `.html` plan, run `bash <absolute path of this skill's base directory>/../../bin/task-start` (same arguments) instead of the skill's `scripts/task-start`.
 
 ## While executing an .html plan
 

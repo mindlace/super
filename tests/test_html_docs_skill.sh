@@ -18,7 +18,11 @@ for s in '## The Written Design' '## Overview' '## Plan Document Header' '## Tas
          'docs/superpowers/specs/YYYY-MM-DD-<topic>-design.html' 'docs/superpowers/plans/YYYY-MM-DD-<feature>.html' \
          'sec-global-constraints' 'sec-task-N' 'tN-sK' 'Task N:' \
          '../../bin/task-brief' '../../bin/task-start' '../../bin/superpowers-html compat' \
-         'spec-format.md' '7.0.2' 'checkbox'; do
+         'spec-format.md' '7.0.2' 'checkbox' \
+         'progress is kept in the workspace ledger' 'Write every step unchecked (no `checked` attribute)' \
+         'nobody ticks steps during execution' \
+         'bash <absolute path of this skill' '/../../bin/task-brief` (same' '/../../bin/task-start` (same'; do
   grep -qF -- "$s" "$skill" || fail "html-docs skill missing: $s"
 done
+if grep -qF -- '- [ ]' "$skill"; then fail "html-docs skill still mentions '- [ ]'"; fi
 echo "PASS: html-docs skill"

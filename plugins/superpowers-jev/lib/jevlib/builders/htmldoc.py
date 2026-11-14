@@ -31,6 +31,7 @@ class _Parser(HTMLParser):
         self.table = None        # current table dict
         self.table_part = None
         self.row = None
+        self.row_cells, self.cell_tag = [], None
         self.cell = None         # pieces while inside td/th
         self.caption = None      # pieces while inside caption
         self.svg = None          # see _svg_start
@@ -95,9 +96,10 @@ class _Parser(HTMLParser):
             if tag in TABLE_PARTS:
                 self.table_part = tag
             elif tag == "tr":
-                self.row = []
+                self.row, self.row_cells = [], []
             elif tag in ("td", "th"):
                 self.cell = []
+                self.cell_tag = tag
             elif tag == "caption":
                 self.caption = []
         elif tag in BLOCK:
@@ -138,13 +140,18 @@ class _Parser(HTMLParser):
             self.table_part = None
         elif tag in ("td", "th") and self.cell is not None and self.row is not None:
             self.row.append(_collapse("".join(self.cell)))
+            self.row_cells.append(self.cell_tag)
             self.cell = None
         elif tag == "tr" and self.row is not None:
             if self.table_part == "thead":
                 if not self.table["header"]:
                     self.table["header"] = self.row
             elif self.row:
-                self.table["rows"].append(self.row)
+                if (not self.table["header"] and not self.table["rows"]
+                        and self.row_cells and all(c == "th" for c in self.row_cells)):
+                    self.table["header"] = self.row
+                else:
+                    self.table["rows"].append(self.row)
             self.row = None
         elif tag == "caption" and self.caption is not None:
             self.table["caption"] = _collapse("".join(self.caption))
