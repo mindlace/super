@@ -1,0 +1,10 @@
+node_modules
+/build
+/.svelte-kit
+/package
+.env
+.DS_Store
+.claude/worktrees/
+
+# Visual brainstorming companion
+.superpowers/
