@@ -33,9 +33,15 @@ the build took.
 
 ## Non-goals
 
-- Parallel implementers inside a spec. The April 2026 `tentacles` fork did this and gave poor,
-  expensive results. Task order inside a spec stays serial, and
-  `superpowers:subagent-driven-development` runs unchanged.
+- Changing `superpowers:subagent-driven-development`. Inside one build unit it runs as
+  written, one task at a time. This is a scoping choice, not a verdict on parallel
+  implementers. The April 2026 `tentacles` fork ran them in parallel and gave poor, expensive
+  results, but it changed several things at once: implementers could not talk to each other,
+  shared files were handled by a conflict-resolver after the fact, the plans were cut by
+  domain, and implementers and reviewers were pinned to cheaper models. No run data survives
+  to say which of those did the damage. This design gets its parallelism from the build
+  graph, where the first three are addressed by construction, and leaves the unit size as the
+  dial (see the build graph).
 - Multi-contributor safety. These repos are written only by the partner's own sessions, so
   contract changes carry no coordination cost.
 - Agent teams. Teammates cannot spawn teammates, block on their own subagents, cannot be
@@ -249,9 +255,13 @@ into a **build graph**: the set of things that get built, in dependency order.
 - One spec may become several units and one unit may draw on several specs. `world-core`'s
   eleventh task would be its own unit, placed where its dependencies put it.
 - No two units that can run together write the same file.
-- A unit is sized to be worth an operator: several tasks, one plan. **(call)** This is the
-  guard against repeating the April fork: units are whole operator runs with every review
-  intact, in separate worktrees with disjoint files, so there is nothing to resolve at merge.
+- Unit size is the dial for how parallel a build is. **(call)** Start with units worth an
+  operator: several tasks, one plan. Whatever the size, a unit is a whole operator run with
+  every review intact and the usual models, in its own worktree with files no other running
+  unit writes, so there is nothing to resolve at merge, and its operator can message the
+  others. Smaller units are the way to try finer parallelism later; the ledger records
+  tokens and wall-clock per finished unit so that trial can be judged on cost per finished
+  task.
 - Every edge names rows of the interface table, never a spec or a position in an order. The
   design doc carries no separate "dependency order" section; order is derived from the edges.
 - Anything two units would both need to build is its own unit or part of contracts, so that
