@@ -65,12 +65,32 @@ ledger status is planning, admitted or running:
   (`## Supervision`) with `notify_when_idle` set; its reply may carry a
   `plan ready`, row report, question or `complete` the last conductor never
   saw.
-- **Absent from the list: dead.** Restart it at once, without asking:
-  refresh its assignment file (`Needs rows` merge shas, `Admitted`) and
-  launch it with the same name in its existing worktree (Phase 2, Starting
-  an operator). Its SDD ledger makes mid-plan resume cheap. Ledger the
-  restart; a restart counts as a death for `## Supervision`, Operator
-  death.
+- **Absent from the list: dead.** Restart it at once, without asking, as
+  `## Supervision`, Operator death, says: its assignment's `Plan:` names
+  the plan it already wrote, its branch is brought up to date, and it is
+  launched with the same name in its existing worktree. Its SDD ledger
+  makes mid-plan resume cheap. Ledger the restart; a restart counts as a
+  death for the second-death rule.
+
+Then reconcile what a conductor that ended mid-run can leave behind:
+
+- **Package worktree.** If `git -C <package worktree> status` shows a merge
+  in progress, run `git -C <package worktree> merge --abort`. Uncommitted
+  edits there are a dead fork's: discard them (`git -C <package worktree>
+  checkout -- .` and `git -C <package worktree> clean -fd`). A merge commit
+  on the integration branch with no `## Integration` line was never tested:
+  run the suite (`## Integration`, step 2) and ledger it if it passes. Such
+  a merge is the branch's head, since each merge is ledgered before the
+  next: if the suite fails, take it out with `git -C <package worktree>
+  reset --hard <merge sha>^1` and send the fix round as `## Integration`,
+  step 4, says.
+- **Questions.** For each `## Questions` line with no ruling commit
+  recorded: if `rulings/<id>.md` exists, route it now (`## Composer forks`,
+  When an adjudication fork exits); otherwise start its adjudication fork
+  again, once the package worktree is clean.
+- **Merge reviews.** For each `## Integration` merge line with neither a
+  `No drift @ <sha>` line nor a `merge-<unit-slug>-<short-sha>` question,
+  start its merge-review fork.
 
 Then post your partner one summary of the true state (not a question) and
 continue from whichever phase the ledger shows incomplete.
@@ -157,7 +177,15 @@ thresholds are set once, at the top of `budget.sh`: `LOWER=70`, `UPPER=90`,
 |---|---|---|
 | `low` | below `LOWER` (70%) | Start an operator for every ready unit and a planning-only operator for every unit not ready. |
 | `middle` | `LOWER` to `UPPER` (70–90%), or the data is missing, unreadable or stale | At most `N` (2) operators running, planning-only operators included. Start a new one only when one finishes or stops; ready units go before planning-only ones. |
-| `high` | `UPPER` (90%) or above | Start no operator and admit no planning operator. Running ones finish their unit. Run `budget.sh` again after the reset it names. |
+| `high` | `UPPER` (90%) or above | Start no operator and admit no planning operator. Running ones finish their unit. Wait for the reset (below). |
+
+**Waiting for the reset.** When the band is `high` and any unit is
+deferred, start one background Bash command that sleeps until the reset
+time `budget.sh` reports for the window at or above `UPPER` (its `resets
+<time>` on that window's line: `sleep <seconds until then>`), unless one is
+already running. When it exits, run `budget.sh` and re-derive admission.
+This wake has real work behind it, deferred units to start, so it is not a
+keep-warm ping (`## Context economics`).
 
 - An operator counts as running from its start until its unit is
   `complete`; a planning-only operator counts too. A completed operator
@@ -245,8 +273,21 @@ result.
      keeps the running count.
    - `--add-dir="<ledger dir>"` declares the one directory outside the
      worktree the operator writes: its question files.
-4. **Ledger** the unit line (`## Units`) and its `## Cost` start: the
-   timestamp and the `SEVEN_DAY` percentage from the `budget.sh` run.
+4. **Ledger** the unit line (`## Units`), with `start <sha>`: the commit
+   its worktree was created at (`git -C <unit worktree> rev-parse HEAD`
+   before launch); a restart, relaunch or replacement in an existing
+   worktree keeps the `start` it has. Ledger its `## Cost` start: the timestamp and the
+   `SEVEN_DAY` percentage from the `budget.sh` run.
+
+**Bringing a branch up to date.** Before you launch a hand-back sibling, a
+replacement or a restart into an existing branch, run `git -C <unit
+worktree> merge --no-edit superconductor/<design-slug>`, so the branch holds
+every row its `Needs rows` line calls merged. If the merge does not complete
+(a conflict, or uncommitted changes in the way), run `git -C <unit worktree>
+merge --abort` if a merge is in progress, launch anyway, and send the
+operator the mechanical ruling `Merge superconductor/<design-slug> into your
+branch before your next task; it did not merge cleanly here. Go on with your
+next task.`
 
 ## Supervision
 
@@ -277,6 +318,8 @@ the status ask.
    the hand-back, `Produces rows others wait on:` the rows from step 1,
    `Plan: <plan path> at <sha>, tasks <numbers> (already written)`, and
    `Siblings:` the session names of `<unit-slug>` and its other siblings.
+   Bring its branch up to date (Phase 2, Bringing a branch up to date)
+   before you launch it.
 3. In the ledger, add the sibling's `## Units` line with those rows under
    `produces:`, and remove them from `<unit-slug>`'s line.
 4. Send `<unit-slug>`'s operator, and every earlier sibling, the sibling
@@ -293,7 +336,8 @@ message. Everything about the design goes to a composer fork.
 | Admitting a planning operator | `You are admitted: rows <ids> merged into superconductor/<design-slug> at <sha>. Merge superconductor/<design-slug> into your branch, then build from step 6 of your briefing.` |
 | Sibling notice (after a hand-back) | `<sibling name> now runs tasks <numbers> of <plan path> and owns rows <ids, or none>; do not report those rows. Message <sibling name> by name when your lanes need to coordinate, and carry on with your own tasks.` |
 | Status ask (resume, or idle without a report) | `Status check from <design-slug>-conductor. Reply to <design-slug>-conductor by name with the last task that passed review, the task in progress, and anything held on a question.` |
-| Ruling relay (a unit listed as `clarification`, or the operator that asked) | `Ruling <id>: the spec now says <the ruling's ## Ruling sentences>. Re-read <file> § <section> in <package worktree>; the spec states the answer, so do not open the ruling file. Bring the tasks you have not started into line with it, release any task question <id> held, and carry on.` |
+| Ruling relay (a unit listed as `clarification`, or the operator that asked), when the ruling's `Package commit` is `none` | `Ruling <id>: the spec now says <the ruling's ## Ruling sentences>. Re-read <file> § <section> in <package worktree>; the spec states the answer, so do not open the ruling file. Bring the tasks you have not started into line with it, release any task question <id> held, and carry on.` |
+| Ruling relay, when the ruling's `Package commit` is not `none` | `Ruling <id>: the spec now says <the ruling's ## Ruling sentences>. Re-read <file> § <section> in <package worktree>; the spec states the answer, so do not open the ruling file. Merge superconductor/<design-slug> into your branch first, then bring the tasks you have not started into line with it, release any task question <id> held, and carry on.` |
 | A mechanical ruling | `<the answer>. Go on with <task>.` |
 | A fix round | `Merging <branch> at <sha> into superconductor/<design-slug> fails: <one line>; output at <path>. Merge superconductor/<design-slug> into your branch, fix it with the usual review, then send the same report again.` |
 
@@ -317,9 +361,10 @@ authority.
   is a question for a fork, which amends the package to model it. Never
   absorb it as additional tasks on a running unit.
 - **Frame-defect tally.** Tag every question with a short defect-class slug
-  in the ledger. **The third same-class instance is a tripwire**: build a
-  new checkpoint (`## Composer forks`, Re-checkpointing) and post your
-  partner one line, `Defect class <slug> has reached 3 (<ids>); rulings in
+  in the ledger. **The third same-class instance is a tripwire**: when the
+  fork that rules on the question that brought the class to three exits,
+  build a new checkpoint (`## Composer forks`, Re-checkpointing) and post
+  your partner one line, `Defect class <slug> has reached 3 (<ids>); rulings in
   rulings/; new checkpoint <id>; nothing waits on you.` It is not a
   stop: questions of that class keep going to forks. Seven independent
   rediscoveries of one missing declaration is a design defect wearing an
@@ -327,7 +372,8 @@ authority.
 - **A ruling that changes a unit's approach replaces its operator.** When a
   ruling names a unit's first task that no longer holds, stop that operator
   and start a fresh one on the amended spec (`## Composer forks`,
-  Replacing an operator). Never send the warm operator the change: an
+  Replacing an operator); for a unit with hand-back siblings, that replaces
+  the whole family. Never send the warm operator the change: an
   operator that lived through the old approach writes it into the code. A
   `clarification` goes to the warm operator as the ruling relay.
 - **Operators stay warm through review.** A completed operator is not
@@ -347,11 +393,22 @@ authority.
   (`## Integration`), not as questions.
 - **Operator death.** An operator whose ledger status is planning, admitted
   or running and whose name is absent from `claude agents --json` is dead.
-  Ledger it, then restart it with the same name, worktree and assignment
-  file (refreshed), and ledger the restart — SDD's ledger makes mid-plan
-  resume cheap. A restart keeps the running count, so it goes ahead in
-  every band. A second consecutive death on one unit: do not restart;
-  surface to your partner.
+  Ledger it, then restart it with the same name, worktree and model:
+  1. Refresh its assignment file: `Needs rows` with current merge shas,
+     `Admitted` as the ledger has it, and `Plan:` naming the plan it
+     already wrote, `<plan path> at <sha>, tasks <the unit's tasks, minus
+     any handed back> (already written)`, with the path and sha from the
+     first line of the unit's SDD ledger or from its `plan ready` ledger
+     entry. Once `Plan:` names a plan, set `Replaces: none`: the replacement
+     work is in that plan. If no plan was committed yet, `Plan:` stays
+     `none`.
+  2. Bring its branch up to date (Phase 2, Bringing a branch up to date)
+     and launch it (Phase 2, Starting an operator, step 3).
+  3. Ledger the restart.
+
+  SDD's ledger makes mid-plan resume cheap. A restart keeps the running
+  count, so it goes ahead in every band. A second consecutive death on one
+  unit: do not restart; surface to your partner.
 
 ## Composer forks
 
@@ -394,17 +451,23 @@ question like any other.
 
 **When an adjudication fork exits**, read `rulings/<id>.md` once, to route
 it: `Package commit`, `Changes design`, `Changes contract`, `## Ruling`,
-`## Re-read` and `## Affected units`. Complete the question's ledger line
-with the commit and `changes contract`. Then, in order:
+`## Re-read`, `## Affected units` and `## Build graph`. Complete the
+question's ledger line with the commit and `changes contract`. Then, in
+order:
 
 1. Each `clarification` unit, and the operator that asked if it is not
    listed, gets the ruling relay (`## Supervision`) by name.
 2. Each unit whose line reads `first task that no longer holds: <task>`:
-   stop its operator, cut its branch and unmerge its cut rows now
-   (Replacing an operator, steps 1-4).
-3. If `Changes design: yes` and `## Affected units` lists any unit, run
-   `## Build-graph fork` with "Units to write" set to those unit slugs. When
-   it exits, update the ledger's `Build graph:` line.
+   stop its operator (and its family's), cut the branches and take the cut
+   work back out now (Replacing an operator, steps 1-4).
+3. If `Changes design: yes`, run `## Build-graph fork` with "Units to
+   write" set to the ruling's `## Build graph` lines: the unit slugs whose
+   rows to rewrite, and each `new: <what>` the specs now need that no row
+   implements; `none named` when the section lists nothing. A hand-back
+   sibling `<unit-slug>-<k>` has no row of its own: pass `<unit-slug>`.
+   When it exits, update the ledger's `Build graph:`
+   line; a row it added is a unit like any other, started when step 5
+   re-derives admission.
 4. Re-checkpoint if one is due (below).
 5. Start the fresh operators from step 2 (Replacing an operator, steps
    5-6), re-derive admission (Phase 2), and start the next queued amending
@@ -417,51 +480,80 @@ package worktree is the authority, and the ruling relay says so.
 
 **Replacing an operator.** A ruling that names a unit's first task that no
 longer holds changes that unit's approach. The warm operator never hears
-the change:
+the change.
 
-1. `claude stop <id>` (`## Supervision`, Stopping an operator). Ledger the
-   unit `replaced`.
-2. Run `claude agents --json` again; start nothing under that name while it
-   is still listed.
-3. Cut the branch back to the commit before that task: find the task's
-   first commit in the unit's SDD ledger or `git -C <unit worktree> log
+A unit's **family** is the unit and its hand-back siblings
+`<unit-slug>-<k>`. A ruling that names a first task for any member of a
+family that has siblings replaces the whole family: every member is stopped
+and cut, and one fresh operator starts on `<unit-slug>` from its
+build-graph row. A unit with no siblings is a family of one.
+
+1. Stop every member: `claude stop <id>` (`## Supervision`, Stopping an
+   operator). Ledger each `replaced`.
+2. Run `claude agents --json` again; start nothing under any member's name
+   while it is still listed.
+3. Cut each member's branch. Every sibling is cut whole, the named one
+   included: remove its worktree and branch (`git -C <project> worktree
+   remove --force <sibling worktree>`, `git -C <project> branch -D
+   <sibling branch>`). When the ruling names a task of `<unit-slug>`
+   itself, cut its branch back to the commit before that task: find the
+   task's first commit in its SDD ledger or `git -C <unit worktree> log
    --oneline superconductor/<design-slug>..HEAD`, then `git -C <unit
-   worktree> reset --hard <the commit before it>`. Every later task goes,
-   even one that might have survived, and no branch keeps a copy: no
-   old-approach code or comment carries over. If the operator never reached
-   that task, nothing is cut. The kept commits are `<base sha>..<kept sha>`,
-   where `<base sha>` is `git -C <unit worktree> merge-base HEAD
-   superconductor/<design-slug>` and `<kept sha>` is the commit you cut
-   back to.
-4. Cut rows. A row whose delivering task the cut removed, and which had
-   already merged, is not merged any more: append `- unmerged row <row id>:
-   cut by ruling <id>` under `## Integration`, so nothing new is admitted on
-   it. It merges again only when the fresh operator's row report (or
-   `complete`) for it passes. Do not revert the earlier merge on the
-   integration branch: the fresh report's merge supersedes it. Units already
+   worktree> reset --hard <the commit before it>`; if it never reached that
+   task, nothing of it is cut. When the ruling names a sibling's task,
+   `<unit-slug>`'s own branch is not cut. Every later task goes, even one
+   that might have survived, and no branch keeps a copy: no old-approach
+   code or comment carries over. The kept commits are `<base sha>..<kept
+   sha>`, where `<base sha>` is `<unit-slug>`'s `start` commit on its
+   `## Units` line and `<kept sha>` is the commit its branch now ends at.
+4. Take the cut work back out of the integration branch. For each member
+   whose cut commits had merged (the newest `## Integration` merge sha from
+   that member, `<merged sha>`, comes after the commit it was cut back to,
+   `<cut-to sha>`, which for a whole sibling is its `start` commit): while
+   you hold the one-writer slot (no amending fork running, no merge under
+   way), revert those commits, not the merge commits, with `git -C
+   <package worktree> revert --no-edit $(git -C <package worktree> rev-list
+   --no-merges --first-parent <cut-to sha>..<merged sha>)`. `--first-parent`
+   keeps to the member's own commits, leaving out what it merged in from
+   the integration branch; the kept commits stay merged. Then run the full
+   test suite in the package worktree and ledger the revert under
+   `## Integration` (`- reverted ...`) with its result. If the revert
+   conflicts, run `git -C <package worktree> revert --abort` and file it as
+   a question; a failing suite after the revert is a question too
+   (`## Composer forks`). Then cut rows: a row whose delivering task the cut removed, and which
+   had already merged, is not merged any more: append `- unmerged row <row
+   id>: cut by ruling <id>` under `## Integration`, so nothing new is
+   admitted on it. It merges again only when the fresh operator's row
+   report (or `complete`) for it passes. In the ledger, move every
+   sibling's `produces:` rows back to `<unit-slug>`'s line. Units already
    running against the old row are in the ruling's `## Affected units` and
    are handled like any other affected unit.
-5. Refresh its assignment file: `Plan: none`, the `Implements`, `Writes` and
-   `Produces rows` cells from the build graph as it now reads, `Needs rows`
-   with current merge shas, `Admitted` unchanged, and the replacement line
-   `- Replaces: an earlier operator; kept commits <base sha>..<kept sha>
-   stand and are not redone; superseded plan <plan path>`. Write nothing
-   else about the old approach in the assignment: the fresh operator learns
-   the unit from the spec and the kept code, never from a summary of what
-   was dropped.
-6. Launch it with the same name, worktree and model (Phase 2, Starting an
-   operator, step 3), and ledger the start. It keeps the running count, so
-   it goes ahead in every band, `high` included.
+5. Refresh `<unit-slug>`'s assignment file: `Plan: none`, `Siblings: none`,
+   the `Implements`, `Writes` and `Produces rows` cells from its build-graph
+   row as it now reads, `Needs rows` with current merge shas, `Admitted`
+   unchanged, and the replacement line `- Replaces: an earlier operator;
+   kept commits <base sha>..<kept sha> stand and are not redone; superseded
+   plan <plan path>`. Write nothing else about the old approach in the
+   assignment: the fresh operator learns the unit from the spec and the
+   kept code, never from a summary of what was dropped.
+6. Bring its branch up to date (Phase 2, Bringing a branch up to date),
+   then launch it with the same name, worktree and model (Phase 2, Starting
+   an operator, step 3), and ledger the start. It keeps the running count,
+   so it goes ahead in every band, `high` included.
 
 **Re-checkpointing.** The checkpoint holds the package as it was when read,
 and goes stale as amendments land. Build a new checkpoint, the same way as
-the first (`## Checkpoint`), when any of these holds after a fork exits:
+the first (`## Checkpoint`: the most capable model available to this
+session, recorded beside its id), when an adjudication fork exits and any of
+these holds:
 
 - the ruling says `Changes contract: yes`;
 - five rulings have committed to the package since the current
   checkpoint: count `git -C <package worktree> log --first-parent --oneline
   --grep='): rule ' <checkpoint package sha>..HEAD`;
-- the frame-defect tally reached three of one class (`## Supervision`).
+- the question this fork ruled on brought a class's frame-defect tally to
+  three (`## Supervision`). A tally that already stood at three or more
+  before this question triggers nothing.
 
 Build it after any build-graph fork that is due, and before the next
 amending fork starts. Append its id under `## Checkpoints`; every fork
@@ -570,8 +662,8 @@ still listed (`claude stop <id>`).
 
     ## Units
     - <unit-slug>: <session name> — status: planning | admitted | running |
-      complete | stopped | replaced | deferred (+ branch, worktree, model
-      — rationale: <signal>, needs: <rows>, produces: <rows>)
+      complete | stopped | replaced | deferred (+ branch, worktree, start
+      <sha>, model — rationale: <signal>, needs: <rows>, produces: <rows>)
 
     ## Questions
     - <date> <id> from <unit-slug> [defect-class: <slug>]: <question> →
@@ -583,6 +675,8 @@ still listed (`claude stop <id>`).
     ## Integration
     - merged <unit-slug> [row <id>] @ <sha> into superconductor/<design-slug>,
       tests <result>, band <band>
+    - reverted <unit-slug> <cut-to sha>..<merged sha> for ruling <id>, tests
+      <result>
     - unmerged row <row id>: cut by ruling <id>
 
     ## Cost
@@ -595,5 +689,5 @@ Append a line after every state change: package accepted, band applied,
 operator started / admitted / complete / died / restarted / relaunched /
 stopped,
 question filed, fork started / exited, ruling relayed, operator replaced,
-checkpoint built, merge done, merge aborted or taken back, deferral
-recorded.
+cut commits reverted, checkpoint built, merge done, merge aborted or taken
+back, deferral recorded.

@@ -67,3 +67,16 @@ hands task 11 back (it has edges to 2-3).
 All reps invoke writing-plans, read the spec from the package worktree, commit the plan, send
 `plan ready: <plan path> at <sha>. Admit simstep-world-score when its rows have merged.`, and
 stop without invoking subagent-driven-development.
+
+## Final-review fix round: regression
+
+Change: step 3 orders the plan so waited-on rows come as early as their dependencies allow;
+the `Replaces:` branch ends "then continue from step 4"; the permissions bullet names the SDD
+scripts and project commands and the `bash <absolute path>` spelling. Rerun GREEN only (the
+scenarios' Pass criteria did not change), context = the fix-round `operator-briefing.md`:
+
+- briefing-planning-only: 3/3. Every rep invokes writing-plans, considers the lane split,
+  sends `plan ready: ... Admit simstep-world-score when its rows have merged.` to
+  `simstep-conductor` by name, and stops without SDD.
+- briefing-lane-handback: 3/3. Every rep keeps tasks 1-3, sends one `hand-back: tasks 4, 5, 6
+  ... Start a sibling operator for them.`, and runs SDD on tasks 1-3 only.

@@ -45,7 +45,9 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
    plan's other lanes; message them by name when your lanes need to coordinate. Otherwise
    (`Plan: none`), invoke `superpowers:writing-plans` against the spec sections your unit
    implements. The plan's Global Constraints section copies the unit's interface rows and
-   the design's global constraints verbatim. Commit the plan.
+   the design's global constraints verbatim. Order it so the tasks delivering your
+   `Produces rows others wait on` come as early as their own dependencies allow. Commit the
+   plan.
    **If your assignment's `Replaces:` line is not `none`**, you replace an earlier operator
    on this unit, and that line names the kept commits and the superseded plan:
    - Your first commit deletes the superseded plan file (`git rm <plan path>`, then
@@ -53,7 +55,7 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
    - The kept commits stand and are not redone. Treat them as existing code, like any other
      code in the repo, never as a prior approach to describe, compare against or comment on.
    - Write a new plan from the current spec covering only what remains after the kept
-     commits, the same way as above, and run SDD on that plan.
+     commits, the same way as above, then continue from step 4.
 4. **Split lanes.** Read the plan as a graph. If it contains task groups with no
    dependency edge between them and no file in common, you are one serial lane: keep the
    group with the lowest-numbered task, and send one `hand-back` per other group (template

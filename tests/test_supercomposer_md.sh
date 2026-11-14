@@ -84,6 +84,19 @@ for s in '# Ruling <id>' 'Package commit: <sha|none>' 'Changes design: yes|no' '
          'jev ask citation --state <state file>'; do
   printf '%s\n' "$adj" | grep -qF -- "$s" || { echo "FAIL: adjudication fork missing: $s"; exit 1; }
 done
+# Every design change names the build-graph rows to rewrite or add; the build-graph fork may add rows.
+for s in '## Build graph' '- new: <what the specs now need' 'running or not yet started'; do
+  printf '%s\n' "$adj" | grep -qF -- "$s" || { echo "FAIL: adjudication fork missing: $s"; exit 1; }
+done
+bg=$(section 'Build-graph fork')
+for s in 'new: <what>' 'none named' 'add the rows the specs need'; do
+  printf '%s\n' "$bg" | grep -qF -- "$s" || { echo "FAIL: build-graph fork missing: $s"; exit 1; }
+done
+# The checkpoint's model: the most capable available, recorded for every fork to reuse.
+printf '%s\n' "$flat" | grep -qF 'most capable model available' \
+  || { echo "FAIL: C5 must say which model the checkpoint runs on"; exit 1; }
+tr '\n' ' ' < "$forks" | tr -s ' ' | grep -qF 'The checkpoint runs on the most capable model available' \
+  || { echo "FAIL: composer-forks.md must say which model the checkpoint runs on"; exit 1; }
 qf=$(tr '\n' ' ' < "$forks" | tr -s ' ')
 for s in '# Question <id> — from <name>' '## Question' '## What the package says' '## What I found' '## Options I see' '## Blocking'; do
   printf '%s\n' "$qf" | grep -qF -- "$s" || { echo "FAIL: composer-forks.md question format missing: $s"; exit 1; }

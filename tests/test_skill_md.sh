@@ -126,9 +126,42 @@ need 'Bash(git rm:*)'
 need 'Write nothing else about the old approach in the assignment'
 need '- unmerged row <row id>: cut by ruling <id>'
 need 'so nothing new is admitted on it'
-need 'Do not revert the earlier merge on the integration branch'
-need "the fresh report's merge supersedes it"
+# Cut commits that had merged are reverted (not the merge commit) under the one-writer slot.
+need 'revert those commits, not the merge commits'
+need 'rev-list --no-merges --first-parent <cut-to sha>..<merged sha>'
+need 'while you hold the one-writer slot'
+need '- reverted <unit-slug> <cut-to sha>..<merged sha> for ruling <id>'
+need "\`start\` commit on its \`## Units\` line"
+need 'start <sha>, model'
+forbid 'Do not revert the earlier merge'
+forbid "the fresh report's merge supersedes it"
+forbid 'merge-base HEAD superconductor'
 need 'only for the merge commit you just made in step 1'
+# A ruling naming a first task for any family member replaces the whole family.
+need 'replaces the whole family'
+need "move every sibling's \`produces:\` rows back to \`<unit-slug>\`'s line"
+need 'pass `<unit-slug>`'
+# Every design change reruns the build graph, which may add rows.
+need 'If `Changes design: yes`, run `## Build-graph fork`'
+need "the ruling's \`## Build graph\` lines"
+forbid 'and `## Affected units` lists any unit, run'
+# Restarts keep their plan; branches are brought up to date before a launch.
+need "\`Plan:\` naming the plan it already wrote"
+need 'Bringing a branch up to date'
+need 'merge --no-edit superconductor/<design-slug>'
+need 'Merge superconductor/<design-slug> into your branch first, then bring the tasks'
+# The tally re-checkpoints on the event, not the standing state.
+need "brought a class's frame-defect tally to three"
+forbid 'the frame-defect tally reached three of one class'
+# Resume reconciles forks, rulings, the package worktree and merge reviews.
+need 'Uncommitted edits there are a dead fork'
+need 'if `rulings/<id>.md` exists, route it now'
+need 'start its merge-review fork'
+# The high band wakes for the reset with real work, not as a keep-warm ping.
+need 'Waiting for the reset'
+need 'not a keep-warm ping'
+# Re-checkpoints use the most capable model available, named nowhere here.
+need 'the most capable model available to this session'
 for s in 'Bounce rule' 'jev ask bounce' '**bounce**' 'Adjudicate yourself' 'exact delta'; do
   forbid "$s"
 done

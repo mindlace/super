@@ -204,8 +204,10 @@ indices in traceability-table order.
    `Package worktree: <absolute path>`.
 3. **Checkpoint.** From the package worktree, start a fresh session with
    the `## Checkpoint` prompt and command in `composer-forks.md`; it
-   cold-reads the package and stops. Record its session id and model under
-   the ledger's `## Checkpoints`. It is deliberately not this session: a
+   cold-reads the package and stops. Run it on the most capable model
+   available to this session: every ruling is made on it, and budget is not
+   an input. Record its session id and model under the ledger's
+   `## Checkpoints`, so every fork reuses that model. It is deliberately not this session: a
    package that cannot be understood cold is a defect to find now.
 4. **Build graph.** Run the `## Build-graph fork` from `composer-forks.md`
    and wait for it to exit with `Build graph @ <sha>` and its

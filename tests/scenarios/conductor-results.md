@@ -218,3 +218,53 @@ it, and plans only what remains after the kept commits. Rows a cut removes are m
   `simstep-map-stream` in the `high` band.
 - Briefing scenarios were not rerun: the briefing change only adds a branch that applies when
   `Replaces:` is not `none`, and none of them sets it.
+
+## Final-review fix round (C1, I1-I8, M1, M2)
+
+Runner: `sh tests/scenarios/run-scenario.sh <scenario> 3 <superconductor/SKILL.md>
+<supercomposer/composer-forks.md>` (sonnet, no tools). RED context: both files at 34be214.
+GREEN context: the fix-round text.
+
+Scenario changes: both ruling files gained the `## Build graph` section the adjudication fork
+now writes. `conductor-approach-change-replaces` gained a ledger excerpt (unit line with
+`start 3f9e1b0`; Task 4's row `snapshot-encoder` merged at `5a0f6e3`) and two Pass criteria:
+revert the cut commit, not the merge commit, and take the kept range from the start commit.
+New scenario `conductor-tally-event`: the tick-order tally already stands at 3 (it built the
+current checkpoint), two rulings since it, and a clarification ruling with a package commit.
+
+### conductor-approach-change-replaces: RED 0/3, GREEN 3/3
+
+- RED: all three reps leave Task 4 on the integration branch, in the old text's words: "I do
+  not revert the earlier merge of 5a0f6e3 on the integration branch. The fresh operator's
+  later report supersedes it." Kept commits are `<base sha>..c19d4b2`; rep 3 computes the
+  base with `merge-base HEAD superconductor/simstep`.
+- GREEN: all three stop `5be2c0d1`, reset to `c19d4b2`, and run `git -C <package worktree>
+  revert --no-edit $(git -C <package worktree> rev-list --no-merges --first-parent
+  c19d4b2..5a0f6e3)` under the one-writer slot ("That resolves to `5a0f6e3` alone ... I do
+  not revert the merge commit"), run the suite, ledger `- reverted map-stream ...` and
+  `- unmerged row snapshot-encoder: cut by ruling map-stream-1`, write `kept commits
+  3f9e1b0..c19d4b2`, bring the branch up to date with `merge --no-edit superconductor/simstep`,
+  and relaunch in the `high` band. Two reps ledgered a new `start` for the relaunched
+  operator; the text now says a restart, relaunch or replacement keeps the `start` it has
+  (not rerun after that one-sentence edit).
+
+### conductor-tally-event: RED 0/3, GREEN 3/3
+
+- RED: the no-re-checkpoint criterion passes at baseline in 3/3 ("`tick-order` already
+  triggered the current checkpoint"); the reps reason from the scenario's own statement that
+  the checkpoint was built for it. All three fail the merge-first relay: the old relay has no
+  merge instruction.
+- GREEN: all three relay "... Merge superconductor/simstep into your branch first, then bring
+  the tasks you have not started into line with it ...", build no checkpoint ("This question
+  moved `leaderboard-storage` to 1, not 3. The `tick-order` tally already tripped at 3"), and
+  post no defect-class line. The event wording stays although the tally criterion passed at
+  baseline: the old text's standing condition ("the tally reached three of one class") read
+  literally re-fires after every fork exit, and the review found that reading.
+
+### conductor-recheckpoint: GREEN 3/3
+
+All reps relay with the merge-first template (the ruling has a package commit), count five
+rulings since `4f2a91c` (`world-core-2` excluded), build the new checkpoint by the
+`## Checkpoint` command on "the most capable model available to this session", append it
+under `## Checkpoints`, and leave the merge-review fork running on the old checkpoint. Not
+rerun at RED: the scenario passed 3/3 at baseline before, and only its ruling form changed.

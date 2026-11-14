@@ -30,6 +30,7 @@ wrote:
     - specs/world-score.md § 3.2 Missing scores
     ## Affected units
     - world-score: clarification
+    ## Build graph
 
 `simstep-world-score` is running, on task 5 of 9. No other fork is running.
 

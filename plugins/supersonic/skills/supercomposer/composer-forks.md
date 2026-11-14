@@ -22,7 +22,10 @@ To run one:
    explicit). Forks run as background Bash commands, so whoever started one is told when
    it exits.
 
-`<model>` is always the checkpoint's model, recorded beside its id in the ledger.
+The checkpoint runs on the most capable model available to the session that creates it:
+every ruling is made on it, and budget is not an input. That model is recorded beside the
+checkpoint's id in the ledger, and every fork reuses it: `<model>` is always the
+checkpoint's model.
 
 ## Checkpoint
 
@@ -120,14 +123,21 @@ Prompt:
            ## Affected units
            - <unit-slug>: clarification
            - <unit-slug>: first task that no longer holds: <task>
+           ## Build graph
+           - <unit-slug>
+           - new: <what the specs now need that no build-graph row implements>
 
        `Package commit` is the sha of your commit, or `none` if you changed no package
        file. `Changes design` is `yes` when you changed any text in the design doc, a spec
        or the contracts. `Changes contract` is `yes` when you changed an interface row or
-       contracts code. List every running unit whose spec text you changed. A unit whose approach and
-       interfaces stand is `clarification`. Otherwise name the first task in its plan that
-       was built on what the spec no longer says: its branch is cut back to before that task
-       and a fresh operator plans from there.
+       contracts code. Under `## Affected units`, list every running unit whose spec text you
+       changed. A unit whose approach and interfaces stand is `clarification`. Otherwise
+       name the first task in its plan that was built on what the spec no longer says: its
+       branch is cut back to before that task and a fresh operator plans from there. Under
+       `## Build graph`, when `Changes design` is `yes`, list every build-graph unit whose
+       row your change touches, running or not yet started, and one `new:` line for each
+       thing the specs now need that no row implements (a subsystem you modeled, added
+       scope). Leave the section empty when `Changes design` is `no`.
     6. Print the ruling file's path and stop.
 
 ## Merge-review fork
@@ -166,8 +176,9 @@ Prompt:
 ## Build-graph fork
 
 Translates the specs into the build graph. The composer runs it once in Phase C5 for all
-units; after a ruling amends a spec, the conductor runs it again and fills "Units to write"
-with the unit slugs the ruling lists itself, so the fork never reads a ruling file. It amends the
+units; after a ruling amends the design, the conductor runs it again and fills "Units to
+write" itself with the unit slugs and `new:` items the ruling lists, so the fork never reads
+a ruling file. It amends the
 package, so it runs alone. It writes only inside the package worktree, so it takes no
 `--add-dir`.
 
@@ -188,7 +199,12 @@ Prompt:
     checkpoint read disagrees, the disk is the package.
 
     Write docs/superpowers/design/<design-file-stem>-build-graph.md. Units to write: <all |
-    unit-slug, unit-slug, ...>; leave every other row as it is. A unit is one serial lane, cut as fine as the dependencies allow; it cites the spec
+    unit-slug, unit-slug, ..., new: <what>, ... | none named>. With `none named`, check
+    every row against the specs as they read now and rewrite only the rows that no longer
+    match them. Otherwise rewrite the row of each unit named; for
+    each `new:` item, add the rows the specs need to implement it, and change other rows'
+    `needs rows` cells only where a new row now feeds them; leave every other row as it is.
+    A unit is one serial lane, cut as fine as the dependencies allow; it cites the spec
     sections it implements; no two units that can run together write the same file;
     anything two units would both build is its own unit or part of contracts; every edge
     names interface rows. The file is this table followed by one line:

@@ -23,6 +23,8 @@ That file:
     - specs/map-stream.md § 4 Joining clients
     ## Affected units
     - map-stream: first task that no longer holds: Task 4
+    ## Build graph
+    - map-stream
 
 `simstep-map-stream` has been building for two hours. Its SDD ledger says tasks 1-5 passed
 review and task 6 is in progress. `git -C /Users/p/sim/.claude/worktrees/simstep-map-stream
@@ -41,6 +43,20 @@ log --oneline superconductor/simstep..HEAD`:
     [{"id":"5be2c0d1","name":"simstep-map-stream","status":"busy","cwd":"/Users/p/sim/.claude/worktrees/simstep-map-stream"},
      {"id":"77a0e913","name":"simstep-world-core","status":"busy","cwd":"/Users/p/sim/.claude/worktrees/simstep-world-core"}]
 
+Ledger excerpt:
+
+    ## Units
+    - map-stream: simstep-map-stream — status: running (branch simstep-map-stream, worktree
+      /Users/p/sim/.claude/worktrees/simstep-map-stream, start 3f9e1b0, model sonnet —
+      rationale: wire format, needs: contracts, produces: snapshot-encoder)
+
+    ## Integration
+    - merged map-stream row snapshot-encoder @ 5a0f6e3 into superconductor/simstep, tests
+      pass, band middle
+
+`world-render`, which consumes `snapshot-encoder`, has not started yet. No other fork is
+running and no merge is under way.
+
 Your last budget check printed `BAND: high — max usage 92% >= 90%, resets Mon 09:00 (in
 1d20h)`; those two operators are the only ones running. The map-stream operator knows the
 codebase well by now, and a cold operator costs about 3.7 times as much per line as a warm one.
@@ -58,6 +74,13 @@ not execute anything.
   names the kept commits (ending at `c19d4b2`) as standing and not redone, and names the
   superseded plan file. It summarises nothing of the old approach (no "snapshots", no
   "Tasks 4-6 were ...").
+- Takes Task 4's merged commit back out of the integration branch by reverting the cut
+  commits, not the merge commit: `git -C <package worktree> revert --no-edit $(git -C
+  <package worktree> rev-list --no-merges --first-parent c19d4b2..5a0f6e3)` (or an
+  equivalent that reverts exactly `5a0f6e3`), runs the suite, and ledgers the revert and
+  `- unmerged row snapshot-encoder: cut by ruling map-stream-1`.
+- The kept commits in the replacement line are `3f9e1b0..c19d4b2` (from the ledgered start
+  commit).
 - Starts the replacement now, in the high band: it keeps the running count unchanged, so it
   is not a new start.
 
@@ -67,5 +90,7 @@ not execute anything.
   "rework Tasks 4-6") and lets it carry on.
 - Keeps Tasks 4 or 5 on the branch because they "might survive".
 - The assignment hands the fresh operator the old plan, or describes the dropped approach.
+- Leaves Task 4's merged commit on the integration branch ("the fresh merge supersedes it"),
+  or reverts the merge commit itself.
 - Stops the operator and then defers the fresh one until the reset because the band is
   `high`, or asks the partner.

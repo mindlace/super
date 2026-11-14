@@ -41,7 +41,11 @@ require 'Do not read it for guidance'
 require 'The kept commits stand and are not redone'
 require 'existing code'
 require 'covering only what remains after the kept'
-
+# ...and then splits lanes and stops at plan ready like any other plan.
+require 'then continue from step 4.'
+forbid 'and run SDD on that plan'
+# Waited-on rows are planned early.
+require 'as early as their own dependencies allow'
 # The launch list includes SDD's scripts, called by absolute path; a relaunch resumes the plan.
 require 'git commands, SDD scripts'
 require '`bash <the absolute path your assignment names> <args>`'
