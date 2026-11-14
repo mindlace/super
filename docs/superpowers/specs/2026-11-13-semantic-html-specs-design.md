@@ -12,13 +12,18 @@ Markdown serves neither as well as it could:
 - Typography is whatever the preview pane happens to do.
 
 This project lets a spec be written as a small, controlled subset of semantic
-HTML, rendered by spec_reader with one shared stylesheet and one shared script.
+HTML, rendered by spec_reader with one shared stylesheet.
 The file stays in the worktree's `docs/superpowers/` directory, so the existing
 rule is untouched: a spec belongs to its worktree and becomes canon on merge.
 
-A second project, not covered here, adds a feedback loop (comments anchored to
-parts of a spec that the agent can read). This project must leave the anchors
-that one will need.
+This is the first of three projects, in this order:
+
+1. **Format and single-pane reading** (this document).
+2. **WYSIWYM editing** in that pane (see "What the next project needs").
+3. **A feedback loop**: comments anchored to parts of a spec that the agent
+   can read.
+
+This project must leave the next two what they need.
 
 ## Goals
 
@@ -26,8 +31,8 @@ that one will need.
    paired, watched, opened, edited and saved exactly as an `.md` spec is today.
 2. The rendered spec is typographically clear in light and dark themes, with no
    styling in the spec file itself.
-3. Tables can be copied in one click in a form that pastes cleanly into a
-   spreadsheet or a chat.
+3. Tables are real HTML tables, so selecting and copying one pastes cleanly
+   into a spreadsheet or a chat. No copy button.
 4. Diagrams are inline SVG that an agent can read and write as structure
    (named nodes, edges that say what they connect) and that take all of their
    appearance from the shared stylesheet.
@@ -37,12 +42,12 @@ that one will need.
 
 ## Non-goals
 
-- The feedback loop (next project).
+- WYSIWYM editing (project 2). Until then, edits are made in the HTML source.
+- The feedback loop (project 3).
 - Publishing to Claude artifacts. The format should not rule it out: the
-  stylesheet and script are standalone files so a spec can later be wrapped
-  and published.
+  stylesheet is a standalone file so a spec can later be wrapped and
+  published.
 - Converting existing markdown specs.
-- WYSIWYG editing. Light edits are made in the HTML source.
 - Rendering Mermaid.
 - Moving plans to HTML. The reader renders any `.html` file it finds, but only
   specs are *written* in HTML for now (see Open questions).
@@ -191,6 +196,7 @@ explicit allowlist that mirrors the tables above, then post-process:
 - Rewrite relative `img`/`video` `src` to the asset endpoint; drop any other
   `src`.
 - Give external links `target="_blank" rel="noopener"`.
+- Add a link anchor to each heading whose section has an `id`.
 
 Rendering runs in the browser only (`ssr = false`), as it does today.
 
@@ -202,7 +208,7 @@ Notes on the DOMPurify configuration:
   (`uponSanitizeAttribute`, `afterSanitizeAttributes`): `class` on SVG
   elements only, no remote `src`, and the relative-`src` rewrite.
 
-The sanitiser is the enforcement point for the subset. The preview shows a
+The sanitiser is the enforcement point for the subset. The rendered pane shows a
 small notice when a spec strays from it, so a stray spec is visible rather
 than silently different. The notice covers two things *(my call on the
 second)*:
@@ -214,24 +220,24 @@ second)*:
   `section`/`figure`/`table` without an `id`, a duplicate `id`. These are
   reported and the spec is still rendered.
 
-### One stylesheet, one script
+### One stylesheet, no script
 
-- `static/spec.css`: all typography, tables, callouts and diagram paint, with
-  light and dark themes. Scoped to the rendered-document container. It also
-  styles the markdown preview, so old specs get the same treatment. It
-  **replaces** the Tailwind `prose prose-invert` classes hardcoded on the
+`static/spec.css` holds all typography, tables, callouts and diagram paint,
+with light and dark themes, scoped to the rendered-document container. The
+look is the one approved in the brainstorm mockup: serif body, sans headings
+and tables, restrained callouts, diagrams drawn in the text colours.
+
+- It also styles rendered markdown, so old specs get the same treatment.
+- It **replaces** the Tailwind `prose prose-invert` classes hardcoded on the
   preview pane in `Editor.svelte` and the prose overrides in `app.css:9-15`.
-  The app has no light theme today; the light theme here applies to the
-  rendered document only, following the system setting, and the rest of the
-  app's chrome stays as it is. *(My call.)*
-- `static/spec.js`: progressive enhancement over rendered output. In this
-  project: a copy button on each table (tab-separated text, plus HTML on the
-  clipboard for rich paste), and a link anchor on each heading that has an id.
-  It exposes one function that enhances a container, and `Editor.svelte` calls
-  it after each `{@html}` re-render, before the existing scroll re-sync.
+- The app has no light theme today. The light theme here applies to the
+  rendered document only, following the system setting; the rest of the app's
+  chrome stays as it is. *(My call.)*
+- It is a plain file with no build step and no dependency on the Svelte app,
+  so it can be reused if a spec is ever published elsewhere.
 
-Both are plain files with no build step and no dependency on the Svelte app,
-so they can be reused if a spec is ever published elsewhere.
+Nothing in this project needs a shared script. One can be added when a
+feature calls for it.
 
 ### Assets endpoint
 
@@ -245,14 +251,40 @@ files are not served; diagrams are inline. Responses carry the right
 `assets/` must sit inside a type directory (`specs/assets/`), never directly
 under `docs/superpowers/`, where discovery would list it as a document type.
 
-### Editing
+### One pane
 
-The editor stays a CodeMirror source editor beside a live preview, switching
-its language mode to HTML for `.html` files (`@codemirror/lang-html` is a new
-dependency). Autosave, the mtime conflict flow, external-reload scroll
-preservation and read-only-on-main all behave as they do today. Scroll sync is
-a plain scroll-position ratio, not line-mapped, so it needs no change for HTML
-source.
+The two-pane layout (source beside preview) goes. A spec opens as a single
+rendered pane, for both `.html` and `.md`.
+
+- A toggle switches the pane to the source: the existing CodeMirror editor,
+  in HTML mode for `.html` files (`@codemirror/lang-html` is a new
+  dependency) and markdown mode for `.md`. Toggling back re-renders.
+- The toggle remembers its state per session, not per file, and a file on
+  main (read-only) can still be toggled to view its source.
+- Autosave, the mtime conflict flow, external reload and read-only-on-main
+  behave as they do today; they apply in source view, the only place edits
+  happen in this project.
+- Scroll position is carried across the toggle by the same scroll-ratio
+  approach the two panes use to stay in sync today.
+
+## What the next project needs
+
+Project 2 puts a WYSIWYM editor in the rendered pane. It is not designed
+here, but these decisions are recorded so this project does not block it:
+
+- **Editor:** TipTap (ProseMirror underneath, HTML-native), with a schema
+  that is exactly the subset above, so the format has one definition. An
+  earlier idea of lifting planafoot's editor was dropped: it is Milkdown, a
+  markdown-in, markdown-out editor that shows unknown HTML as literal text.
+- **Sections** will be edited as a flat run of headings and blocks, wrapped
+  into nested `section` elements on save. So nothing in this project may
+  depend on a `section` carrying anything except its `id`.
+- **Diagrams** will be shown as one rendered block: movable and deletable,
+  not redrawn in place. The source toggle stays for that.
+- **Canonical formatting.** An editor rewrites the whole file on save. To
+  keep diffs small, `docs/spec-format.md` defines one canonical layout now
+  (one block element per line, two-space nesting, attributes in a fixed
+  order, `id` first) and agents write specs in it from the start.
 
 ## Getting specs written this way
 
@@ -281,12 +313,9 @@ Pure unit tests, colocated, in the existing style:
 
 ## Left to the builder
 
-- The stylesheet's exact look. A mockup from the brainstorm shows the
-  direction: serif body, sans headings and tables, restrained callouts,
-  diagrams drawn in the text colours.
-- How the stray-markup notice looks.
-- Whether late-loading images and video shift the scroll ratio enough to need
-  a re-sync on load.
+- Fine detail of the stylesheet beyond the approved mockup, which is saved at
+  `docs/superpowers/specs/assets/2026-11-13-semantic-html-specs-design/sample-spec.html`.
+- How the stray-markup notice and the source toggle look.
 
 ## Open questions
 
