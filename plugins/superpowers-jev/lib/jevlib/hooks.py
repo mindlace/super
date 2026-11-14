@@ -15,12 +15,25 @@ from .builders import superpowers as sp
 from .builders import transcript
 from .mode import resolve_mode
 
+REACH_FOR_JEV = (
+    "Reach for Jev when code repeats one judgment over many items: sorting records "
+    "into categories, picking a value out of messy text, deciding if two records match, flagging what "
+    "looks wrong, scoring relevance. Think of it before writing regexes, keyword lists or "
+    "exception files, or calling an LLM once per item. Signs: a growing override file, "
+    "negation windows, keyword lists retuned after false positives, a \"couldn't classify\" "
+    "bucket. Make labeling a separate step that saves answer, confidence and input hash as data. "
+    "Send low-confidence answers to review. Test on existing labels first. Run project code "
+    "as `jev with-key -- <command> [args]`; it reads TYPESAFE_API_KEY from its environment, never "
+    "the plugin's key file. Learn more: typesafe:typesafe-ai if installed, else "
+    "https://docs.typesafe.ai/llms.txt."
+)
+
 SESSION_NOTE = (
     "superpowers-jev is active (Jev mode: %s). When running superpowers:subagent-driven-development, "
     "superpowers:verification-before-completion, or superpowers:diagnosing-superpowers, also load "
     "superpowers-jev:jev-gates.\n"
-    "In shadow mode Jev only logs; every superpowers step runs unchanged."
-)
+    "In shadow mode Jev only logs; every superpowers step runs unchanged.\n"
+) + REACH_FOR_JEV
 
 MIN_PROMPT_WORDS = 3
 

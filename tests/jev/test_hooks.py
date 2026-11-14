@@ -38,6 +38,19 @@ class SessionStartTest(unittest.TestCase):
         self.assertIn("superpowers-jev:jev-gates", ctx["additionalContext"])
         self.assertIn("mode: shadow", ctx["additionalContext"])
 
+    def test_note_carries_reach_for_jev_guidance_in_shadow_and_on(self):
+        for extra in ({}, {"SUPERPOWERS_JEV": "on"}):
+            code, out = run_hook("session-start", {"hook_event_name": "SessionStart"},
+                                 support.make_env(**extra))
+            text = json.loads(out)["hookSpecificOutput"]["additionalContext"]
+            for needle in ("jev with-key --", "TYPESAFE_API_KEY", "typesafe:typesafe-ai",
+                           "https://docs.typesafe.ai/llms.txt", "regex"):
+                self.assertIn(needle, text, (extra, needle))
+
+    def test_reach_for_jev_is_short(self):
+        self.assertLessEqual(len(hooks.REACH_FOR_JEV.split()), 120)
+        self.assertNotIn("%", hooks.REACH_FOR_JEV)
+
     def test_on_mode_note_says_on(self):
         code, out = run_hook("session-start", {"hook_event_name": "SessionStart"},
                              support.make_env(SUPERPOWERS_JEV="on"))
