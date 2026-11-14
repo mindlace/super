@@ -26,6 +26,11 @@ class StateBlobTest(unittest.TestCase):
         self.assertEqual(state.read_blob(sha, d), {"a": 1})
         self.assertEqual(sha, hashlib.sha256(state.canonical({"a": 1})).hexdigest())
 
+    def test_write_blob_ensures_gitignore(self):
+        d = self.d / "fresh"
+        state.write_blob({"a": 1}, d)
+        self.assertEqual((d / ".gitignore").read_text(), "*\n")
+
     def test_identical_states_dedupe(self):
         d = self.d
         a = state.write_blob({"a": 1, "b": 2}, d)

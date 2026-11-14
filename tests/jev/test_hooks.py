@@ -47,6 +47,16 @@ class SessionStartTest(unittest.TestCase):
                            "https://docs.typesafe.ai/llms.txt", "regex"):
                 self.assertIn(needle, text, (extra, needle))
 
+    def test_note_names_promoted_points_only_when_promoted(self):
+        def note(**extra):
+            _, out = run_hook("session-start", {"hook_event_name": "SessionStart"},
+                              support.make_env(**extra))
+            return json.loads(out)["hookSpecificOutput"]["additionalContext"]
+        self.assertNotIn("Promoted to on", note())
+        self.assertIn("Promoted to on: severity", note(SUPERPOWERS_JEV_ON="severity"))
+        self.assertIn("project code reads TYPESAFE_API_KEY from its own environment", note())
+        self.assertIn("Load `typesafe:typesafe-ai` if installed, else read https://docs.typesafe.ai/llms.txt", note())
+
     def test_reach_for_jev_is_short(self):
         self.assertLessEqual(len(hooks.REACH_FOR_JEV.split()), 120)
         self.assertNotIn("%", hooks.REACH_FOR_JEV)

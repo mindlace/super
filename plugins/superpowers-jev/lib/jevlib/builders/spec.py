@@ -57,8 +57,10 @@ def coverage(design_path, spec_paths, env, call_id=None, cwd=None, ask_fn=None):
     call_id = call_id or ask_mod.new_call_id()
     carriers, raws, confident, version = {}, {}, True, None
     specs = {str(s): Path(s).read_text(encoding="utf-8") for s in spec_paths}
+    blobs = {}   # one blob per spec text: a combined blob would truncate past the size cap
     for k, spec in enumerate(spec_paths):
         state = {"requirements": reqs, "spec_text": specs[str(spec)]}
+        blobs[str(spec)] = state_mod.safe_write(state, env, cwd)
         res = ask_fn("fidelity-coverage", state, env, call_id="%s.s%d" % (call_id, k),
                      cwd=cwd, write_log=False)
         if not res.get("enabled"):
@@ -77,7 +79,7 @@ def coverage(design_path, spec_paths, env, call_id=None, cwd=None, ask_fn=None):
                      "point": "fidelity-coverage", "template_version": version, "mode": mode,
                      "compare": "coverage", "on_skips": None, "verdict": verdict,
                      "confident": confident, "detail": detail, "raw": raws,
-                     "state_sha": state_mod.safe_write({"requirements": reqs, "specs": specs}, env, cwd),
+                     "state_sha": state_mod.safe_write({"requirements": reqs, "specs": blobs}, env, cwd),
                      "ctx": ctx.safe_collect(env, None, cwd)}, env, cwd)
     return {"enabled": True, "call_id": call_id, "point": "fidelity-coverage", "mode": mode,
             "verdict": verdict, "confident": confident, "targets": targets, "detail": detail}

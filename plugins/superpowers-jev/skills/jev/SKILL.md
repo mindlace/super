@@ -78,7 +78,7 @@ To label `verify-stop` calls, run `jev label verify-stop [--since YYYY-MM-DD]`. 
 
 Calls from before the hook logged state have none. Run `jev recover-states verify-stop [--projects-dir DIR]` first. It rebuilds state from the Stop-hook summaries in `~/.claude/projects/` and prints a `recovered` count and `unmatched`/`ambiguous` lists of call ids.
 
-`jev register --scan <root>...` seeds the registry that `jev report --all` reads. Log dirs register themselves on first write.
+`jev register --scan <root>...` seeds the registry that `jev report --all` reads. Log dirs register themselves on first write. Logs written before 0.6.0 never registered: run `jev register --scan <root>...` once over them, for example `~/Projects`.
 
 ## Persistence
 

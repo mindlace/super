@@ -35,6 +35,7 @@ def write_blob(obj, log_dir):
     path = blob_path(log_dir, sha)
     if path.exists():
         return sha
+    log.ensure_dir(log_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".tmp-")
     try:
@@ -60,9 +61,9 @@ def read_blob(sha, log_dir):
     return obj if isinstance(obj, dict) else None
 
 
-def safe_write(obj, env, cwd=None):
+def safe_write(obj, env, cwd=None, d=None):
     try:
-        return write_blob(obj, log.log_dir(env, cwd))
+        return write_blob(obj, d if d is not None else log.log_dir(env, cwd))
     except Exception as exc:  # persisting is best-effort
         sys.stderr.write("jev: state write failed: %s\n" % exc)
         return None

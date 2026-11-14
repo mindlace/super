@@ -38,22 +38,27 @@ def ask(point, state, env, call_id=None, cwd=None, post=None, write_log=True, ho
         return disabled("mode off")
     call_id = call_id or new_call_id()
     entry = {"type": "call", "call_id": call_id, "ts": now(), "point": point, "mode": mode}
+    d = None
     if write_log:   # best-effort and never raises; done first so every fail() entry carries both
-        entry.update(state_sha=state_mod.safe_write(state, env, cwd),
+        try:
+            d = log.log_dir(env, cwd)   # resolved once: one git spawn per ask
+        except Exception:
+            d = None
+        entry.update(state_sha=state_mod.safe_write(state, env, cwd, d),
                      ctx=ctx_mod.safe_collect(env, hook, cwd))
 
     def fail(reason):
         if write_log:
-            log.safe_append(dict(entry, verdict=None, confident=False, error=reason), env, cwd)
+            log.safe_append(dict(entry, verdict=None, confident=False, error=reason), env, cwd, d)
         return disabled(reason, call_id=call_id, point=point, mode=mode)
 
     try:
-        return _run(point, state, env, cwd, post, write_log, entry, fail)
+        return _run(point, state, env, cwd, post, write_log, entry, fail, d)
     except Exception as exc:  # fail open on anything unexpected in the body
         return fail("internal error: %s" % type(exc).__name__)
 
 
-def _run(point, state, env, cwd, post, write_log, entry, fail):
+def _run(point, state, env, cwd, post, write_log, entry, fail, d):
     call_id, mode = entry["call_id"], entry["mode"]
     try:
         template = templates.load_template(point, env)
@@ -100,5 +105,5 @@ def _run(point, state, env, cwd, post, write_log, entry, fail):
         log.safe_append(dict(entry, verdict=result["verdict"], confident=result["confident"],
                              items=result.get("items"), detail=detail,
                              confidence=summary_confidence(answers), raw=answers,
-                             model=response.get("model")), env, cwd)
+                             model=response.get("model")), env, cwd, d)
     return out

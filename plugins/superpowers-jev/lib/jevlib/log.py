@@ -31,12 +31,18 @@ def log_dir(env, cwd=None):
     return root / ".superpowers" / "jev"
 
 
-def append(entry, env, cwd=None):
-    d = log_dir(env, cwd)
+def ensure_dir(d):
+    """Create the log dir with its own `.gitignore` (`*`), so nothing in it is committable."""
+    d = Path(d)
     d.mkdir(parents=True, exist_ok=True)
     ignore = d / ".gitignore"
     if not ignore.exists():
         ignore.write_text("*\n", encoding="utf-8")
+    return d
+
+
+def append(entry, env, cwd=None, d=None):
+    d = ensure_dir(d if d is not None else log_dir(env, cwd))
     line = json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n"
     first = not (d / "log.jsonl").exists()
     with open(d / "log.jsonl", "a", encoding="utf-8") as fh:
@@ -51,9 +57,9 @@ def append(entry, env, cwd=None):
         registry.safe_register(d, env)
 
 
-def safe_append(entry, env, cwd=None):
+def safe_append(entry, env, cwd=None, d=None):
     try:
-        append(entry, env, cwd)
+        append(entry, env, cwd, d)
     except Exception as exc:  # logging must never break a caller
         sys.stderr.write("jev: log write failed: %s\n" % exc)
 

@@ -324,10 +324,31 @@ class LogDirTest(unittest.TestCase):
                          Path(home) / ".superpowers" / "jev")
 
 
+class GitSpawnTest(unittest.TestCase):
+    def test_one_ask_spawns_git_at_most_once(self):
+        repo = Path(tempfile.mkdtemp(prefix="jevrepo-")).resolve()
+        subprocess.run(["git", "init", "-q"], cwd=repo, check=True, capture_output=True)
+        env = toy_env(None)
+        env.pop("JEV_LOG_DIR", None)
+        env["HOME"] = tempfile.mkdtemp()
+        real = subprocess.run
+        calls = []
+
+        def counting(*a, **k):
+            calls.append(a)
+            return real(*a, **k)
+
+        with mock.patch.object(subprocess, "run", side_effect=counting):
+            with mock.patch.object(client, "post", return_value=(200, {})):
+                ask.ask("toy", STATE, env, cwd=str(repo))
+        self.assertLessEqual(len(calls), 1, calls)
+
+
 class CliTest(unittest.TestCase):
     def run_jev(self, args, env, stdin=None):
         full = dict(os.environ)
-        for k in ("SUPERPOWERS_JEV", "SUPERPOWERS_JEV_ON", "TYPESAFE_API_KEY", "JEV_ENDPOINT"):
+        for k in ("SUPERPOWERS_JEV", "SUPERPOWERS_JEV_ON", "TYPESAFE_API_KEY", "JEV_ENDPOINT",
+                  "JEV_REGISTRY"):
             full.pop(k, None)
         full.update(env)
         return subprocess.run([str(support.JEV)] + args, input=stdin, env=full,
