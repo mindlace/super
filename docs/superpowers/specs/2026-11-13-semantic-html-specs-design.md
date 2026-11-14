@@ -112,6 +112,7 @@ doctype, `html`, `head`, `body`, `style`, `script` or `link`.
 | Structure | `article`, `header`, `section`, `h1`–`h4`, `hr` |
 | Prose | `p`, `ul`, `ol`, `li`, `dl`, `dt`, `dd`, `blockquote`, `details`, `summary` |
 | Inline | `a`, `em`, `strong`, `code`, `kbd`, `mark`, `sub`, `sup`, `br` |
+| Checklists | `input` with `type="checkbox"`, as the first child of an `li` |
 | Callouts | `aside` with `data-kind` = `note`, `warning`, `decision` or `question` |
 | Code | `pre` > `code`, language in `data-lang` |
 | Tables | `table`, `caption`, `thead`, `tbody`, `tfoot`, `tr`, `th`, `td` |
@@ -120,7 +121,8 @@ doctype, `html`, `head`, `body`, `style`, `script` or `link`.
 
 ### Allowed attributes
 
-`id`, `class` (SVG only), `data-*`, `href`, `src`, `alt`, `controls`, `scope`,
+`id`, `class` (SVG only), `data-*`, `href`, `src`, `alt`, `controls`, `type`
+and `checked` (on `input` only, and `type` only as `checkbox`), `scope`,
 `colspan`, `rowspan`, `open`, `role`, `aria-*`, and SVG geometry and reference
 attributes (`viewBox`, `x`, `y`, `width`, `height`, `d`, `points`, `cx`, `cy`,
 `r`, `rx`, `ry`, `x1`…`y2`, `transform`, `marker-end`, `marker-start`, and
@@ -137,6 +139,28 @@ font (`fill`, `stroke`, `font-*`).
 - A table has a `caption`, and header cells use `th` with `scope`.
 - A diagram sits in a `figure` with a `figcaption`, and its `svg` has a
   `title`.
+
+### Checklists
+
+Plans are checklists, and the format gives them real checkboxes in place of
+markdown's `- [x]` text.
+
+```html
+<ol>
+  <li id="t1-s1"><input type="checkbox" checked> Write the failing test</li>
+  <li id="t1-s2"><input type="checkbox"> Run it and see it fail
+    <pre><code data-lang="sh">npx vitest run src/lib/specfile.test.ts</code></pre>
+  </li>
+</ol>
+```
+
+- A checklist item is an `li` whose first child is the checkbox. It may hold
+  further blocks after its text.
+- Done is the presence of the `checked` attribute, written bare. An agent
+  ticks a step by adding it, which is a one-word change to one line.
+- Every checklist `li` has an `id`, so a step can be referred to by name.
+  *(My call.)*
+- No other `input` type, and no other form element, is allowed.
 
 ### Diagrams
 
@@ -297,6 +321,10 @@ typed within.
   as today. *(My call.)*
 - Files on main, which are read-only.
 
+**Checkboxes.** Clicking a checkbox toggles it. The save adds or removes the
+`checked` attribute on that one `input` tag in the source, by the same
+splice, and touches nothing else. On a read-only file the boxes are disabled.
+
 **Keys.** Enter does not create a new block. Paste inserts plain text.
 Undo is the browser's own, within the element being edited.
 
@@ -341,9 +369,8 @@ that switch is deliberately not part of this project.
 - Turning HTML on afterwards is a follow-on piece of work, not part of this
   plan. It is to be baked into superpowers rather than added to
   `~/.claude/CLAUDE.md`: a SessionStart hook injects the instruction to write
-  design docs as `.html` per the format reference, the way the
-  `superpowers-jev` plugin injects its own session context. Whether plans
-  follow is decided then.
+  both design docs and plans as `.html` per the format reference, the way
+  the `superpowers-jev` plugin injects its own session context.
 - So `docs/spec-format.md` must stand alone: an agent given only that file
   can write a valid spec.
 - Until then the reader is exercised with hand-converted specs, starting with
@@ -365,6 +392,9 @@ Pure unit tests, colocated, in the existing style:
 - In-place editing, as pure functions over a source string: locating an
   element's inner range, cleaning edited content to the inline subset, and
   the splice, including the confined-diff case above.
+- Checkboxes: the sanitiser keeps `input type="checkbox"` and removes every
+  other `input`; toggling one changes only the `checked` attribute of that
+  tag in the source, in both directions.
 
 ## Left to the builder
 
@@ -374,5 +404,5 @@ Pure unit tests, colocated, in the existing style:
 
 ## Open questions
 
-None. Whether plans move to HTML, and when the override is switched on, are
-decided after this ships (see Rollout).
+None. Design docs and plans both move to HTML, once this has shipped (see
+Rollout).
