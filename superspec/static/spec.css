@@ -24,6 +24,7 @@
 .spec-doc h1, .spec-doc h2, .spec-doc h3, .spec-doc h4, .spec-doc h5, .spec-doc h6,
 .spec-doc th, .spec-doc caption, .spec-doc figcaption, .spec-doc dt, .spec-doc nav,
 .spec-doc button { font-family: var(--sans); }
+.spec-doc h1, .spec-doc h2, .spec-doc h3, .spec-doc h4, .spec-doc h5, .spec-doc h6 { font-weight: 700; }
 .spec-doc h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .4rem; letter-spacing: -.01em; text-wrap: balance; }
 .spec-doc h2 { font-size: 1.25rem; margin: 2.6rem 0 .6rem; }
 .spec-doc h3 { font-size: 1rem; margin: 1.8rem 0 .4rem; }
@@ -33,22 +34,27 @@
 
 /* heading anchors added by the reader */
 .spec-doc a[data-sr-added] { color: var(--muted); text-decoration: none; margin-left: .4em; opacity: 0; }
-.spec-doc :is(h1, h2, h3, h4):hover > a[data-sr-added],
+.spec-doc :is(h1, h2, h3, h4, h5, h6):hover > a[data-sr-added],
 .spec-doc a[data-sr-added]:focus-visible { opacity: 1; }
 
 .spec-doc a { color: var(--accent); text-decoration: underline; text-underline-offset: .15em; }
 .spec-doc p { margin: .7rem 0; }
 .spec-doc ul, .spec-doc ol { margin: .7rem 0; padding-left: 1.5rem; }
+.spec-doc ul { list-style: disc; }
+.spec-doc ol { list-style: decimal; }
 .spec-doc li { margin: .25rem 0; }
 .spec-doc li > input[type='checkbox']:first-child { margin: 0 .5em 0 0; vertical-align: baseline; accent-color: var(--ok); }
 .spec-doc ol:has(> li > input[type='checkbox']),
 .spec-doc ul:has(> li > input[type='checkbox']) { list-style: none; padding-left: .25rem; }
 .spec-doc blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--rule); color: var(--muted); }
 .spec-doc hr { border: 0; border-top: 1px solid var(--rule); margin: 2rem 0; }
-.spec-doc img, .spec-doc video { max-width: 100%; height: auto; }
+.spec-doc img, .spec-doc video { display: inline-block; vertical-align: baseline; max-width: 100%; height: auto; }
+.spec-doc figure > :is(img, video) { display: block; }
 
-.spec-doc code { font: .86em var(--mono); background: var(--panel); padding: .1em .3em; border-radius: 3px; }
+.spec-doc kbd, .spec-doc samp { font: .86em var(--mono); }
+.spec-doc code { font:.86em var(--mono); background: var(--panel); padding: .1em .3em; border-radius: 3px; }
 .spec-doc pre { background: var(--panel); padding: .9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.45; }
+.spec-doc pre { font-family: var(--mono); }
 .spec-doc pre code { background: none; padding: 0; }
 .spec-doc pre.shiki { background: var(--panel) !important; }
 @media (prefers-color-scheme: dark) {
