@@ -1,11 +1,12 @@
 import json
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
 import support
-from jevlib import cli, ctx, log, state
-from jevlib.builders import cite, ledger, spec
+from jevlib import cli, ctx, log, schema, state
+from jevlib.builders import cite, htmldoc, ledger, spec
 
 FX = support.FIXTURES
 
@@ -27,6 +28,72 @@ class CiteTest(unittest.TestCase):
 
     def test_no_claims(self):
         self.assertEqual(cite.build_state("nothing cited here", FX), {"claims": [], "unreadable": []})
+
+
+SPEC_A_MD_SECTIONS = [
+    {"id": None, "heading": "Auth spec", "path": ["Auth spec"], "text": ""},
+    {"id": None, "heading": "Goal", "path": ["Auth spec", "Goal"],
+     "text": "Validate session tokens in middleware for every route."},
+    {"id": None, "heading": "Interface rows", "path": ["Auth spec", "Interface rows"], "text": "",
+     "tables": [{"id": None, "caption": "", "header": ["Producer", "Consumer", "Signature"],
+                 "rows": [["auth", "billing", "verify(token) -> User"],
+                          ["auth", "search", "current_user() -> User"]]}]},
+]
+
+
+class SectionsTest(unittest.TestCase):
+    def test_markdown_sections(self):
+        self.assertEqual(spec.md_sections((FX / "spec-a.md").read_text()), SPEC_A_MD_SECTIONS)
+
+    def test_html_sections(self):
+        got = htmldoc.sections((FX / "spec-a.html").read_text())
+        self.assertEqual([s["id"] for s in got], [None, "sec-goal", "sec-interfaces", "sec-flow"])
+        self.assertEqual(got[1], dict(SPEC_A_MD_SECTIONS[1], id="sec-goal"))
+        self.assertEqual(got[2]["tables"], [dict(SPEC_A_MD_SECTIONS[2]["tables"][0],
+                                                 id="tbl-interfaces", caption="Interface rows")])
+        self.assertEqual(got[2]["text"], "")
+
+    def test_svg_gives_title_and_edges_only(self):
+        flow = htmldoc.sections((FX / "spec-a.html").read_text())[3]
+        self.assertEqual(flow["text"], "Token flow\nclient → middleware\nFigure 1. Tokens pass through middleware.")
+
+    def test_nested_section_path_and_own_text(self):
+        got = htmldoc.sections('<article><header><h1>T</h1></header><section id="a"><h2>A</h2><p>x</p>'
+                               '<section id="b"><h3>B</h3><p>y</p></section></section></article>')
+        self.assertEqual([(s["path"], s["text"]) for s in got[1:]], [(["T", "A"], "x"), (["T", "A", "B"], "y")])
+
+    def test_markdown_fence_hides_headings_and_pipes(self):
+        got = spec.md_sections("# T\n## A\n```sh\n# not a heading\n| not | a table |\n```\n")
+        self.assertEqual(len(got), 2)
+        self.assertEqual(got[1]["text"], "```sh\n# not a heading\n| not | a table |\n```")
+        self.assertNotIn("tables", got[1])
+
+    def test_markdown_table_starting_with_separator_has_empty_header(self):
+        got = spec.md_sections("# T\n## A\n| --- |\n")
+        self.assertEqual(got[1]["tables"][0]["header"], [])
+
+    def test_html_table_without_thead_takes_leading_th_row_as_header(self):
+        got = htmldoc.sections('<article><section id="a"><h2>A</h2><table><tr><th>Claim</th></tr>'
+                               '<tr><td>A</td></tr></table></section></article>')
+        t = got[0]["tables"][0] if got[0].get("tables") else got[1]["tables"][0]
+        self.assertEqual((t["header"], t["rows"]), (["Claim"], [["A"]]))
+
+    def test_br_and_hr_break_lines_in_both_forms(self):
+        for br, hr in (("<br>", "<hr>"), ("<br/>", "<hr/>")):
+            got = htmldoc.sections('<article><section id="a"><h2>A</h2><p>one%stwo</p><p>x%sy</p></section></article>'
+                                   % (br, hr))
+            self.assertEqual(got[0]["text"], "one\ntwo\nx\ny", br)
+
+    def test_title(self):
+        self.assertEqual(htmldoc.title((FX / "spec-a.html").read_text()), "Auth spec")
+        self.assertIsNone(htmldoc.title("<p>x</p>"))
+
+    def test_both_formats_validate_against_the_template(self):
+        t = support.template("fidelity-coverage")
+        self.assertEqual(t["version"], 2)
+        for p in ("spec-a.md", "spec-a.html", "spec-b.md", "spec-b.html"):
+            state = {"requirements": ["r"], "spec_sections": spec.spec_sections(FX / p)}
+            self.assertEqual(schema.validate(t["state_schema"], state), [], p)
 
 
 class LedgerTest(unittest.TestCase):
@@ -60,9 +127,9 @@ class SpecTest(unittest.TestCase):
         def fake_ask(point, state, env, call_id=None, cwd=None, write_log=True):
             self.assertEqual(point, "fidelity-coverage")
             self.assertFalse(write_log)
-            name = "spec-a.md" if state["spec_text"].startswith("# Auth") else "spec-b.md"
+            name = "spec-a.md" if state["spec_sections"][0]["heading"] == "Auth spec" else "spec-b.md"
             return {"enabled": True, "verdict": carried[name], "confident": True, "raw": {},
-                    "template_version": 1}
+                    "template_version": 2}
 
         env = support.make_env()
         out = spec.coverage(FX / "design.md", [FX / "spec-a.md", FX / "spec-b.md"], env,
@@ -78,12 +145,11 @@ class SpecTest(unittest.TestCase):
         d = log.log_dir(env)
         a = state.read_blob(st["specs"][str(FX / "spec-a.md")], d)
         self.assertEqual(a, {"requirements": st["requirements"],
-                             "spec_text": (FX / "spec-a.md").read_text()})
-        self.assertTrue(a["spec_text"].startswith("# Auth"))
+                             "spec_sections": spec.spec_sections(FX / "spec-a.md")})
+        self.assertEqual(a["spec_sections"][0]["heading"], "Auth spec")
         self.assertEqual(set(entries[0]["ctx"]), set(ctx.CTX_KEYS))
 
     def test_coverage_big_specs_rebuild_exactly(self):
-        import tempfile
         tmp = Path(tempfile.mkdtemp())
         paths = []
         for i in range(3):
@@ -93,12 +159,45 @@ class SpecTest(unittest.TestCase):
         env = support.make_env()
         spec.coverage(FX / "design.md", paths, env, call_id="cov-big",
                       ask_fn=lambda *a, **k: {"enabled": True, "verdict": [0], "confident": True,
-                                              "raw": {}, "template_version": 1})
+                                              "raw": {}, "template_version": 2})
         st = state.load("cov-big", env)
         d = log.log_dir(env)
         for p in paths:
             self.assertEqual(state.read_blob(st["specs"][str(p)], d),
-                             {"requirements": st["requirements"], "spec_text": p.read_text()})
+                             {"requirements": st["requirements"],
+                              "spec_sections": spec.spec_sections(p)})
+
+    def test_html_traceability_skips_earlier_tables(self):
+        self.assertEqual(spec.requirements(FX / "design.html"),
+                         spec.traceability_requirements((FX / "design.md").read_text()))
+
+    def test_html_traceability_by_section_heading(self):
+        html = ('<article><section id="s"><h2>Traceability</h2><table id="t"><caption>Claims</caption>'
+                '<thead><tr><th scope="col">Claim</th></tr></thead><tbody><tr><td>A</td></tr></tbody>'
+                '</table></section></article>')
+        self.assertEqual(spec.html_traceability_requirements(html), ["A"])
+
+    def test_html_traceability_without_thead_skips_th_header_row(self):
+        html = ('<article><section id="s"><h2>Traceability</h2><table id="t"><caption>Claims</caption>'
+                '<tr><th scope="col">Claim</th></tr><tr><td>A</td></tr></table></section></article>')
+        self.assertEqual(spec.html_traceability_requirements(html), ["A"])
+
+    def test_html_design_without_traceability_table_reports(self):
+        p = Path(tempfile.mkdtemp()) / "d.html"
+        p.write_text('<article><header><h1>D</h1></header></article>', encoding="utf-8")
+        out = spec.coverage(p, [FX / "spec-a.html"], support.make_env(), ask_fn=lambda *a, **k: 1 / 0)
+        self.assertFalse(out["enabled"])
+        self.assertIn("no traceability table in %s" % p, out["reason"])
+
+    def test_coverage_html_sends_sections_never_raw_html(self):
+        env = support.make_env()
+        spec.coverage(FX / "design.html", [FX / "spec-a.html"], env, call_id="cov-h",
+                      ask_fn=lambda *a, **k: {"enabled": True, "verdict": [0], "confident": True,
+                                              "raw": {}, "template_version": 2})
+        blob = state.read_blob(state.load("cov-h", env)["specs"][str(FX / "spec-a.html")], log.log_dir(env))
+        self.assertEqual(sorted(blob), ["requirements", "spec_sections"])
+        self.assertEqual(blob["spec_sections"], htmldoc.sections((FX / "spec-a.html").read_text()))
+        self.assertNotIn("<", json.dumps(blob["spec_sections"]))
 
     def test_coverage_fails_open_when_any_spec_ask_is_disabled(self):
         env = support.make_env()

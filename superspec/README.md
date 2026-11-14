@@ -1,10 +1,9 @@
 # superspec
 
-A local web app for reading and lightly editing superpowers spec files across
+A local web app for reading superpowers spec files across
 `~/Projects/`. Lists only specs that live in a worktree (active work) — specs in a
 project's main checkout are not shown, and a worktree spec drops off the list once
-the same file lands on main. Specs render as formatted HTML in a split-pane editor
-with autosave. Deep-links (below) still open any spec by path, including ones on main.
+the same file lands on main. Specs render read-only as formatted HTML. Deep-links (below) still open any spec by path, including ones on main.
 
 ## Running
 

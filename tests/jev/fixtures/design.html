@@ -1,0 +1,20 @@
+<article>
+  <header><h1>Shop design</h1></header>
+  <section id="sec-goal"><h2>Goal</h2><p>Sell things.</p></section>
+  <section id="sec-interfaces"><h2>Interface table</h2>
+    <table id="tbl-interfaces"><caption>Interface table</caption>
+      <thead><tr><th scope="col">Producer</th><th scope="col">Consumer</th><th scope="col">Signature</th></tr></thead>
+      <tbody><tr><td>auth</td><td>billing</td><td>verify(token) -&gt; User</td></tr></tbody>
+    </table>
+  </section>
+  <section id="sec-traceability"><h2>Traceability table</h2>
+    <table id="tbl-traceability"><caption>Traceability table</caption>
+      <thead><tr><th scope="col">Model claim</th><th scope="col">Carried by</th></tr></thead>
+      <tbody>
+        <tr><th scope="row">Tokens are validated by middleware</th><td>auth interface row 1</td></tr>
+        <tr><th scope="row">Prices are integer cents</th><td>billing spec §2</td></tr>
+        <tr><th scope="row">Search reads the product index</th><td>search spec</td></tr>
+      </tbody>
+    </table>
+  </section>
+</article>

@@ -88,6 +88,9 @@ require 'Do not wait on the conductor'
 require 'Delivers row <row id>'
 require 'hold a task waiting on a sibling'
 require 'send `plan ready` and end your turn'
+# The spec may be markdown or HTML; the html-docs line lives in the superconductor's assignment.
+require '.html'
+forbid 'superpowers-html'
 
 forbid 'with a pointer to'
 forbid 'message `main`'

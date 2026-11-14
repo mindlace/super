@@ -15,7 +15,9 @@ export interface SpecEntry {
   type: string;
   /** file mtime in ms */
   mtime: number;
-  /** max(mtime, filename-date-ms) — for ordering and the 24h window only */
-  recency: number;
+  /** when the doc first appeared (git first-add time; birthtime/mtime fallbacks), ms */
+  created: number;
+  /** when the doc last changed (git last-touch time, or mtime when edited/unknown), ms */
+  updated: number;
 }
 

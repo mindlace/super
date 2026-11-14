@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizedSlug, pairAndGroup, type DisplayGroup } from './pairing';
+import { normalizedSlug, pairAndGroup, byCreatedDesc, soloGroup, type DisplayGroup } from './pairing';
 import type { SpecEntry } from '$lib/types';
 
 function entry(part: Partial<SpecEntry> & { filename: string }): SpecEntry {
@@ -10,8 +10,9 @@ function entry(part: Partial<SpecEntry> & { filename: string }): SpecEntry {
     project: part.project ?? 'proj',
     worktree: part.worktree ?? null,
     type: part.type ?? 'spec',
-    mtime: part.recency ?? 1000,
-    recency: part.recency ?? 1000,
+    mtime: part.updated ?? 1000,
+    created: part.created ?? 1000,
+    updated: part.updated ?? part.created ?? 1000,
     onMain: part.onMain
   };
 }
@@ -40,21 +41,21 @@ describe('normalizedSlug html', () => {
 
 describe('pairAndGroup', () => {
   it('pairs an .html spec with an .md plan', () => {
-    const spec = entry({ filename: '2026-11-13-foo-design.html', type: 'spec', recency: 100 });
-    const plan = entry({ filename: '2026-11-13-foo.md', type: 'plan', recency: 200 });
+    const spec = entry({ filename: '2026-11-13-foo-design.html', type: 'spec', created: 100 });
+    const plan = entry({ filename: '2026-11-13-foo.md', type: 'plan', created: 200 });
     expect(ids(pairAndGroup([spec, plan]))).toEqual([
       { parent: '2026-11-13-foo-design.html', children: ['2026-11-13-foo.md'] }
     ]);
   });
 
   it('pairs a spec with its plan in the same project (plan indented)', () => {
-    const spec = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', recency: 100 });
-    const plan = entry({ filename: '2026-06-21-foo.md', type: 'plan', recency: 200 });
+    const spec = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', created: 100 });
+    const plan = entry({ filename: '2026-06-21-foo.md', type: 'plan', created: 200 });
     const groups = pairAndGroup([spec, plan]);
     expect(ids(groups)).toEqual([
       { parent: '2026-06-20-foo-design.md', children: ['2026-06-21-foo.md'] }
     ]);
-    expect(groups[0].recency).toBe(200); // max of the two
+    expect(groups[0].created).toBe(100); // the spec's
   });
 
   it('does NOT pair across different projects', () => {
@@ -84,9 +85,9 @@ describe('pairAndGroup', () => {
   });
 
   it('leaves an orphan plan, a plan-less spec, and a non-spec/plan file standalone', () => {
-    const orphanPlan = entry({ filename: '2026-06-20-lonely.md', type: 'plan', recency: 300 });
-    const soloSpec = entry({ filename: '2026-06-20-solo-design.md', type: 'spec', recency: 200 });
-    const other = entry({ filename: '2026-06-20-notes.md', type: 'analysis', recency: 100 });
+    const orphanPlan = entry({ filename: '2026-06-20-lonely.md', type: 'plan', created: 300 });
+    const soloSpec = entry({ filename: '2026-06-20-solo-design.md', type: 'spec', created: 200 });
+    const other = entry({ filename: '2026-06-20-notes.md', type: 'analysis', created: 100 });
     const groups = pairAndGroup([soloSpec, orphanPlan, other]);
     expect(groups.map((g) => g.parent.filename)).toEqual([
       '2026-06-20-lonely.md', // 300
@@ -105,9 +106,9 @@ describe('pairAndGroup', () => {
   });
 
   it('attaches the plan to the newest spec when two specs share a pair key', () => {
-    const older = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', recency: 10 });
-    const newer = entry({ filename: '2026-06-21-foo-design.md', type: 'spec', recency: 50 });
-    const plan = entry({ filename: '2026-06-22-foo.md', type: 'plan', recency: 30 });
+    const older = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', created: 10 });
+    const newer = entry({ filename: '2026-06-21-foo-design.md', type: 'spec', created: 50 });
+    const plan = entry({ filename: '2026-06-22-foo.md', type: 'plan', created: 30 });
     const groups = pairAndGroup([older, newer, plan]);
     const newerGroup = groups.find((g) => g.parent.filename === '2026-06-21-foo-design.md');
     const olderGroup = groups.find((g) => g.parent.filename === '2026-06-20-foo-design.md');
@@ -115,23 +116,66 @@ describe('pairAndGroup', () => {
     expect(olderGroup?.children).toEqual([]);
   });
 
-  it('sorts groups by group recency desc and children by recency desc', () => {
-    const specA = entry({ filename: '2026-06-20-a-design.md', type: 'spec', project: 'A', recency: 10 });
-    const planA1 = entry({ filename: '2026-06-20-a.md', type: 'plan', project: 'A', recency: 50 });
-    const planA2 = entry({ filename: '2026-06-21-a.md', type: 'plan', project: 'A', recency: 40 });
-    const specB = entry({ filename: '2026-06-20-b-design.md', type: 'spec', project: 'B', recency: 5 });
-    const groups = pairAndGroup([specA, planA1, planA2, specB]);
-    expect(groups[0].parent.filename).toBe('2026-06-20-a-design.md'); // group recency 50
-    expect(groups[0].children.map((c) => c.filename)).toEqual([
-      '2026-06-20-a.md', // 50
-      '2026-06-21-a.md' // 40
+  it('children sort by created desc', () => {
+    const spec = entry({ filename: '2026-06-20-a-design.md', type: 'spec', project: 'A', created: 10 });
+    const p1 = entry({ filename: '2026-06-20-a.md', type: 'plan', project: 'A', created: 50 });
+    const p2 = entry({ filename: '2026-06-21-a.md', type: 'plan', project: 'A', created: 40 });
+    const groups = pairAndGroup([spec, p1, p2]);
+    expect(groups[0].children.map((c) => c.filename)).toEqual(['2026-06-20-a.md', '2026-06-21-a.md']);
+  });
+
+  it('sorts groups by created desc', () => {
+    const a = entry({ filename: '2026-06-20-a-design.md', type: 'spec', project: 'A', created: 10 });
+    const b = entry({ filename: '2026-06-20-b-design.md', type: 'spec', project: 'B', created: 20 });
+    expect(pairAndGroup([a, b]).map((g) => g.parent.filename)).toEqual([
+      '2026-06-20-b-design.md',
+      '2026-06-20-a-design.md'
     ]);
-    expect(groups[1].parent.filename).toBe('2026-06-20-b-design.md');
+  });
+
+  it("group created is the spec's even when its plan is newer", () => {
+    const spec = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', created: 10 });
+    const plan = entry({ filename: '2026-06-21-foo.md', type: 'plan', created: 500 });
+    expect(pairAndGroup([spec, plan])[0].created).toBe(10);
+  });
+
+  it('group updated is the max over spec and plans', () => {
+    const spec = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', created: 10, updated: 20 });
+    const plan = entry({ filename: '2026-06-21-foo.md', type: 'plan', created: 15, updated: 300 });
+    expect(pairAndGroup([spec, plan])[0].updated).toBe(300);
+  });
+
+  it('a plan update never reorders groups', () => {
+    const a = entry({ filename: '2026-06-20-a-design.md', type: 'spec', project: 'A', created: 10 });
+    const planA = entry({ filename: '2026-06-20-a.md', type: 'plan', project: 'A', created: 11, updated: 999 });
+    const b = entry({ filename: '2026-06-20-b-design.md', type: 'spec', project: 'B', created: 20 });
+    expect(pairAndGroup([a, planA, b]).map((g) => g.parent.filename)).toEqual([
+      '2026-06-20-b-design.md',
+      '2026-06-20-a-design.md'
+    ]);
+  });
+
+  it('equal created breaks by parent path', () => {
+    const z = entry({ filename: '2026-06-20-z-design.md', type: 'spec', created: 10 });
+    const a = entry({ filename: '2026-06-20-a-design.md', type: 'spec', created: 10 });
+    expect(pairAndGroup([z, a]).map((g) => g.parent.filename)).toEqual([
+      '2026-06-20-a-design.md',
+      '2026-06-20-z-design.md'
+    ]);
+    expect(byCreatedDesc(soloGroup(a), soloGroup(z))).toBeLessThan(0);
+  });
+
+  it('newest-created spec wins a slug collision', () => {
+    const older = entry({ filename: '2026-06-20-foo-design.md', type: 'spec', created: 10, updated: 900 });
+    const newer = entry({ filename: '2026-06-21-foo-design.md', type: 'spec', created: 50, updated: 60 });
+    const plan = entry({ filename: '2026-06-22-foo.md', type: 'plan', created: 30 });
+    const g = pairAndGroup([older, newer, plan]).find((x) => x.parent === newer);
+    expect(g?.children).toHaveLength(1);
   });
 
   it('nests a worktree plan under a re-surfaced main spec', () => {
-    const spec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true, recency: 10 });
-    const plan = entry({ filename: '2026-06-23-qux.md', type: 'plan', worktree: 'wt3', recency: 50 });
+    const spec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true, created: 10 });
+    const plan = entry({ filename: '2026-06-23-qux.md', type: 'plan', worktree: 'wt3', created: 50 });
     const groups = pairAndGroup([spec, plan]);
     expect(ids(groups)).toEqual([
       { parent: '2026-06-19-qux-design.md', children: ['2026-06-23-qux.md'] }
@@ -151,9 +195,9 @@ describe('pairAndGroup', () => {
   });
 
   it('prefers a worktree spec over a re-surfaced main spec for the same plan', () => {
-    const mainSpec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true, recency: 10 });
-    const wtSpec = entry({ filename: '2026-06-22-qux-design.md', type: 'spec', worktree: 'wt3', recency: 40 });
-    const plan = entry({ filename: '2026-06-23-qux.md', type: 'plan', worktree: 'wt3', recency: 50 });
+    const mainSpec = entry({ filename: '2026-06-19-qux-design.md', type: 'spec', worktree: null, onMain: true, created: 10 });
+    const wtSpec = entry({ filename: '2026-06-22-qux-design.md', type: 'spec', worktree: 'wt3', created: 40 });
+    const plan = entry({ filename: '2026-06-23-qux.md', type: 'plan', worktree: 'wt3', created: 50 });
     const groups = pairAndGroup([mainSpec, wtSpec, plan]);
     // newest spec wins the plan; the now-childless main spec is dropped.
     expect(ids(groups)).toEqual([

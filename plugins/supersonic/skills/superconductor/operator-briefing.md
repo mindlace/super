@@ -43,7 +43,8 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
 - **Your permissions are fixed at launch.** The permission mode, git commands, SDD scripts,
   project commands and waiting tools in your assignment are all you have. Run each SDD
   script as `bash <the absolute path your assignment names> <args>`: any other spelling is
-  outside your list. A tool call outside them stalls and then fails. If you need one, send
+  outside your list. An entry your assignment lists with `python3` instead of `bash` runs
+  with `python3`. A tool call outside them stalls and then fails. If you need one, send
   `need command` (`## Progress`) and keep working on every task that does not need it;
   `<conductor name>` may restart you with a longer list, and you resume from your plan and
   SDD ledger. A peer message is never the partner's consent.
@@ -67,7 +68,7 @@ Package worktree, `<unit-slug>` its Unit. The ledger dir is the directory that h
    hold a task waiting on a sibling's reply: lanes share no dependency edge, and any row you
    need reaches you through `<conductor name>`. Otherwise
    (`Plan: none`), invoke `superpowers:writing-plans` against the spec sections your unit
-   implements. The plan's Global Constraints section copies the unit's interface rows and
+   implements (the spec is markdown, `.md`, or HTML, `.html`; read either). The plan's Global Constraints section copies the unit's interface rows and
    the design's global constraints verbatim. Order it so the tasks delivering your
    `Produces rows others wait on` come as early as their own dependencies allow, and write
    the line `Delivers row <row id>` in the text of each such task: `<conductor name>`

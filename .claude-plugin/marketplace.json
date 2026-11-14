@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "super",
-  "description": "mindlace's Claude Code plugins: supersonic (superconductor + supercomposer) and superpowers-jev (optional TypeSafe Jev judgments for superpowers).",
+  "description": "mindlace's Claude Code plugins: supersonic (superconductor + supercomposer), superpowers-jev (optional TypeSafe Jev judgments for superpowers) and superpowers-html (superpowers specs and plans written as HTML).",
   "owner": {
     "name": "mindlace",
     "url": "https://github.com/mindlace"
@@ -16,6 +16,11 @@
       "name": "superpowers-jev",
       "source": "./plugins/superpowers-jev",
       "description": "Optional TypeSafe Jev typed judgments at superpowers and supersonic decision points. Shadow mode by default; fails open."
+    },
+    {
+      "name": "superpowers-html",
+      "source": "./plugins/superpowers-html",
+      "description": "Overlays superpowers 7.x so specs and plans are written as HTML in the supersonic spec format. Fails open."
     }
   ]
 }

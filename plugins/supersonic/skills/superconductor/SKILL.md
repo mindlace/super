@@ -203,6 +203,8 @@ The package comes from a supersonic:supercomposer session, committed in the
 package worktree on the integration branch `superconductor/<design-slug>`.
 Before the first admission, verify it is complete:
 
+- Design doc and specs may be markdown (`.md`, composed before supersonic
+  0.4.0) or HTML (`.html`); check the required sections by heading in either.
 - Design doc with every required section, including the **traceability
   table** (every model-doc claim → interface row / spec, or a
   dropped/narrowed/deferred entry bearing partner sign-off) and the
@@ -219,7 +221,7 @@ Before the first admission, verify it is complete:
 
 Anything missing → back to supersonic:supercomposer; do not patch it here.
 
-**Operator commands.** Resolve two things once, at intake, and ledger them
+**Operator commands.** Resolve these once, at intake, and ledger them
 as header lines below `Build graph:`:
 
 - `SDD scripts: <absolute path>`: the `scripts/` directory of the installed
@@ -228,6 +230,11 @@ as header lines below `Build graph:`:
   followed by `/skills/subagent-driven-development/scripts`; check that
   `sdd-workspace`, `task-brief` and `review-package` are in it. SDD runs
   each as `bash <absolute path> ...`.
+- `HTML scripts: <absolute path>`, only when `superpowers-html:html-docs` is
+  among your available skills: the `installPath` of the `superpowers-html`
+  entry in the same file followed by `/bin`; check that `task-brief` and
+  `superpowers-html` are in it. An operator running an `.html` plan calls
+  these in place of SDD's `task-brief`.
 - `Project commands: <commands>`: the project's own test, build, lint and
   install commands, taken from its CLAUDE.md and its package scripts (for
   example `npm test`, `npx vitest`, `npm install`), never from a plan.
@@ -367,6 +374,11 @@ is done: go on from step 2.
        - Allowed project commands: <project commands>
        - Allowed for waiting: sleep (run in the background), TaskStop, sh <skill dir>/beat.sh changed
 
+   If `superpowers-html:html-docs` is among your available skills, also add
+   the line `- Before superpowers:writing-plans, load superpowers-html:html-docs.`
+   and add `bash <html scripts dir>/task-brief, python3 <html scripts dir>/superpowers-html`
+   to `Allowed SDD scripts:`. Otherwise the assignment is unchanged.
+
 3. **Ledger** the unit line (`## Units`) before the launch, then run `sh
    <skill dir>/beat.sh <ledger dir> launching <unit-slug>`, which forgets
    any earlier operator's session id, so a death before step 5 never
@@ -392,10 +404,12 @@ is done: go on from step 2.
      verified.
    - `Bash(<project command>:*)` is one entry per command on the ledger's
      `Project commands:` line. Add `Bash(jev:*)` when `superpowers-jev` is
-     installed. A tool call outside the list stalls about two minutes and
-     then fails: the operator sends `need command` (`## Supervision`), and
-     you relaunch it with a longer list (below) when the command belongs to
-     its unit's work.
+     installed. Add `Bash(bash <html scripts dir>/task-brief:*)` and
+     `Bash(python3 <html scripts dir>/superpowers-html:*)` when the ledger has
+     an `HTML scripts:` line; `<html scripts dir>` is that path. A tool call
+     outside the list stalls about two minutes and then fails: the operator
+     sends `need command` (`## Supervision`), and you relaunch it with a
+     longer list (below) when the command belongs to its unit's work.
    - `TaskStop`, `Bash(sleep:*)` and `Bash(sh <skill dir>/beat.sh
      changed:*)` are how the operator waits on its own implementers and
      reviewers: it dispatches them in the background, waits in bounded
@@ -1181,6 +1195,7 @@ still listed (`claude stop <id>`), and stop the heartbeat timer (`sh
     Package worktree: <absolute path>
     Build graph: <build-graph path> @ <sha>
     SDD scripts: <absolute path>
+    HTML scripts: <absolute path>   (only with superpowers-html)
     Project commands: <commands>
 
     ## Checkpoints

@@ -4,5 +4,50 @@
     "Prices are integer cents",
     "Search reads the product index"
   ],
-  "spec_text": "# Billing spec\n\n## Goal\nCharge customers; prices are integer cents.\n\n## Interfaces consumed\n\n| Producer | Consumer | Signature |\n| --- | --- | --- |\n| auth | billing | verify(token) -> User |\n"
+  "spec_sections": [
+    {
+      "id": null,
+      "heading": "Billing spec",
+      "path": [
+        "Billing spec"
+      ],
+      "text": ""
+    },
+    {
+      "id": null,
+      "heading": "Goal",
+      "path": [
+        "Billing spec",
+        "Goal"
+      ],
+      "text": "Charge customers; prices are integer cents."
+    },
+    {
+      "id": null,
+      "heading": "Interfaces consumed",
+      "path": [
+        "Billing spec",
+        "Interfaces consumed"
+      ],
+      "text": "",
+      "tables": [
+        {
+          "id": null,
+          "caption": "",
+          "header": [
+            "Producer",
+            "Consumer",
+            "Signature"
+          ],
+          "rows": [
+            [
+              "auth",
+              "billing",
+              "verify(token) -> User"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
 }

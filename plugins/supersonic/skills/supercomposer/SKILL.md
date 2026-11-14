@@ -53,7 +53,9 @@ checkpoint made in C5.
    `ls` and `grep`, not intelligence — do it yourself or via one mechanical
    agent.
 2. **Coverage table — cover or exclude every row.** The survey plan is a
-   table: inventory item → surveyed-by-agent-X | excluded-with-reason.
+   table (in the design doc, a captioned `table` with id `tbl-coverage` and
+   caption "Coverage table", inside the `sec-subsystems` section, never inside `sec-traceability`):
+   inventory item → surveyed-by-agent-X | excluded-with-reason.
    An item with neither is a plan defect. The scopes come from the
    inventory, never from your prior map of the system.
 3. **Provenance in every survey report.** Each agent's brief requires: a
@@ -93,30 +95,36 @@ the conductor and every composer fork read only the package.
 
 ## Phase C3 — The design doc
 
-Path: `docs/superpowers/design/YYYY-MM-DD-HHMM-<topic>.md`. Required
-sections: **Goal**; **Subsystems** (one-paragraph scope each, with a
-`<slug>` and the interface rows it needs); **Interface table**;
-**Global constraints**; **Out of scope**; and four this skill adds below.
+Path: `docs/superpowers/design/YYYY-MM-DD-HHMM-<topic>.html`, an HTML
+fragment following `spec-format.md` in this skill's directory (read it; do
+not restate it). Required sections keep their names and become `section`s
+with these ids: **Goal** (`sec-goal`); **Subsystems** (`sec-subsystems`;
+one-paragraph scope each, with a `<slug>` and the interface rows it needs);
+**Interface table** (`tbl-interfaces`, a captioned `table` with caption
+"Interface table"); **Global constraints** (`sec-global-constraints`);
+**Out of scope** (`sec-out-of-scope`); and four this skill adds below.
 Every edge names interface rows, never a spec or a position in an order;
 build order is derived from those edges, so the doc has no separate order
 section.
 
-- **Contracts.** The interface table as code: real types, schemas and
-  stubs that throw "not implemented", written as a `contracts` spec. One
-  operator builds it with the normal review loop and it lands before
-  anything else; every other unit builds against it, testing with its own
-  fakes.
-- **Write sets.** The files each subsystem writes. No two units that can
-  run together write the same file. A shared hotspot (`schema.ts`,
-  migrations, route indexes) goes into contracts or to one owner, and the
-  others need that owner's row.
-- **Traceability table.** Every load-bearing claim or mechanism in the
+- **Contracts** (`sec-contracts`). The interface table as code: real types,
+  schemas and stubs that throw "not implemented", written as a `contracts`
+  spec. One operator builds it with the normal review loop and it lands
+  before anything else; every other unit builds against it, testing with its
+  own fakes.
+- **Write sets** (`sec-write-sets`). The files each subsystem writes. No two
+  units that can run together write the same file. A shared hotspot
+  (`schema.ts`, migrations, route indexes) goes into contracts or to one
+  owner, and the others need that owner's row.
+- **Traceability table** (`sec-traceability`, holding the captioned `table`
+  `tbl-traceability` with caption "Traceability table"; the Jev coverage
+  builder finds it by that caption). Every load-bearing claim or mechanism in the
   source model documents → the interface row or spec section that carries
   it, or an explicit **dropped / narrowed / deferred** entry with partner
   sign-off. A model mechanism stated in prose that constrains code must
   appear as a type/signature in the interface table — if it cannot be typed
   yet, it becomes a named open decision, never silence.
-- **Commitment layering.** Interface-table rows are marked *model
+- **Commitment layering** (`sec-commitment-layering`). Interface-table rows are marked *model
   commitment* (from the source design; changes need the partner) or
   *decomposition choice* (orchestrator-owned). Execution-time interface
   changes are adjudicated against this marking.
@@ -131,8 +139,10 @@ derivation.**
 
 ## Phase C4 — Specs + fidelity check
 
-Derive one spec per subsystem (`docs/superpowers/specs/…-<slug>-design.md`),
-each embedding its interface rows and the global constraints verbatim. Then
+Derive one spec per subsystem
+(`docs/superpowers/specs/YYYY-MM-DD-<slug>-design.html`, same format as the
+design doc), each embedding its interface rows as a captioned `table` and the
+global constraints verbatim. Then
 one fresh-eyes agent checks: every design requirement covered by exactly one
 spec; no contradictions; signatures identical everywhere; no placeholders;
 **the fidelity leg — specs and design diffed against the source model
@@ -249,7 +259,9 @@ are in `composer-forks.md`: `## Checkpoint`, `## Adjudication fork`,
   doc, a spec, the contracts or the build graph reads as if it had always
   said this: no "previously", no "changed from", no changelog section, and
   no mention of the approach it replaces, of plan tasks or of code already
-  written. Git holds the history. Commit the amendment.
+  written. Git holds the history. Commit the amendment. An amended package
+  keeps the format it was composed in (`.md` before supersonic 0.4.0,
+  `.html` from 0.4.0 on); do not convert it.
 - **Write the ruling file and end.** The ruling says what the package now
   says, the sections to re-read, and for each affected running unit either
   `clarification` or the first task that no longer holds. `rulings/` is the
