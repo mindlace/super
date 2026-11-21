@@ -28,6 +28,8 @@ const MEDIA_TYPE = {
 }
 
 const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const escapeAttr = s => escapeHtml(s).replace(/"/g, '&quot;')
+const etagOf = bytes => `"${createHash('sha1').update(bytes).digest('hex')}"`
 
 /** The text of the first h1 with tags removed and white space collapsed, else the file name. */
 function titleOf(fragment, file) {
@@ -39,7 +41,7 @@ function titleOf(fragment, file) {
   return escapeHtml(basename(file))
 }
 
-function page(fragment, file) {
+function page(fragment, file, etag) {
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -52,7 +54,7 @@ function page(fragment, file) {
     <script src="/_/page.js" defer></script>
   </head>
   <body class="spec-doc">
-    <main>${fragment}</main>
+    <main data-etag="${escapeAttr(etag)}">${fragment}</main>
   </body>
 </html>
 `
@@ -91,6 +93,7 @@ function send(res, status, headers, body, req) {
   res.writeHead(status, {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store',
+    'Cross-Origin-Resource-Policy': 'same-origin',
     'Content-Security-Policy': CSP,
     ...headers
   })
@@ -134,12 +137,12 @@ async function handle(req, res) {
 
   const bytes = await readFile(real)
   if (!startsWithArticle(bytes.toString('utf8'))) return send(res, 404, {}, null, req)
+  const etag = etagOf(bytes)
   if (query.get('fragment') === '1') {
-    const etag = `"${createHash('sha1').update(bytes).digest('hex')}"`
     if (req.headers['if-none-match'] === etag) return send(res, 304, { ETag: etag }, null, req)
     return send(res, 200, { 'Content-Type': HTML, 'Content-Length': bytes.length, ETag: etag }, bytes, req)
   }
-  const body = Buffer.from(page(bytes.toString('utf8'), real))
+  const body = Buffer.from(page(bytes.toString('utf8'), real, etag))
   return send(res, 200, { 'Content-Type': HTML, 'Content-Length': body.length }, body, req)
 }
 
@@ -161,6 +164,7 @@ function media(req, res, file, size) {
   res.writeHead(status, {
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'no-store',
+    'Cross-Origin-Resource-Policy': 'same-origin',
     'Content-Security-Policy': CSP,
     ...headers
   })
@@ -189,12 +193,18 @@ export function listenPreferred(server, preferred = 4520) {
   })
 }
 
-async function main(argv) {
+/** The port `--port` asks for; anything but a decimal 0-65535 falls back to 4520. */
+export function preferredPort(argv) {
   const i = argv.indexOf('--port')
-  const asked = i >= 0 ? Number(argv[i + 1]) : 4520
-  const preferred = Number.isInteger(asked) && asked >= 0 && asked < 65536 ? asked : 4520
+  const value = i >= 0 ? argv[i + 1] : undefined
+  if (typeof value !== 'string' || !/^\d{1,5}$/.test(value)) return 4520
+  const asked = Number(value)
+  return asked < 65536 ? asked : 4520
+}
+
+async function main(argv) {
   const server = createReaderServer()
-  const port = await listenPreferred(server, preferred)
+  const port = await listenPreferred(server, preferredPort(argv))
   process.stdout.write(`{"port": ${port}}\n`)
   const stop = () => process.exit(0)
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(sig, stop)

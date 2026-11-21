@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, writeFile, symlink, readFile, realpath, rm } from 'node
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createReaderServer, listenPreferred } from '../../plugins/superpowers-reader/reader/server.mjs'
+import { createReaderServer, listenPreferred, preferredPort } from '../../plugins/superpowers-reader/reader/server.mjs'
 
 const SERVER = fileURLToPath(new URL('../../plugins/superpowers-reader/reader/server.mjs', import.meta.url))
 const SPEC_CSS = fileURLToPath(new URL('../../superspec/static/spec.css', import.meta.url))
@@ -82,7 +82,19 @@ test('a spec is wrapped in the page', async () => {
   assert.ok(html.includes('<script src="/_/highlight.min.js" defer></script>'))
   assert.ok(html.includes('<script src="/_/page.js" defer></script>'))
   assert.ok(html.includes('<body class="spec-doc">'))
-  assert.ok(html.includes('<main><article><header><h1>A &amp; <em>B</em></h1>'))
+  assert.match(html, /<main data-etag="&quot;[0-9a-f]{40}&quot;"><article><header><h1>A &amp; <em>B<\/em><\/h1>/)
+})
+
+test("the page's data-etag is the fragment's ETag, and answers 304 as If-None-Match", async () => {
+  const p = doc('superpowers/specs/a-design.html')
+  const html = (await get(p)).body.toString()
+  const attr = /<main data-etag="([^"]*)">/.exec(html)?.[1]
+  assert.ok(attr, 'no data-etag on main')
+  const etag = attr.replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+  const frag = await get(p + '?fragment=1')
+  assert.equal(etag, frag.headers.etag)
+  const same = await get(p + '?fragment=1', { headers: { 'if-none-match': etag } })
+  assert.equal(same.status, 304)
 })
 
 test('any docs folder, comments first, title falls back to the file name', async () => {
@@ -142,7 +154,8 @@ test('outside docs, .., encoded .., a symlink out, a directory: all 404', async 
     `/s${root}/proj/docs/%2e%2e/secret.html`,
     doc('notes/link.html'),
     doc('notes/'),
-    '/s%E0%A4%A'
+    '/s%E0%A4%A',
+    '/s/%E0%A4%A'
   ]) {
     assert.equal((await get(p)).status, 404, p)
   }
@@ -209,7 +222,7 @@ test("static files: spec.css is superspec's, the others are typed", async () => 
   }
 })
 
-test('every answer carries nosniff and no-store', async () => {
+test('every answer carries nosniff, no-store and same-origin CORP', async () => {
   const frag = doc('notes/frag.html') + '?fragment=1'
   const etag = (await get(frag)).headers.etag
   const answers = [
@@ -224,7 +237,11 @@ test('every answer carries nosniff and no-store', async () => {
   for (const a of answers) {
     assert.equal(a.headers['x-content-type-options'], 'nosniff')
     assert.equal(a.headers['cache-control'], 'no-store')
+    assert.equal(a.headers['cross-origin-resource-policy'], 'same-origin')
   }
+  const whole = await get(doc('notes/assets/foo/pic.png'))
+  assert.equal(whole.status, 200)
+  assert.equal(whole.headers['cross-origin-resource-policy'], 'same-origin')
 })
 
 test('the command line prints its port; a taken port falls back', async () => {
@@ -253,6 +270,36 @@ test('the command line prints its port; a taken port falls back', async () => {
     const done = exited(child2)
     child2.kill('SIGTERM')
     await done
+  }
+})
+
+test('--port: a decimal port is used; empty, non-numeric or out-of-range falls back to 4520', () => {
+  assert.equal(preferredPort([]), 4520)
+  assert.equal(preferredPort(['--port']), 4520)
+  assert.equal(preferredPort(['--port', '0']), 0)
+  assert.equal(preferredPort(['--port', '4521']), 4521)
+  assert.equal(preferredPort(['--port', '65535']), 65535)
+  for (const value of ['', ' ', 'abc', '0x10', '1e3', '4521.5', '65536', '70000', '-1']) {
+    assert.equal(preferredPort(['--port', value]), 4520, JSON.stringify(value))
+  }
+})
+
+test('the command line with an empty --port listens on 4520', async t => {
+  const probe = http.createServer()
+  const free = await new Promise(resolve => {
+    probe.once('error', () => resolve(false))
+    probe.listen(4520, '127.0.0.1', () => probe.close(() => resolve(true)))
+  })
+  if (!free) return t.skip('port 4520 is in use here')
+  for (const value of ['', 'abc']) {
+    const child = spawn('node', [SERVER, '--port', value], { stdio: ['ignore', 'pipe', 'inherit'] })
+    try {
+      assert.equal(await firstLine(child.stdout), '{"port": 4520}\n', JSON.stringify(value))
+    } finally {
+      const done = exited(child)
+      child.kill('SIGTERM')
+      await done
+    }
   }
 })
 

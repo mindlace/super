@@ -1,9 +1,10 @@
 (function () {
   var main = document.querySelector('main')
   if (!main) return
-  var etag = null
+  // The server stamps the fragment's ETag on main, so the first poll already
+  // sees any edit made after this page was served.
+  var etag = main.getAttribute('data-etag') || null
   var busy = false
-  var started = false
 
   function highlight() {
     if (typeof hljs === 'undefined') return
@@ -91,9 +92,8 @@
         if (res.status !== 200) return null
         var next = res.headers.get('ETag')
         return res.text().then(function (html) {
-          if (next) etag = next
-          if (started) replace(html)
-          started = true
+          replace(html)
+          etag = next || null
           clearGone()
         })
       })
