@@ -173,7 +173,8 @@ ext       png jpg jpeg gif webp mp4 webm</code></pre>
         <li>The path is decoded and normalised before it is checked. A path that still holds <code>..</code> is a 404.</li>
         <li>The file's real path, after symlinks are resolved, must match the same shape. Otherwise the answer is 404.</li>
         <li>The file must be a regular file.</li>
-        <li>Every answer carries <code>X-Content-Type-Options: nosniff</code> and <code>Cache-Control: no-store</code>.</li>
+        <li>Every answer carries <code>X-Content-Type-Options: nosniff</code>, <code>Cache-Control: no-store</code> and <code>Cross-Origin-Resource-Policy: same-origin</code>, so another website cannot embed a document or probe for files.</li>
+        <li>The page carries its content's <code>ETag</code> on <code>main</code> as <code>data-etag</code>, and the script starts from it, so the first refresh check already knows what the page shows.</li>
         <li>The path is not limited to one projects folder. The shape is the guard.</li>
       </ul>
     </section>
@@ -221,7 +222,7 @@ ext       png jpg jpeg gif webp mp4 webm</code></pre>
         <li>In the desktop app it opens the document's address in the reader's own browser-pane tab.</li>
         <li>In the CLI it writes one line to the transcript, naming the document and giving its address as a link. It does this once per document, not on every edit.</li>
         <li>The reader's tab is one the module opened itself. It opens that tab the first time, reuses it afterwards, and opens a new one if the person closed it. It never navigates a tab it did not open, so a dev-server preview in the pane is left alone.</li>
-        <li>It brings the reader's tab to the front when it shows a different document, and not otherwise.</li>
+        <li>It brings the reader's tab to the front when it shows a different document, and not otherwise. At the same moment it asks the app to show the Browser pane, in case the person had it hidden. A refusal is ignored.</li>
         <li>It starts the server at most once per session, on the first document, and reads the port from the first line the server prints.</li>
         <li>It navigates only when the document differs from the one it last showed. The page refreshes itself, so navigating again would only lose the scroll position.</li>
         <li>It registers a command, <code>/reader [path]</code>, that shows the given document. With no path it shows the document with the latest modification time under any <code>docs/</code> directory in the session's working directory. In the desktop app the command always navigates. In the CLI it answers with the link.</li>
