@@ -1,0 +1,10 @@
+{
+  "name": "superpowers-reader",
+  "version": "0.1.0",
+  "description": "Shows a spec or plan (.html under docs/) beside the chat as soon as it is written, styled by superspec's stylesheet. Needs Node; fails open.",
+  "author": { "name": "mindlace", "url": "https://github.com/mindlace" },
+  "homepage": "https://github.com/mindlace/super",
+  "repository": "https://github.com/mindlace/super",
+  "license": "MIT",
+  "keywords": ["superpowers", "html", "specs", "plans", "reader"]
+}
