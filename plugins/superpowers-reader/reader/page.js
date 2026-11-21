@@ -3,6 +3,7 @@
   if (!main) return
   var etag = null
   var busy = false
+  var started = false
 
   function highlight() {
     if (typeof hljs === 'undefined') return
@@ -83,15 +84,16 @@
     fetch(location.pathname + '?fragment=1', { cache: 'no-store', headers: headers })
       .then(function (res) {
         if (res.status === 404) {
+          etag = null
           showGone()
           return null
         }
         if (res.status !== 200) return null
         var next = res.headers.get('ETag')
         return res.text().then(function (html) {
-          var first = etag === null
           if (next) etag = next
-          if (!first) replace(html)
+          if (started) replace(html)
+          started = true
           clearGone()
         })
       })
