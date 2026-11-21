@@ -6,6 +6,9 @@ const DOC2 = '/repo/docs/notes/a b#1.html'
 const WHOLE = '/repo/docs/notes/api.html'
 const URL1 = 'http://localhost:4520/s/repo/docs/superpowers/specs/2026-11-20-x-design.html'
 const URL2 = 'http://localhost:4520/s/repo/docs/notes/a%20b%231.html'
+const DOC_X = '/repo/docs/notes/x.html'
+const URL_X = 'http://localhost:4520/s/repo/docs/notes/x.html'
+const SHOW_PANE = 'mcp__ccd_view__show_pane'
 // As a session sees them: pretty-printed JSON, then a line of prose.
 const TABS_CONTEXT_TEXT = (tabs: { tabId: string; isActive: boolean }[], browserOpen = true) =>
   `${JSON.stringify(
@@ -25,6 +28,8 @@ type Opts = {
   context?: 'ok' | 'error' | 'throw'
   // Whether navigating with no tab makes its new tab the active one (default true).
   opensActive?: boolean
+  // How mcp__ccd_view__show_pane answers (default 'ok').
+  reveal?: 'ok' | 'deny' | 'throw'
 }
 function standIns(on: On, opts: Opts) {
   const seen = { spawns: 0, toasts: [] as string[], logs: [] as string[], tools: [] as Record<string, unknown>[] }
@@ -57,6 +62,11 @@ function standIns(on: On, opts: Opts) {
   on('ui.log', (_, e) => { seen.logs.push(String(e.text)); return { value: undefined } })
   on('tool.call', (_, e) => {
     seen.tools.push(e)
+    if (e.tool === SHOW_PANE) {
+      if (opts.reveal === 'deny') return { deny: 'No such tool' }
+      if (opts.reveal === 'throw') throw new Error('the view broke')
+      return { result: {} }
+    }
     if (e.tool.startsWith('mcp__Claude_Browser__') && !opts.pane) return { deny: 'No such tool' }
     if (e.tool === 'mcp__Claude_Browser__tabs_context') {
       if (opts.context === 'error') return { result: {}, isError: true as const }
@@ -93,6 +103,7 @@ const reader = ($: any, args: string): Promise<{ text?: string }> =>
   })
 const of = (seen: { tools: Record<string, unknown>[] }, tool: string) =>
   seen.tools.filter(t => t.tool === `mcp__Claude_Browser__${tool}`)
+const reveals = (seen: { tools: Record<string, unknown>[] }) => seen.tools.filter(t => t.tool === SHOW_PANE)
 
 test('desktop: a spec write starts one server and opens it in a new reader tab', async ($, on) => {
   const { seen } = standIns(on, { pane: true, spawn: 'ok' })
@@ -120,6 +131,35 @@ test('desktop: the same document again does not select or navigate', async ($, o
   expect(of(seen, 'navigate').length).toBe(1)
   expect(of(seen, 'tabs_select').length).toBe(0)
 })
+
+test('desktop: each different document reveals the browser pane once', async ($, on) => {
+  const { seen } = standIns(on, { pane: true, spawn: 'ok' })
+  await write($, DOC)
+  expect(reveals(seen).map(t => [t.tool, t.pane])).toEqual([[SHOW_PANE, 'preview']])
+  await write($, DOC2)
+  expect(reveals(seen).length).toBe(2)
+  expect(reveals(seen).every(t => t.pane === 'preview')).toBe(true)
+})
+
+test('desktop: an edit of the shown document does not reveal the pane', async ($, on) => {
+  const { seen } = standIns(on, { pane: true, spawn: 'ok' })
+  await write($, DOC)
+  await edit($, DOC); await edit($, DOC)
+  expect(reveals(seen).length).toBe(1)
+})
+
+for (const reveal of ['deny', 'throw'] as const) {
+  test(`desktop: a reveal that answers ${reveal} changes nothing`, async ($, on) => {
+    const { seen } = standIns(on, { pane: true, spawn: 'ok', reveal })
+    const ran = await write($, DOC)
+    expect(ran).toEqual({ result: {} })
+    // Still counted as shown: no transcript line, and an edit does not navigate again.
+    await edit($, DOC)
+    expect(seen.logs.length).toBe(0)
+    expect(of(seen, 'navigate').length).toBe(1)
+    expect(reveals(seen).length).toBe(1)
+  })
+}
 
 test('desktop: a closed reader tab is replaced by a new one', async ($, on) => {
   const { seen, closeTab } = standIns(on, { pane: true, spawn: 'ok' })
@@ -219,6 +259,7 @@ test('CLI: one transcript line per document, with its link', async ($, on) => {
   expect(seen.logs[0]).toContain(URL1)
   expect(seen.logs[1]).toContain(URL2)
   expect(of(seen, 'navigate').length).toBe(0)
+  expect(reveals(seen).length).toBe(0)
 })
 
 test('outcome: Node not on the path gives one notice naming Node and nothing else', async ($, on) => {
@@ -239,11 +280,12 @@ test('outcome: the server dies without a port: one notice, the next document tri
   expect(of(seen, 'navigate').length).toBe(0)
 })
 
-test('outcome: a server that exits after its port is started again for the next document', async ($, on) => {
+test('outcome: a server that exits after its port: one notice, started again for the next document', async ($, on) => {
   const { seen } = standIns(on, { pane: true, spawn: 'exits' })
   await write($, DOC); await write($, DOC2)
   expect(seen.spawns).toBe(2)
-  expect(seen.toasts.length).toBe(0)
+  expect(seen.toasts.length).toBe(1)
+  expect(seen.toasts[0]).toContain('server')
   expect(of(seen, 'navigate').map(t => [t.tabId, t.url])).toEqual([['r1', URL1], ['r1', URL2]])
 })
 
@@ -305,4 +347,27 @@ test('/reader with a non-document path says so', async ($, on) => {
   standIns(on, { pane: true, spawn: 'ok' })
   const ran = await reader($, '/repo/src/a.html')
   expect(ran.text?.startsWith('Not a spec-format document under docs/')).toBe(true)
+})
+
+test('paths are normalised: ./, /./, // and .. resolve to the plain path', async ($, on) => {
+  on('session.cwd', () => ({ value: '/repo' }))
+  const { seen } = standIns(on, { pane: true, spawn: 'ok' })
+  await write($, '/repo/docs/./notes/x.html')
+  expect(of(seen, 'navigate').map(t => t.url)).toEqual([URL_X])
+  // The same document by other spellings: the URL is unchanged, so nothing navigates.
+  await edit($, '/repo//docs/notes/x.html')
+  await edit($, '/repo/src/../docs/notes/../notes/x.html')
+  expect(of(seen, 'navigate').map(t => t.url)).toEqual([URL_X])
+  const ran = await reader($, './docs/notes/x.html')
+  expect(ran.text).toBe(`Showing ${DOC_X}`)
+  expect(of(seen, 'navigate').map(t => t.url)).toEqual([URL_X, URL_X])
+})
+
+test('a path that climbs out of docs with .. is normalised before the shape check', async ($, on) => {
+  on('session.cwd', () => ({ value: '/repo' }))
+  const { seen } = standIns(on, { pane: true, spawn: 'ok' })
+  await write($, '/repo/docs/notes/../../src/a.html')
+  expect(seen.spawns).toBe(0)
+  const ran = await reader($, 'docs/../src/a.html')
+  expect(ran.text).toBe('Not a spec-format document under docs/: /repo/src/a.html')
 })

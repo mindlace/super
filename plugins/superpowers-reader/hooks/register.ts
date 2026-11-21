@@ -12,7 +12,7 @@ const startsWithArticle: (text: string) => boolean = isArticle
 
 const NODE_NOTICE = 'superpowers-reader needs Node on the PATH to show documents.'
 const SERVER_NOTICE = 'superpowers-reader could not start its server. The next document will try again.'
-const START_TIMEOUT_MS = 10_000
+const START_TIMEOUT_MS = 8_000 // under the 10 s hook budget, so this timeout decides
 const MAX_DEPTH = 8
 const BROWSER = 'mcp__Claude_Browser__'
 
@@ -33,8 +33,20 @@ function docUrl(port: number, path: string): string {
   return `http://localhost:${port}/s${path.split('/').map(encodeURIComponent).join('/')}`
 }
 
+// POSIX-normalises an absolute path: drops empty and `.` segments, resolves `..`.
+function normalise(path: string): string {
+  const parts: string[] = []
+  for (const part of path.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part === '..') parts.pop()
+    else parts.push(part)
+  }
+
+  return `/${parts.join('/')}`
+}
+
 async function absolute($: EngineInterface, path: string): Promise<string> {
-  return path.startsWith('/') ? path : `${(await $.session.cwd()).replace(/\/$/, '')}/${path}`
+  return normalise(path.startsWith('/') ? path : `${await $.session.cwd()}/${path}`)
 }
 
 async function isDocument($: EngineInterface, path: string): Promise<boolean> {
@@ -121,11 +133,13 @@ function startServer($: EngineInterface): Promise<number | undefined> {
         }
       }
       if (hasPort) {
-        // The child exited after printing its port: the next document starts another.
+        // The child exited after printing its port: one notice per session, and
+        // the next document starts another.
         if (server === started) {
           server = undefined
           shownUrl = ''
         }
+        warnServer($)
 
         return
       }
@@ -261,8 +275,24 @@ async function showInPaneNow($: EngineInterface, url: string, isForced: boolean)
   return 'shown'
 }
 
+// Reveals the desktop app's Browser pane. Any failure, deny or missing tool is ignored.
+async function revealPane($: EngineInterface): Promise<void> {
+  try {
+    await $.tool.call({ tool: 'mcp__ccd_view__show_pane', pane: 'preview' } as never)
+  } catch {
+    // ignored: the document is shown either way
+  }
+}
+
+async function showAndReveal($: EngineInterface, url: string, isForced: boolean): Promise<'shown' | 'same' | 'no-pane'> {
+  const shown = await showInPaneNow($, url, isForced)
+  if (shown === 'shown') await revealPane($)
+
+  return shown
+}
+
 function showInPane($: EngineInterface, url: string, isForced: boolean): Promise<'shown' | 'same' | 'no-pane'> {
-  const turn = paneTurn.then(() => showInPaneNow($, url, isForced))
+  const turn = paneTurn.then(() => showAndReveal($, url, isForced))
   paneTurn = turn.catch(() => {})
 
   return turn
