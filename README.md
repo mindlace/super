@@ -1,14 +1,15 @@
 # super
 
-A Claude Code plugin marketplace with three plugins.
+A Claude Code plugin marketplace with four plugins.
 
 | Plugin | What it does |
 |---|---|
 | `supersonic` | `supersonic:superconductor` conducts a multi-spec build through named `claude --bg` operator sessions admitted by dependency, and sends design questions to one-shot forks of a frozen composer checkpoint. `supersonic:supercomposer` composes the design package it executes. |
 | `superpowers-jev` | Optional [TypeSafe](https://typesafe.ai) Jev typed judgments at 11 decision points in superpowers and supersonic. Shadow mode by default. Fails open. |
 | `superpowers-html` | Overlays superpowers 7.x so specs and plans are written as `.html` in the supersonic spec format. Fails open. |
+| `superpowers-reader` | Shows the spec or plan Claude just wrote in the desktop app's browser pane, or as a transcript link in the CLI. Needs Node 20 or newer; no install step. Fails open. |
 
-`superspec/` is a local SvelteKit app for reading superpowers specs and plans across `~/Projects`. It is not a plugin yet. See `superspec/README.md`.
+`superspec/` is a local SvelteKit app for reading superpowers specs and plans across `~/Projects`. It is not a plugin yet, and the `superpowers-reader` plugin carries its stylesheet. See `superspec/README.md`.
 
 ## Install
 
@@ -17,6 +18,7 @@ A Claude Code plugin marketplace with three plugins.
 /plugin install supersonic@super
 /plugin install superpowers-jev@super
 /plugin install superpowers-html@super
+/plugin install superpowers-reader@super
 ```
 
 For local development, add the checkout as a directory marketplace instead:
@@ -25,6 +27,8 @@ For local development, add the checkout as a directory marketplace instead:
 `superpowers-jev` overlays the official `superpowers` plugin and does not replace it. Keep superpowers installed.
 
 `superpowers-html` overlays superpowers 7.x the same way and makes the specs and plans it writes `.html` instead of markdown. Keep superpowers installed; a `.md` plan still runs as before.
+
+`superpowers-reader` shows the document Claude just wrote. In the desktop app it opens the document in its own tab in the browser pane. In the CLI it prints one transcript line with a link for each document. It needs neither superspec running nor `superpowers-html` installed. It uses superspec's stylesheet, so a document looks the same in both, but superspec remains the place for the document list, search, tabs, pairing and structure reports. `/reader [path]` shows a document on demand. The reader serves only spec-format `.html` files under a `docs/` directory, on `localhost`, from port 4520 or the next free port.
 
 ## Requirements
 
@@ -49,6 +53,11 @@ For local development, add the checkout as a directory marketplace instead:
   - `"Bash(python3 -c:*)"`: the checkpoint id; it admits any Python.
 
   Four of these are as wide as a general shell allow; the narrow ones do not narrow the set. `<dir>` contains the plugin's version, so after a plugin update allow the new path too: operators launched before the update keep the old one in their launch line and assignment.
+
+`superpowers-reader` needs:
+
+- Node 20 or newer on the PATH. There is nothing to install.
+- A Claude Code that loads hooks modules (early access). Without Node or without that, the plugin does nothing.
 
 ## Jev modes
 
@@ -98,7 +107,7 @@ The `jev` command is on the Bash tool's PATH only while Claude Code runs. To run
 
 ## Tests
 
-`sh tests/run.sh` runs the sh tests and the Python suite (stdlib `unittest`, with a local stub server). The live smoke test runs only with `JEV_LIVE=1`.
+`sh tests/run.sh` runs the sh tests and the Python suite (stdlib `unittest`, with a local stub server). It also runs the reader's Node tests and, when `claude` is on the path, its hooks-module tests. The live smoke test runs only with `JEV_LIVE=1`.
 
 ## License
 
