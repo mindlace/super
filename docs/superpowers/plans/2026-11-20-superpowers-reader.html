@@ -1,0 +1,863 @@
+<article>
+  <header>
+    <h1>superpowers-reader implementation plan</h1>
+    <p>Builds the plugin that shows a just-written spec or plan in the browser pane, served by a zero-dependency Node server and painted by superspec's stylesheet.</p>
+    <aside data-kind="note"><strong>For agentic workers</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps are checklist items; progress is kept in the workspace ledger, not in the plan.</aside>
+  </header>
+
+  <section id="sec-overview">
+    <h2>Overview</h2>
+    <dl>
+      <dt>Goal</dt>
+      <dd>A new marketplace plugin, <code>superpowers-reader</code>, that opens a spec-format <code>.html</code> document under any <code>docs/</code> directory in the desktop app's browser pane as soon as it is written, and prints a link to it in the CLI.</dd>
+      <dt>Architecture</dt>
+      <dd>A hooks module (<code>hooks/register.ts</code>) hears <code>Write</code> and <code>Edit</code>, starts <code>reader/server.mjs</code> once per session as a child process, and points its own browser-pane tab at <code>http://localhost:&lt;port&gt;/s/&lt;absolute path&gt;</code>. The server wraps the fragment in a small page under a strict Content-Security-Policy; <code>reader/page.js</code> highlights code, disables checkboxes and polls for changes. One pure module, <code>reader/shape.mjs</code>, holds the path and <code>article</code> rules both sides share.</dd>
+      <dt>Tech Stack</dt>
+      <dd>Node 20 or newer with only <code>node:</code> modules and <code>node --test</code>; the Claude Code hooks-module API (early access) tested with <code>claude plugin test</code>; highlight.js 11.11.1, vendored as published.</dd>
+      <dt>Spec</dt>
+      <dd><code>docs/superpowers/specs/2026-11-20-superpowers-reader-design.html</code></dd>
+    </dl>
+  </section>
+
+  <section id="sec-global-constraints">
+    <h2>Global Constraints</h2>
+    <ul>
+      <li>Zero npm dependencies and no build step in the plugin. <code>reader/server.mjs</code> imports only <code>node:</code> modules. No <code>package.json</code>, no <code>node_modules</code>, nothing to install.</li>
+      <li>Never edit anything under <code>superspec/</code>, and never touch its uncommitted files in this worktree. The plugin only symlinks <code>superspec/static/spec.css</code>.</li>
+      <li>Fail open. A missing Node, a dead server, a missing pane or any thrown error never changes a <code>Write</code> or <code>Edit</code> call or its result, and the session carries on.</li>
+      <li>The server listens on <code>127.0.0.1</code>, prefers port 4520, falls back to an OS-chosen port, and names the host <code>localhost</code> in links.</li>
+      <li>Served documents and media: only paths with a segment named exactly <code>docs</code>; media extensions are exactly <code>png jpg jpeg gif webp mp4 webm</code>.</li>
+      <li>Every server answer carries <code>X-Content-Type-Options: nosniff</code> and <code>Cache-Control: no-store</code>.</li>
+      <li>The page CSP is exactly: <code>default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'</code>.</li>
+      <li>No Claude or AI attribution anywhere: no <code>Co-Authored-By</code> trailers, no "generated with" lines, in commits, code, comments or docs.</li>
+      <li>Commits use Conventional Commits. A multi-line message goes through <code>git commit -F &lt;file&gt;</code> or several <code>-m</code> flags, never a heredoc.</li>
+      <li>Never compound <code>cd ... &amp;&amp; cmd</code>; run commands from the worktree root with paths.</li>
+      <li>Windows paths are out of scope. Paths are POSIX.</li>
+    </ul>
+  </section>
+
+  <section id="sec-review-focus">
+    <h2>Review Focus</h2>
+    <ul>
+      <li>File names with spaces, <code>#</code>, <code>?</code>, <code>%</code> or non-ASCII letters: the module encodes each path segment and the server decodes it, so the page and its media load. Tests: <a href="#t2-s1">t2-s1</a>, <a href="#t3-s1">t3-s1</a>, <a href="#t6-s1">t6-s1</a>.</li>
+      <li>Two writes of the first document in quick succession (a subagent and the main loop, or Write then Edit): one server starts, not two. Test: <a href="#t6-s1">t6-s1</a> (concurrent writes).</li>
+      <li>A second session already holds port 4520: the module uses whatever port the server prints, never 4520 by assumption. Tests: <a href="#t3-s1">t3-s1</a> (CLI), <a href="#t6-s1">t6-s1</a> (port 4521).</li>
+      <li>A document that is momentarily empty or not yet an <code>article</code> (a rewrite in progress): the fragment answers 404, the page shows its gone line and keeps the last content, and the next good poll removes the line. Tests: <a href="#t3-s1">t3-s1</a> (empty file), <a href="#t5-s5">t5-s5</a> (live check).</li>
+      <li><code>/reader</code> with no path in a large repository: the walk skips dot directories and <code>node_modules</code>, so a newer file there is never picked and the command answers promptly. Test: <a href="#t6-s1">t6-s1</a> (newest skips node_modules).</li>
+    </ul>
+  </section>
+
+  <section id="sec-file-structure">
+    <h2>File Structure</h2>
+    <table id="tbl-file-structure">
+      <caption>Files this plan creates or changes</caption>
+      <thead>
+        <tr><th scope="col">Path</th><th scope="col">Responsibility</th><th scope="col">Task</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/shape.mjs</code></th><td>Pure path-shape and <code>article</code> checks, shared by server and module.</td><td>2</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/server.mjs</code></th><td>The static server and its command line.</td><td>3</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/spec.css</code></th><td>Symlink to <code>superspec/static/spec.css</code>.</td><td>3</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/vendor/highlight.min.js</code></th><td>highlight.js 11.11.1 common build, byte for byte.</td><td>4</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/vendor/LICENSE</code></th><td>highlight.js BSD-3-Clause licence.</td><td>4</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/vendor/VERSION</code></th><td>Pinned version, source and SHA-256.</td><td>4</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/page.js</code></th><td>Highlight, disable checkboxes, external links, poll.</td><td>5</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/reader/page.css</code></th><td>Page chrome, the gone line, code colours light and dark.</td><td>5</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/.claude-plugin/plugin.json</code></th><td>Manifest.</td><td>6</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/hooks/hooks.json</code></th><td>Names the hooks module.</td><td>6</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/hooks/register.ts</code></th><td>The hooks module.</td><td>6</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/tsconfig.json</code></th><td>Editor types; extends the app-written, self-ignoring <code>.claude-plugin/types/</code>.</td><td>6</td></tr>
+        <tr><th scope="row"><code>plugins/superpowers-reader/tests/reader.test.ts</code></th><td>Hooks-module tests for <code>claude plugin test</code>.</td><td>6</td></tr>
+        <tr><th scope="row"><code>tests/reader/shape.test.mjs</code>, <code>server.test.mjs</code>, <code>vendor.test.mjs</code></th><td>Node tests, run with <code>node --test</code>.</td><td>2, 3, 4</td></tr>
+        <tr><th scope="row"><code>tests/test_format_links.sh</code></th><td>Gains the <code>spec.css</code> symlink pair.</td><td>3</td></tr>
+        <tr><th scope="row"><code>.claude-plugin/marketplace.json</code>, <code>README.md</code>, <code>tests/test_manifests.sh</code>, <code>tests/run.sh</code></th><td>Repo wiring.</td><td>7</td></tr>
+      </tbody>
+    </table>
+    <aside data-kind="decision"><strong>Decision (builder's call)</strong> The Node tests live at the repository root in <code>tests/reader/</code>, so the installed plugin carries no test files beyond the hooks-module tests that <code>claude plugin test</code> needs inside the plugin folder.</aside>
+    <aside data-kind="decision"><strong>Decision (builder's call)</strong> <code>reader/shape.mjs</code> is one file the spec's table does not list. The path rules are the security guard, and the server and the module must agree on them exactly; one pure module with no imports is loadable by both runtimes.</aside>
+    <aside data-kind="decision"><strong>Decision (builder's call)</strong> <code>reader/vendor/VERSION</code> records the pinned version beside the file, as the spec's "Left to the builder" asks.</aside>
+  </section>
+
+  <section id="sec-task-1">
+    <h2>Task 1: Prove first (controller-run)</h2>
+    <aside data-kind="warning"><strong>Warning</strong> This task is run by the controller, the person's main session in the desktop app, not by an implementer subagent: it needs a live desktop session to observe. No code from it is committed.</aside>
+    <aside data-kind="decision" id="t1-result"><strong>Result (2026-11-20)</strong> The controller ran the probes before execution. P1 holds: in a desktop session the spike spawned <code>node</code> (v24.2.0) and read its first line, and the child was gone after the loop was left. P2 holds: the <code>Write</code> hook fired for this plan, written by a subagent, with <code>agentId</code> set. P3 is recorded below. P4 was not run; the API's statement is taken as true and the server never reads standard input. P5 was not run; the parent watch in Task 3 stays. Steps t1-s1 to t1-s7 need no re-run, and the probe hooks are already removed from the spike.</aside>
+    <p>P3, as a session sees the two tools answer. Each is pretty-printed JSON followed by a line of prose, so take the first JSON object from the text and ignore the rest. A hooks module's <code>$.tool.call</code> may wrap this text in a result object; the implementer of Task 6 reads the declared result type and parses defensively. <code>tabs_create</code> with the pane closed was not tried, so keep the pane-closed path of <a href="#t6-s3">t6-s3</a>.</p>
+    <pre><code data-lang="text">tabs_context:
+{
+  "browserOpen": true,
+  "tabs": [
+    {
+      "tabId": "seed",
+      "origin": "http://127.0.0.1:4510",
+      "isActive": true
+    }
+  ]
+}
+The Browser pane is currently hidden.
+
+tabs_create:
+{
+  "serverId": "beb1c1b5-1338-4e3d-8bbe-09b5c5c557d0",
+  "tabId": "tab-1",
+  "reused": false,
+  "type": "browser"
+}
+Opened tab tab-1 in the background — the user's current tab stays in front. Use `navigate` with tabId "tab-1" to load a URL; front it with `tabs_select` when the user should look.</code></pre>
+    <p>What the task checked: the spec's premises, plus three facts the later tasks' tests depend on.</p>
+    <ul>
+      <li>P1: a hooks module can start a child process in a desktop-app session (the API marks <code>process</code> "CLI only", <code>index.d.ts:4190</code>).</li>
+      <li>P2: the <code>Write</code> hook fires for a document a subagent writes (<code>index.d.ts:16824</code> says a subagent's tools raise their own <code>tool.call</code>).</li>
+      <li>P3: the exact result text of <code>mcp__Claude_Browser__tabs_context</code> and <code>mcp__Claude_Browser__tabs_create</code>, which Task 6 parses.</li>
+      <li>P4: whether a spawned child's standard input is closed from the start (<code>ProcessSpawnRequest.input</code>, <code>index.d.ts:10347</code>: "absent, standard input is closed from the start").</li>
+      <li>P5: whether the child's parent process id changes when the session ends (the server's lifetime guard in Task 3).</li>
+    </ul>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Modify (temporarily, outside the repo): <code>/Users/mindlace/.claude/dev-mods/42007924-5295-45cb-9f9e-e7f18769383b/superspec-pane/hooks/register.ts</code></li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: nothing.</li>
+      <li>Produces: the recorded P1 to P5 outcomes, written into this plan as a note under this task, and the P3 texts copied into <code>TABS_CONTEXT_TEXT</code> and <code>TABS_CREATE_TEXT</code> in <a href="#t6-s1">t6-s1</a>.</li>
+    </ul>
+    <ol>
+      <li id="t1-s1"><input type="checkbox"> Add the probe hooks to the spike's <code>register</code>, beside its existing hooks
+        <pre><code data-lang="ts">on('session.start', async ($, e, next) =&gt; {
+  const started = await next(e)
+  void (async () =&gt; {
+    const script =
+      "process.stdout.write(JSON.stringify({ppid: process.ppid, pid: process.pid}) + '\\n');" +
+      "process.stdin.on('end', () =&gt; process.stdout.write('stdin-end\\n'));" +
+      "process.stdin.resume(); setInterval(() =&gt; {}, 1e9)"
+    try {
+      for await (const { stream, text } of $.process.spawn({ argv: ['node', '-e', script] })) {
+        $.ui.toast(`probe spawn ${stream}: ${text.trim()}`, { timeoutMs: 15000 })
+        $.ui.log(`probe spawn ${stream}: ${text.trim()}`, { to: 'debug' })
+      }
+    } catch (err) {
+      $.ui.toast(`probe spawn refused: ${String(err)}`, { timeoutMs: 15000 })
+    }
+  })()
+  return started
+})
+on('tool.call', { tool: 'Write' }, async ($, e, next) =&gt; {
+  const ran = await next(e)
+  $.ui.log(`probe write agentId=${e.agentId ?? 'main'} path=${e.file_path}`, { to: 'debug' })
+  $.ui.toast(`probe write by ${e.agentId ?? 'main'}`)
+  return ran
+})
+on('command.run', { command: 'probe-tabs' }, async $ =&gt; {
+  const ctx = await $.tool.call({ tool: 'mcp__Claude_Browser__tabs_context' })
+  const made = await $.tool.call({ tool: 'mcp__Claude_Browser__tabs_create', foreground: true })
+  return { text: `context: ${JSON.stringify(ctx)}\ncreate: ${JSON.stringify(made)}` }
+})</code></pre>
+        <p>Register <code>probe-tabs</code> with <code>$.command.register</code> in the same <code>session.start</code> hook.</p>
+      </li>
+      <li id="t1-s2"><input type="checkbox"> Run <code>claude plugin validate</code> on the spike folder and see it pass
+        <pre><code data-lang="sh">claude plugin validate /Users/mindlace/.claude/dev-mods/42007924-5295-45cb-9f9e-e7f18769383b/superspec-pane</code></pre>
+      </li>
+      <li id="t1-s3"><input type="checkbox"> Start a new desktop-app session with the spike loaded and observe P1 and P4
+        <p>Expected for P1 holding: a toast <code>probe spawn stdout: {"ppid":…,"pid":…}</code>. A <code>probe spawn refused</code> toast, or none, means P1 fails. A <code>stdin-end</code> toast confirms P4.</p>
+      </li>
+      <li id="t1-s4"><input type="checkbox"> With the pane closed, run <code>/probe-tabs</code>; open the pane on any page and run it again
+        <p>Copy both answers verbatim (P3). Note whether <code>tabs_create</code> works while the pane is closed.</p>
+      </li>
+      <li id="t1-s5"><input type="checkbox"> Ask the session to dispatch a subagent that writes <code>docs/notes/probe.html</code> containing <code>&lt;article&gt;&lt;h1&gt;probe&lt;/h1&gt;&lt;/article&gt;</code>
+        <p>P2 holds when a <code>probe write by &lt;agent id&gt;</code> toast appears. Delete the file afterwards.</p>
+      </li>
+      <li id="t1-s6"><input type="checkbox"> End the session, then check whether the probe child survived and what its parent became (P5)
+        <pre><code data-lang="sh">ps -o pid,ppid,command -p &lt;pid from the toast&gt;</code></pre>
+        <p>No row: the engine killed it. A row with ppid 1: it was orphaned, so the server's parent watch (Task 3) is what ends it; kill it by hand.</p>
+      </li>
+      <li id="t1-s7"><input type="checkbox"> Remove the probe hooks from the spike, and record the outcomes as a note under this task
+        <table id="tbl-t1-outcomes">
+          <caption>What each probe outcome means for later tasks</caption>
+          <thead>
+            <tr><th scope="col">Outcome</th><th scope="col">Consequence</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">P1 holds</th><td>Continue with Tasks 2 to 8.</td></tr>
+            <tr><th scope="row">P1 fails</th><td>Stop. Bring it back to the owner: the fallback is a different design.</td></tr>
+            <tr><th scope="row">P2 holds</th><td>Continue; README says nothing about subagents.</td></tr>
+            <tr><th scope="row">P2 fails</th><td>Continue; <a href="#t7-s3">t7-s3</a> adds the README line that a subagent's document is opened with <code>/reader</code>.</td></tr>
+            <tr><th scope="row">P3 texts</th><td>Paste them into <code>TABS_CONTEXT_TEXT</code>, <code>TABS_CREATE_TEXT</code> in <a href="#t6-s1">t6-s1</a>; if <code>tabs_create</code> fails with the pane closed, keep the pane-closed path of <a href="#t6-s3">t6-s3</a>.</td></tr>
+            <tr><th scope="row">P4 stdin closed at once</th><td>Expected. The server must not exit on standard-input close (see <a href="#sec-open-questions">Open questions</a>).</td></tr>
+            <tr><th scope="row">P5 child orphaned</th><td>The parent watch in Task 3 is required, not just a backstop.</td></tr>
+          </tbody>
+        </table>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-2">
+    <h2>Task 2: Path shape rules</h2>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Create: <code>plugins/superpowers-reader/reader/shape.mjs</code></li>
+      <li>Test: <code>tests/reader/shape.test.mjs</code></li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: nothing.</li>
+      <li>Produces, for Tasks 3 and 6:
+        <pre><code data-lang="js">export const MEDIA_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm']
+/** 'doc' for name.html, 'media' for name.&lt;MEDIA_EXT&gt;, under a segment named exactly docs; else undefined. */
+export function docKind(path /* string */) /* : 'doc' | 'media' | undefined */
+/** True when the first element, after white space, a BOM and HTML comments, is &lt;article&gt;. */
+export function startsWithArticle(text /* string */) /* : boolean */</code></pre>
+      </li>
+    </ul>
+    <ul>
+      <li><code>docKind</code> takes an already decoded, absolute path. It is pure: no imports, no file system.</li>
+      <li>It answers <code>undefined</code> for a relative path, a NUL byte, an empty segment, a <code>.</code> or <code>..</code> segment, a <code>docs</code> segment that is the last one, or a file name with nothing before its extension.</li>
+      <li>Extensions compare case-insensitively (builder's call: <code>A.HTML</code> written on a case-insensitive disk is the same file).</li>
+    </ul>
+    <ol>
+      <li id="t2-s1"><input type="checkbox"> Write the failing tests
+        <pre><code data-lang="js">import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { docKind, startsWithArticle, MEDIA_EXT } from '../../plugins/superpowers-reader/reader/shape.mjs'
+
+test('a document anywhere under a docs segment', () =&gt; {
+  for (const p of ['/p/docs/superpowers/specs/a-design.html', '/p/docs/notes/foo.html',
+    '/docs/x.html', '/p/docs/a b#1 é.html', '/p/docs/A.HTML']) assert.equal(docKind(p), 'doc', p)
+})
+test('media by extension, nothing else', () =&gt; {
+  assert.deepEqual(MEDIA_EXT, ['png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm'])
+  for (const e of MEDIA_EXT) assert.equal(docKind(`/p/docs/s/assets/x/pic.${e}`), 'media', e)
+  for (const e of ['svg', 'js', 'css', 'md', 'mjs', '']) assert.equal(docKind(`/p/docs/pic.${e}`), undefined, e)
+})
+test('no docs segment', () =&gt; {
+  for (const p of ['/p/src/a.html', '/p/mydocs/a.html', '/p/docs-old/a.html', '/p/docs.html', '/p/docs'])
+    assert.equal(docKind(p), undefined, p)
+})
+test('relative, dot, empty and NUL segments are refused', () =&gt; {
+  for (const p of ['docs/a.html', '/p/docs/../a.html', '/p/docs/./a.html', '/p//docs/a.html',
+    '/p/docs/.html', '/p/docs/a.html\0', '/p/docs/'])
+    assert.equal(docKind(p), undefined, JSON.stringify(p))
+})
+test('article first, after white space, a BOM and comments', () =&gt; {
+  for (const t of ['&lt;article&gt;', '  \n&lt;article id="x"&gt;', '&lt;!-- c --&gt;\n  &lt;!--d--&gt;&lt;article&gt;', '﻿&lt;article&gt;', '&lt;ARTICLE&gt;'])
+    assert.equal(startsWithArticle(t), true, t)
+  for (const t of ['&lt;!doctype html&gt;&lt;article&gt;', '&lt;html&gt;', '&lt;articles&gt;', '', 'text &lt;article&gt;', '&lt;!-- open &lt;article&gt;'])
+    assert.equal(startsWithArticle(t), false, t)
+})</code></pre>
+      </li>
+      <li id="t2-s2"><input type="checkbox"> Run it and see it fail
+        <pre><code data-lang="sh">node --test tests/reader/shape.test.mjs</code></pre>
+        <p>Expected: FAIL, cannot find module <code>shape.mjs</code>.</p>
+      </li>
+      <li id="t2-s3"><input type="checkbox"> Implement <code>MEDIA_EXT</code>, <code>docKind(path)</code> and <code>startsWithArticle(text)</code> in <code>plugins/superpowers-reader/reader/shape.mjs</code>, with no imports</li>
+      <li id="t2-s4"><input type="checkbox"> Run the tests and see them pass
+        <pre><code data-lang="sh">node --test tests/reader/shape.test.mjs</code></pre>
+        <p>Expected: 5 tests pass.</p>
+      </li>
+      <li id="t2-s5"><input type="checkbox"> Commit
+        <pre><code data-lang="sh">git add plugins/superpowers-reader/reader/shape.mjs tests/reader/shape.test.mjs
+git commit -m "feat(reader): path shape and article rules"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-3">
+    <h2>Task 3: The reader server</h2>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Create: <code>plugins/superpowers-reader/reader/server.mjs</code></li>
+      <li>Create: <code>plugins/superpowers-reader/reader/spec.css</code> (symlink to <code>../../../superspec/static/spec.css</code>)</li>
+      <li>Create: <code>plugins/superpowers-reader/reader/page.js</code> and <code>page.css</code> as empty placeholders (Task 5 fills them), and <code>reader/vendor/highlight.min.js</code> is served once Task 4 adds it</li>
+      <li>Modify: <code>tests/test_format_links.sh:10-12</code> (default pairs)</li>
+      <li>Test: <code>tests/reader/server.test.mjs</code></li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: <code>docKind</code>, <code>startsWithArticle</code> from Task 2.</li>
+      <li>Produces, for Tasks 5, 6 and 8:
+        <pre><code data-lang="sh">node plugins/superpowers-reader/reader/server.mjs [--port N]   # N defaults to 4520
+# first stdout line, then serves until killed:
+{"port": 4520}</code></pre>
+        <pre><code data-lang="js">export function createReaderServer() /* : import('node:http').Server */
+/** Listens on 127.0.0.1:preferred; on EADDRINUSE listens on port 0. Resolves the bound port. */
+export function listenPreferred(server, preferred = 4520) /* : Promise&lt;number&gt; */</code></pre>
+      </li>
+    </ul>
+    <table id="tbl-t3-routes">
+      <caption>Routes, as the server answers them</caption>
+      <thead>
+        <tr><th scope="col">Request</th><th scope="col">Answer</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row"><code>/s&lt;abs path&gt;</code> with <code>docKind</code> doc</th><td>200 page, <code>text/html; charset=utf-8</code>.</td></tr>
+        <tr><th scope="row">same with <code>?fragment=1</code></th><td>200 file bytes with a strong <code>ETag</code>, or 304 on a matching <code>If-None-Match</code>.</td></tr>
+        <tr><th scope="row"><code>/s&lt;abs path&gt;</code> with <code>docKind</code> media</th><td>200 or 206 with <code>Accept-Ranges: bytes</code>; 416 for an unsatisfiable range.</td></tr>
+        <tr><th scope="row"><code>/_/spec.css</code>, <code>/_/page.css</code></th><td><code>text/css; charset=utf-8</code>.</td></tr>
+        <tr><th scope="row"><code>/_/page.js</code>, <code>/_/highlight.min.js</code></th><td><code>text/javascript; charset=utf-8</code>.</td></tr>
+        <tr><th scope="row">Wrong <code>Host</code> name</th><td>403.</td></tr>
+        <tr><th scope="row">Method other than GET and HEAD</th><td>405 with <code>Allow: GET, HEAD</code>.</td></tr>
+        <tr><th scope="row">Anything else</th><td>404.</td></tr>
+      </tbody>
+    </table>
+    <ul>
+      <li>Order of checks: method (405), then <code>Host</code> (403), then route.</li>
+      <li>The <code>Host</code> name is the header's value without its port; only <code>127.0.0.1</code> and <code>localhost</code> pass.</li>
+      <li>A document or media path is decoded with <code>decodeURIComponent</code> (a malformed escape is 404), normalised with <code>path.posix.normalize</code>, then checked with <code>docKind</code>; then <code>fs.realpath</code> is checked with <code>docKind</code> to the same kind; then <code>stat.isFile()</code>; then, for a document, <code>startsWithArticle</code> of its text. Any failure is 404.</li>
+      <li>Media is served for any path <code>docKind</code> calls media, not only under <code>assets/</code> (the spec's "Which files are served" section is the rule; its route table's <code>assets</code> row is the usual case).</li>
+      <li>The ETag is the quoted hex SHA-1 of the bytes (builder's call: exact under same-second rewrites, where size and mtime are not).</li>
+      <li>The page is the spec's template exactly, with the fragment unchanged inside <code>&lt;main&gt;</code>. The title is the text of the first <code>h1</code> with tags removed and white space collapsed, else the file name with <code>&amp;</code>, <code>&lt;</code>, <code>&gt;</code> escaped.</li>
+      <li>Every answer, errors included, carries <code>nosniff</code>, <code>no-store</code> and the CSP (builder's call: the CSP on every answer costs nothing and covers a fragment opened directly).</li>
+      <li>HEAD answers the same status and headers as GET with no body.</li>
+      <li>Static files resolve against the directory of <code>server.mjs</code> (<code>new URL('.', import.meta.url)</code>); <code>/_/highlight.min.js</code> is <code>vendor/highlight.min.js</code>.</li>
+      <li>Lifetime: it exits on <code>SIGTERM</code>, <code>SIGINT</code> and <code>SIGHUP</code>, and when <code>process.ppid</code> differs from its value at start, checked every second on an unref'd timer. It does not read standard input (see <a href="#sec-open-questions">Open questions</a>).</li>
+      <li>It runs its command line only when it is the entry script, so the tests can import it.</li>
+    </ul>
+    <ol>
+      <li id="t3-s1"><input type="checkbox"> Write the failing tests
+        <p>The fixture and the request helper, written in full:</p>
+        <pre><code data-lang="js">import { test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
+import http from 'node:http'
+import { spawn } from 'node:child_process'
+import { mkdtemp, mkdir, writeFile, symlink, readFile, realpath, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createReaderServer, listenPreferred } from '../../plugins/superpowers-reader/reader/server.mjs'
+
+const SERVER = fileURLToPath(new URL('../../plugins/superpowers-reader/reader/server.mjs', import.meta.url))
+const SPEC_CSS = fileURLToPath(new URL('../../superspec/static/spec.css', import.meta.url))
+const CSP = "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; " +
+  "media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'"
+let root, port, server
+const enc = p =&gt; p.split('/').map(encodeURIComponent).join('/')
+
+before(async () =&gt; {
+  root = await realpath(await mkdtemp(join(tmpdir(), 'reader-')))
+  const d = `${root}/proj/docs`
+  await mkdir(`${d}/superpowers/specs`, { recursive: true })
+  await mkdir(`${d}/notes/assets/foo`, { recursive: true })
+  await writeFile(`${d}/superpowers/specs/a-design.html`, '&lt;article&gt;&lt;header&gt;&lt;h1&gt;A &amp;amp; &lt;em&gt;B&lt;/em&gt;&lt;/h1&gt;&lt;/header&gt;&lt;p&gt;x&lt;/p&gt;&lt;/article&gt;')
+  await writeFile(`${d}/notes/foo.html`, '&lt;!-- c --&gt;\n&lt;article&gt;&lt;p&gt;no heading&lt;/p&gt;&lt;/article&gt;')
+  await writeFile(`${d}/notes/a b#1.html`, '&lt;article&gt;&lt;h1&gt;spaced&lt;/h1&gt;&lt;/article&gt;')
+  await writeFile(`${d}/notes/page.html`, '&lt;!doctype html&gt;&lt;html&gt;&lt;body&gt;&lt;article&gt;&lt;/article&gt;&lt;/body&gt;&lt;/html&gt;')
+  await writeFile(`${d}/notes/empty.html`, '')
+  await writeFile(`${d}/notes/script.html`, '&lt;article&gt;&lt;script&gt;x()&lt;/script&gt;&lt;p onclick="x()"&gt;y&lt;/p&gt;&lt;/article&gt;')
+  await writeFile(`${d}/notes/assets/foo/pic.png`, Buffer.from(Array.from({ length: 100 }, (_, i) =&gt; i)))
+  await writeFile(`${d}/notes/assets/foo/pic.svg`, '&lt;svg/&gt;')
+  await writeFile(`${root}/proj/secret.html`, '&lt;article&gt;secret&lt;/article&gt;')
+  await symlink(`${root}/proj/secret.html`, `${d}/notes/link.html`)
+  server = createReaderServer()
+  port = await listenPreferred(server, 0)
+})
+after(async () =&gt; { server.close(); await rm(root, { recursive: true, force: true }) })
+
+function get(path, { method = 'GET', headers = {} } = {}) {
+  return new Promise((resolve, reject) =&gt; {
+    const req = http.request({ host: '127.0.0.1', port, path, method, headers }, res =&gt; {
+      const chunks = []
+      res.on('data', c =&gt; chunks.push(c))
+      res.on('end', () =&gt; resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+const doc = rel =&gt; `/s${enc(`${root}/proj/docs/${rel}`)}`</code></pre>
+        <p>The tests, each by name with its assertions:</p>
+        <pre><code data-lang="js">test('a spec is wrapped in the page', async () =&gt; {
+  const r = await get(doc('superpowers/specs/a-design.html'))
+  assert.equal(r.status, 200)
+  assert.equal(r.headers['content-type'], 'text/html; charset=utf-8')
+  assert.equal(r.headers['content-security-policy'], CSP)
+  const html = r.body.toString()
+  assert.match(html, /^&lt;!doctype html&gt;/)
+  assert.ok(html.includes('&lt;title&gt;A &amp;amp; B&lt;/title&gt;'))
+  assert.ok(html.includes('&lt;link rel="stylesheet" href="/_/spec.css"&gt;'))
+  assert.ok(html.includes('&lt;link rel="stylesheet" href="/_/page.css"&gt;'))
+  assert.ok(html.includes('&lt;script src="/_/highlight.min.js" defer&gt;&lt;/script&gt;'))
+  assert.ok(html.includes('&lt;script src="/_/page.js" defer&gt;&lt;/script&gt;'))
+  assert.ok(html.includes('&lt;body class="spec-doc"&gt;'))
+  assert.ok(html.includes('&lt;main&gt;&lt;article&gt;&lt;header&gt;&lt;h1&gt;A &amp;amp; &lt;em&gt;B&lt;/em&gt;&lt;/h1&gt;'))
+})
+test('any docs folder, comments first, title falls back to the file name')
+  // doc('notes/foo.html') → 200, &lt;title&gt;foo.html&lt;/title&gt;
+test('a name with a space and # is served when encoded')
+  // doc('notes/a b#1.html') → 200, body includes 'spaced'
+test('a whole-page html file is not served')
+  // doc('notes/page.html') → 404; doc('notes/page.html') + '?fragment=1' → 404
+test('an empty file is not served, and is once it becomes an article')
+  // empty.html ?fragment=1 → 404; writeFile article → 200
+test('fragment: bytes, ETag, 304, new ETag after a change')
+  // body equals file bytes; etag matches /^"[0-9a-f]{40}"$/; If-None-Match etag → 304, empty body;
+  // rewrite file → 200 with a different etag
+test('script and onclick are inert under the CSP')
+  // script.html page → 200, CSP header equals CSP, fragment bytes unchanged
+test('outside docs, .., encoded .., a symlink out, a directory: all 404')
+  // `/s${root}/proj/secret.html`; `/s${root}/proj/docs/../secret.html`;
+  // `/s${root}/proj/docs/%2e%2e/secret.html`; doc('notes/link.html'); doc('notes/'); '/s%E0%A4%A' → 404 each
+test('a wrong Host is 403; localhost and 127.0.0.1 pass')
+  // headers { host: 'evil.example' } → 403; { host: `localhost:${port}` } → 200; { host: `127.0.0.1:${port}` } → 200
+test('POST is 405 with Allow')
+  // method POST → 405, headers.allow === 'GET, HEAD'
+test('HEAD has the headers and no body')
+  // HEAD doc → 200, content-type text/html; charset=utf-8, body length 0
+test('media: whole, range, open range, unsatisfiable, svg refused')
+  // pic.png → 200 image/png, accept-ranges bytes, 100 bytes
+  // Range bytes=10-19 → 206, content-range 'bytes 10-19/100', body equals bytes 10..19
+  // Range bytes=90- → 206, 10 bytes; Range bytes=-5 → 206, last 5 bytes
+  // Range bytes=200- → 416, content-range 'bytes */100'; pic.svg → 404
+test('static files: spec.css is superspec\'s, the others are typed')
+  // /_/spec.css → 200 text/css; charset=utf-8, body equals readFile(SPEC_CSS)
+  // /_/page.css text/css; /_/page.js and /_/highlight.min.js text/javascript; charset=utf-8
+  // /_/server.mjs → 404; /_/../server.mjs → 404; / → 404; /s → 404
+test('every answer carries nosniff and no-store')
+  // for 200, 304, 403, 404, 405, 416: x-content-type-options nosniff, cache-control no-store
+test('the command line prints its port; a taken port falls back')
+  // blocker = http.createServer().listen(0, '127.0.0.1'); P = its port
+  // spawn('node', [SERVER, '--port', String(P)]); first stdout line JSON.parse → port !== P, &gt; 0
+  // GET through that port works; child.kill('SIGTERM') → exit within 2 s
+  // spawn with a free port Q (listen 0, read, close) → first line is exactly `{"port": ${Q}}`
+test('the server exits when its parent dies')
+  // spawn('node', ['-e', `const c = require('child_process').spawn(process.execPath, [${JSON.stringify(SERVER)}, '--port', '0'], { stdio: ['ignore', 'pipe', 'inherit'], detached: true }); c.stdout.once('data', () =&gt; { console.log(c.pid); process.exit(0) })`])
+  // read pid from its stdout; poll process.kill(pid, 0) every 200 ms; it throws ESRCH within 5 s</code></pre>
+        <p>Each commented test is written as code with exactly those assertions.</p>
+      </li>
+      <li id="t3-s2"><input type="checkbox"> Run them and see them fail
+        <pre><code data-lang="sh">node --test tests/reader/server.test.mjs</code></pre>
+        <p>Expected: FAIL, cannot find module <code>server.mjs</code>.</p>
+      </li>
+      <li id="t3-s3"><input type="checkbox"> Create the symlink and the placeholders
+        <pre><code data-lang="sh">ln -s ../../../superspec/static/spec.css plugins/superpowers-reader/reader/spec.css
+touch plugins/superpowers-reader/reader/page.js plugins/superpowers-reader/reader/page.css
+mkdir -p plugins/superpowers-reader/reader/vendor
+touch plugins/superpowers-reader/reader/vendor/highlight.min.js</code></pre>
+        <p>The empty <code>highlight.min.js</code> is replaced by Task 4.</p>
+      </li>
+      <li id="t3-s4"><input type="checkbox"> Implement <code>createReaderServer()</code>, <code>listenPreferred(server, preferred)</code> and the entry-script command line in <code>plugins/superpowers-reader/reader/server.mjs</code>, importing only <code>node:</code> modules and <code>./shape.mjs</code>
+        <p>Range parsing handles one range of the forms <code>a-b</code>, <code>a-</code>, <code>-n</code>; anything else is served whole. The entry check compares <code>import.meta.url</code> with <code>pathToFileURL(fs.realpathSync(process.argv[1])).href</code>. The port line is written with <code>process.stdout.write(`{"port": ${port}}\n`)</code>.</p>
+      </li>
+      <li id="t3-s5"><input type="checkbox"> Run the tests and see them pass
+        <pre><code data-lang="sh">node --test tests/reader/server.test.mjs</code></pre>
+        <p>Expected: 16 tests pass.</p>
+      </li>
+      <li id="t3-s6"><input type="checkbox"> Add the symlink pair to <code>tests/test_format_links.sh</code> and run it
+        <pre><code data-lang="sh">  set -- plugins/supersonic/skills/supercomposer/spec-format.md:docs/spec-format.md \
+    plugins/superpowers-html/skills/html-docs/spec-format.md:docs/spec-format.md \
+    plugins/superpowers-html/hooks/run-hook.cmd:plugins/superpowers-jev/hooks/run-hook.cmd \
+    plugins/superpowers-reader/reader/spec.css:superspec/static/spec.css</code></pre>
+        <pre><code data-lang="sh">git add plugins/superpowers-reader/reader/spec.css
+sh tests/test_format_links.sh</code></pre>
+        <p>Expected: <code>PASS: format links</code> (the mode check needs the link staged).</p>
+      </li>
+      <li id="t3-s7"><input type="checkbox"> Commit
+        <pre><code data-lang="sh">git add plugins/superpowers-reader/reader tests/reader/server.test.mjs tests/test_format_links.sh
+git commit -m "feat(reader): static server for spec-format documents under docs/"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-4">
+    <h2>Task 4: Vendor highlight.js</h2>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Replace: <code>plugins/superpowers-reader/reader/vendor/highlight.min.js</code></li>
+      <li>Create: <code>plugins/superpowers-reader/reader/vendor/LICENSE</code>, <code>plugins/superpowers-reader/reader/vendor/VERSION</code></li>
+      <li>Test: <code>tests/reader/vendor.test.mjs</code></li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: the <code>/_/highlight.min.js</code> route from Task 3.</li>
+      <li>Produces, for Task 5: a global <code>hljs</code> (version 11.11.1, the common-languages build) with <code>hljs.getLanguage(name)</code> and <code>hljs.highlight(text, { language })</code>.</li>
+    </ul>
+    <aside data-kind="decision"><strong>Decision (builder's call)</strong> highlight.js 11.11.1, the common build that <code>@highlightjs/cdn-assets</code> publishes as <code>highlight.min.js</code>. It covers every language the spec names; <code>sh</code> is an alias of <code>bash</code> and <code>html</code> of <code>xml</code>.</aside>
+    <ol>
+      <li id="t4-s1"><input type="checkbox"> Write the failing test
+        <pre><code data-lang="js">import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import vm from 'node:vm'
+
+const dir = new URL('../../plugins/superpowers-reader/reader/vendor/', import.meta.url)
+
+test('the vendored file is the pinned build and covers the spec\'s languages', async () =&gt; {
+  const src = await readFile(new URL('highlight.min.js', dir), 'utf8')
+  const ctx = {}
+  vm.runInNewContext(src, ctx)
+  assert.equal(ctx.hljs.versionString, '11.11.1')
+  for (const lang of ['ts', 'js', 'json', 'sh', 'sql', 'html', 'css', 'py'])
+    assert.ok(ctx.hljs.getLanguage(lang), lang)
+  assert.equal(ctx.hljs.getLanguage('svelte'), undefined)
+})
+test('VERSION records the version and the file\'s SHA-256', async () =&gt; {
+  const bytes = await readFile(new URL('highlight.min.js', dir))
+  const version = await readFile(new URL('VERSION', dir), 'utf8')
+  assert.match(version, /^highlight\.js 11\.11\.1$/m)
+  assert.ok(version.includes(createHash('sha256').update(bytes).digest('hex')))
+})
+test('the licence is BSD-3-Clause', async () =&gt; {
+  assert.match(await readFile(new URL('LICENSE', dir), 'utf8'), /BSD 3-Clause/)
+})</code></pre>
+      </li>
+      <li id="t4-s2"><input type="checkbox"> Run it and see it fail
+        <pre><code data-lang="sh">node --test tests/reader/vendor.test.mjs</code></pre>
+        <p>Expected: FAIL, <code>ctx.hljs</code> is undefined (the file is the empty placeholder).</p>
+      </li>
+      <li id="t4-s3"><input type="checkbox"> Fetch the build from two sources into the scratchpad and check they agree
+        <pre><code data-lang="sh">mkdir -p "$SCRATCH/hljs/npm" "$SCRATCH/hljs/cdn"
+npm pack @highlightjs/cdn-assets@11.11.1 --pack-destination "$SCRATCH/hljs/npm"
+tar -xzf "$SCRATCH/hljs/npm/highlightjs-cdn-assets-11.11.1.tgz" -C "$SCRATCH/hljs/npm"
+curl -fsSL -o "$SCRATCH/hljs/cdn/highlight.min.js" https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js
+shasum -a 256 "$SCRATCH/hljs/npm/package/highlight.min.js" "$SCRATCH/hljs/cdn/highlight.min.js"</code></pre>
+        <p><code>$SCRATCH</code> is the session's scratchpad directory. <code>npm pack</code> only downloads the tarball; nothing is installed. Expected: both hashes equal. If they differ, stop and report.</p>
+      </li>
+      <li id="t4-s4"><input type="checkbox"> Copy the file and the licence, and write <code>VERSION</code>
+        <pre><code data-lang="sh">cp "$SCRATCH/hljs/npm/package/highlight.min.js" plugins/superpowers-reader/reader/vendor/highlight.min.js
+cp "$SCRATCH/hljs/npm/package/LICENSE" plugins/superpowers-reader/reader/vendor/LICENSE</code></pre>
+        <pre><code data-lang="text">highlight.js 11.11.1
+build: common languages, highlight.min.js as published
+source: npm @highlightjs/cdn-assets@11.11.1 (package/highlight.min.js), equal to cdnjs highlight.js/11.11.1
+sha256: &lt;the hash from t4-s3&gt;
+licence: BSD-3-Clause, see LICENSE</code></pre>
+      </li>
+      <li id="t4-s5"><input type="checkbox"> Run the vendor and server tests and see them pass
+        <pre><code data-lang="sh">node --test tests/reader/vendor.test.mjs tests/reader/server.test.mjs</code></pre>
+        <p>Expected: all pass.</p>
+      </li>
+      <li id="t4-s6"><input type="checkbox"> Commit
+        <pre><code data-lang="sh">git add plugins/superpowers-reader/reader/vendor tests/reader/vendor.test.mjs
+git commit -m "build(reader): vendor highlight.js 11.11.1 common build"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-5">
+    <h2>Task 5: The page script and stylesheet</h2>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Modify: <code>plugins/superpowers-reader/reader/page.js</code>, <code>plugins/superpowers-reader/reader/page.css</code></li>
+      <li>Read only: <code>$SCRATCH/hljs/npm/package/styles/github.css</code>, <code>github-dark.css</code> (from Task 4's tarball)</li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: the page template and <code>?fragment=1</code> route from Task 3; global <code>hljs</code> from Task 4.</li>
+      <li>Produces: no names for later tasks. The page's only DOM addition is one <code>p</code> with id <code>reader-gone</code>, inserted before <code>main</code>.</li>
+    </ul>
+    <ul>
+      <li><code>page.js</code> is a classic script (no modules, no globals beyond one IIFE) and works under the CSP: no <code>eval</code>, no inline style, no <code>style</code> attribute writes.</li>
+      <li>Highlight: for each <code>main pre &gt; code[data-lang]</code>, the language is the attribute trimmed and lower-cased; when <code>hljs.getLanguage</code> knows it, the block's <code>innerHTML</code> becomes <code>hljs.highlight(code.textContent, { language }).value</code> and it gains class <code>hljs</code>. Otherwise it is left as it is.</li>
+      <li>Checkboxes: every <code>main input[type=checkbox]</code> gets <code>disabled</code>.</li>
+      <li>Links: every <code>main a[href]</code> whose resolved protocol is <code>http:</code> or <code>https:</code> gets <code>target="_blank"</code> and <code>rel="noopener"</code>.</li>
+      <li>Poll: every 2000 ms while <code>document.visibilityState === 'visible'</code>, <code>fetch(location.pathname + '?fragment=1', { cache: 'no-store', headers: { 'If-None-Match': etag } })</code>. 304: nothing. 200: store the new ETag, replace <code>main</code>'s content, run the three steps, remove <code>#reader-gone</code>. 404: insert <code>#reader-gone</code> once, text "This file is gone. Showing its last version.", keep the content. A network error: nothing. The first ETag comes from an initial poll at load.</li>
+      <li>Scroll (builder's call): before replacing, take the first element with an <code>id</code> inside <code>main</code> whose top is at or below 0 in the viewport and record its top; after replacing, find the element with that id and <code>scrollBy</code> the difference. With no such element, keep <code>scrollY</code>. This holds the reading place when content above the viewport changes height.</li>
+      <li><code>page.css</code> (builder's call on its rules): <code>body { margin: 0; min-height: 100vh }</code>, <code>img, video { max-width: 100%; height: auto }</code>, a style for <code>#reader-gone</code> using spec.css variables, then the token rules (<code>.hljs-*</code> selectors only, scoped under <code>.spec-doc</code>) from highlight.js's <code>github.css</code> as the default and <code>github-dark.css</code> inside <code>@media (prefers-color-scheme: dark)</code>, with a comment naming highlight.js 11.11.1 and its BSD-3-Clause licence. The <code>.hljs</code> background and padding rules are not copied, so <code>pre</code> keeps spec.css's panel. Further rules are added only where t5-s5 shows a difference from superspec.</li>
+    </ul>
+    <ol>
+      <li id="t5-s1"><input type="checkbox"> Write <code>page.css</code> as above</li>
+      <li id="t5-s2"><input type="checkbox"> Write <code>page.js</code> as above</li>
+      <li id="t5-s3"><input type="checkbox"> Check the script parses and the server tests still pass
+        <pre><code data-lang="sh">node --check plugins/superpowers-reader/reader/page.js
+node --test tests/reader/</code></pre>
+        <p>Expected: no output from <code>--check</code>; all tests pass.</p>
+      </li>
+      <li id="t5-s4"><input type="checkbox"> Start the server against this repository
+        <pre><code data-lang="sh">node plugins/superpowers-reader/reader/server.mjs --port 4529</code></pre>
+        <p>Run it in the background; expected first line <code>{"port": 4529}</code>.</p>
+      </li>
+      <li id="t5-s5"><input type="checkbox"> Live check in a browser (controller-run if the implementer has no browser tool)
+        <p>Open <code>http://localhost:4529/s&lt;worktree&gt;/docs/superpowers/specs/2026-11-13-html-spec-writers-design.html</code> and this plan, beside the same documents in superspec. Expected, each confirmed:</p>
+        <ul>
+          <li>Layout, tables, callouts and the diagram match superspec, except heading anchors and code colours.</li>
+          <li><code>ts</code>, <code>sh</code> and <code>html</code> blocks are coloured; a <code>text</code> block is plain.</li>
+          <li>Light and dark both apply, code colours included.</li>
+          <li>Checkboxes are disabled; an external link opens in a new tab.</li>
+          <li>An edit to a scratch copy under <code>docs/notes/</code> shows within 3 s with the scroll position held; emptying the file shows the gone line, and restoring it removes the line.</li>
+          <li>A copy containing <code>&lt;script&gt;</code> and <code>onclick</code> runs neither (the console shows CSP refusals).</li>
+          <li>No CSP errors on a normal document.</li>
+        </ul>
+        <p>Add only the <code>page.css</code> rules this check shows are needed, then stop the server.</p>
+      </li>
+      <li id="t5-s6"><input type="checkbox"> Commit
+        <pre><code data-lang="sh">git add plugins/superpowers-reader/reader/page.js plugins/superpowers-reader/reader/page.css
+git commit -m "feat(reader): page script and code colours"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-6">
+    <h2>Task 6: The hooks module</h2>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Create: <code>plugins/superpowers-reader/.claude-plugin/plugin.json</code></li>
+      <li>Create: <code>plugins/superpowers-reader/hooks/hooks.json</code>, <code>plugins/superpowers-reader/hooks/register.ts</code></li>
+      <li>Create: <code>plugins/superpowers-reader/tsconfig.json</code></li>
+      <li>Test: <code>plugins/superpowers-reader/tests/reader.test.ts</code></li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: <code>docKind</code>, <code>startsWithArticle</code> from <code>../reader/shape.mjs</code> (Task 2); the server's command line and port line (Task 3).</li>
+      <li>Produces: the <code>/reader [path]</code> command; nothing else other tasks call.</li>
+    </ul>
+    <pre><code data-lang="json">{
+  "name": "superpowers-reader",
+  "version": "0.1.0",
+  "description": "Shows a spec or plan (.html under docs/) beside the chat as soon as it is written, styled by superspec's stylesheet. Needs Node; fails open.",
+  "author": { "name": "mindlace", "url": "https://github.com/mindlace" },
+  "homepage": "https://github.com/mindlace/super",
+  "repository": "https://github.com/mindlace/super",
+  "license": "MIT",
+  "keywords": ["superpowers", "html", "specs", "plans", "reader"]
+}</code></pre>
+    <p><code>hooks/hooks.json</code> is <code>{ "modules": ["./register.ts"] }</code> (spike <code>hooks/hooks.json</code>). <code>tsconfig.json</code> is the spike's: <code>{ "extends": "./.claude-plugin/types/tsconfig.json" }</code>; the app writes that folder with its own <code>.gitignore</code> of <code>*</code>. No <code>network</code> key: the module makes no HTTP request.</p>
+    <p>Module state, all module-level, lost on reload (as the spike's <code>shown</code>, <code>register.ts:13</code>):</p>
+    <pre><code data-lang="ts">let server: Promise&lt;number | undefined&gt; | undefined  // the port, shared by concurrent callers
+let isNodeMissing = false                              // set on spawn failure; stops all further work
+let hasWarnedServer = false                            // one server notice per session
+let readerTab: string | undefined                      // the pane tab this module opened
+let shownUrl = ''                                      // the URL last navigated in readerTab
+const logged = new Set&lt;string&gt;()                       // paths given a CLI transcript line</code></pre>
+    <pre><code data-lang="ts">function docUrl(port: number, path: string): string
+async function isDocument($: EngineInterface, path: string): Promise&lt;boolean&gt;
+async function ensureServer($: EngineInterface): Promise&lt;number | undefined&gt;
+async function showInPane($: EngineInterface, url: string, isForced: boolean): Promise&lt;'shown' | 'same' | 'no-pane'&gt;
+async function show($: EngineInterface, path: string, origin: 'write' | 'command'): Promise&lt;{ url?: string; where: 'pane' | 'line' | 'none' }&gt;
+async function newestDoc($: EngineInterface): Promise&lt;string | undefined&gt;
+export const register: Register</code></pre>
+    <dl>
+      <dt><code>docUrl</code></dt><dd><code>http://localhost:${port}/s</code> plus the path with each segment <code>encodeURIComponent</code>-ed.</dd>
+      <dt><code>isDocument</code></dt><dd><code>docKind(path) === 'doc'</code>, <code>$.fs.stat(path, { resolve: true }).realPath</code> also <code>'doc'</code>, and <code>startsWithArticle($.fs.read(path))</code>. Any rejection is false.</dd>
+      <dt><code>ensureServer</code></dt><dd>Returns the shared <code>server</code> promise, starting it when absent and <code>isNodeMissing</code> is false.</dd>
+      <dt><code>showInPane</code></dt><dd>The desktop path: <code>'no-pane'</code> when <code>tabs_context</code> is refused, errors or throws.</dd>
+      <dt><code>show</code></dt><dd>Paths and outcomes for both a write and the command.</dd>
+    </dl>
+    <ul>
+      <li>Hooks: <code>tool.call</code> on <code>Write</code> and on <code>Edit</code> each <code>await next(e)</code> first; when the result has no <code>deny</code> and no <code>isError</code> and the path is absolute (else joined to <code>$.session.cwd()</code>), they <code>await show($, path, 'write').catch(() =&gt; {})</code>, then return the result unchanged (spike <code>register.ts:82-93</code>).</li>
+      <li>Starting the server: a detached loop, as the API's own example (<code>index.d.ts:4232</code>), runs <code>$.process.spawn({ argv: ['node', `${$.plugin.root}/reader/server.mjs`] })</code>, buffers stdout to the first <code>\n</code>, and resolves the port from <code>JSON.parse(line).port</code>. Loop end, a bad first line, or no line within 10 s (<code>$.clock.sleep</code>, then <code>return()</code> on the stream) resolves <code>undefined</code>, clears <code>server</code> so the next document tries once more, and toasts the server notice once per session. A child that exits after printing its port also clears <code>server</code>.</li>
+      <li>A rejection of the stream's first pull means Node is missing (builder's call: <code>argv[0]</code> is <code>node</code>, so that is the only start failure): toast the Node notice once, set <code>isNodeMissing</code>, and do nothing more this session.</li>
+      <li>Desktop vs CLI (builder's call): the session has a pane when <code>mcp__Claude_Browser__tabs_context</code> answers without <code>deny</code> or <code>isError</code>. Asking the pane is what the module must do anyway to find its tab, and it needs no surface name.</li>
+      <li>Pane, write origin: when <code>url === shownUrl</code>, nothing (<code>'same'</code>). Otherwise, if <code>readerTab</code> is among the listed tabs, navigate it with <code>{ tabId: readerTab, url }</code> and, unless it is the active tab, <code>tabs_select</code> it. If it is not listed, <code>tabs_create({ foreground: true })</code>, take its tab id as <code>readerTab</code>, then navigate it. If <code>browserOpen</code> is false and <code>tabs_create</code> fails, navigate with <code>{ url }</code> alone (this opens the pane), then take the active tab from a second <code>tabs_context</code> as <code>readerTab</code>. Never navigate without <code>tabId</code> otherwise.</li>
+      <li>Pane, command origin: the same, except <code>url === shownUrl</code> still navigates (<code>isForced</code>).</li>
+      <li>No pane, write origin: when <code>logged</code> lacks the path, <code>$.ui.log(`superpowers-reader: ${name} ${url}`)</code> and add it. No pane, command origin: return the URL in the command's text, no log line.</li>
+      <li>Parsing tool answers reads <code>ran.text</code>: <code>tabs_context</code> by <code>JSON.parse</code> of the text from its first <code>{</code> to its last <code>}</code>, giving <code>{ browserOpen, tabs: [{ tabId, isActive }] }</code>; <code>tabs_create</code> by the first <code>tabId</code> in its text. Task 1's recorded texts are the reference; adjust the parse if they differ.</li>
+      <li>Notices (builder's wording): Node, <code>superpowers-reader needs Node on the PATH to show documents.</code>; server, <code>superpowers-reader could not start its server. The next document will try again.</code></li>
+      <li><code>session.start</code> registers <code>{ name: 'reader', description: 'Show a spec or plan (.html under docs/) in the reader; no path picks the newest', argumentHint: '[path]' }</code> (spike <code>register.ts:62-70</code>).</li>
+      <li><code>/reader</code> answers: no document found, <code>No spec-format .html document under a docs/ directory here.</code>; a path that is not a document, <code>Not a spec-format document under docs/: ${path}</code>; Node missing or server down, the matching notice text; pane, <code>Showing ${path}</code>; no pane, <code>${path}: ${url}</code>.</li>
+      <li><code>newestDoc</code> walks <code>$.session.cwd()</code> with <code>$.fs.list</code>, depth at most 8, skipping names that start with <code>.</code> and <code>node_modules</code>; it gathers <code>.html</code> files whose path <code>docKind</code> calls doc, sorts by <code>mtimeMs</code> descending, and returns the first that passes <code>isDocument</code>.</li>
+    </ul>
+    <ol>
+      <li id="t6-s1"><input type="checkbox"> Write the failing tests
+        <p>The stand-ins, written in full (stand-in shapes as the spike's tests, <code>tests/open.test.ts:8-13</code>):</p>
+        <pre><code data-lang="ts">import { expect, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
+
+const DOC = '/repo/docs/superpowers/specs/2026-11-20-x-design.html'
+const DOC2 = '/repo/docs/notes/a b#1.html'
+const WHOLE = '/repo/docs/notes/api.html'
+const URL1 = 'http://localhost:4520/s/repo/docs/superpowers/specs/2026-11-20-x-design.html'
+const URL2 = 'http://localhost:4520/s/repo/docs/notes/a%20b%231.html'
+// Replace with Task 1's recorded texts if they differ in shape.
+const TABS_CONTEXT_TEXT = (tabs: { tabId: string; isActive: boolean }[], browserOpen = true) =&gt;
+  JSON.stringify({ browserOpen, tabs: tabs.map(t =&gt; ({ ...t, origin: 'http://localhost:4520' })) })
+const TABS_CREATE_TEXT = (tabId: string) =&gt; JSON.stringify({ tabId })
+
+type Opts = { pane: boolean; spawn: 'ok' | 'no-node' | 'dies'; port?: number; browserOpen?: boolean }
+function standIns(on: On, opts: Opts) {
+  const seen = { spawns: 0, toasts: [] as string[], logs: [] as string[], tools: [] as Record&lt;string, unknown&gt;[] }
+  let tabs: { tabId: string; isActive: boolean }[] = [{ tabId: 'dev', isActive: true }]
+  let made = 0
+  on('fs.read', (_, e) =&gt; ({ value: String(e.path) === WHOLE ? '&lt;!doctype html&gt;&lt;html&gt;' : '&lt;article&gt;&lt;h1&gt;x&lt;/h1&gt;&lt;/article&gt;' }))
+  on('fs.stat', (_, e) =&gt; ({ value: { kind: 'file', size: 1, mtimeMs: 1, isLink: false, realPath: String(e.path) } }))
+  on('process.spawn', async function* () {
+    seen.spawns++
+    if (opts.spawn === 'no-node') throw new Error('spawn node ENOENT')
+    if (opts.spawn === 'dies') return { code: 1, signal: null }
+    yield { stream: 'stdout', text: `{"port": ${opts.port ?? 4520}}\n` }
+    await new Promise(() =&gt; {})
+    return { code: 0, signal: null }
+  })
+  on('ui.toast', (_, e) =&gt; { seen.toasts.push(String(e.text)); return { value: undefined } })
+  on('ui.log', (_, e) =&gt; { seen.logs.push(String(e.text)); return { value: undefined } })
+  on('tool.call', (_, e) =&gt; {
+    seen.tools.push(e)
+    if (e.tool.startsWith('mcp__Claude_Browser__') &amp;&amp; !opts.pane) return { deny: 'No such tool' }
+    if (e.tool === 'mcp__Claude_Browser__tabs_context')
+      return { result: {}, text: TABS_CONTEXT_TEXT(tabs, opts.browserOpen ?? true) }
+    if (e.tool === 'mcp__Claude_Browser__tabs_create') {
+      const tabId = `r${++made}`
+      tabs = [...tabs.map(t =&gt; ({ ...t, isActive: false })), { tabId, isActive: true }]
+      return { result: {}, text: TABS_CREATE_TEXT(tabId) }
+    }
+    if (e.tool === 'mcp__Claude_Browser__tabs_select')
+      tabs = tabs.map(t =&gt; ({ ...t, isActive: t.tabId === e.tabId }))
+    return { result: {} }
+  })
+  return { seen, closeTab: (id: string) =&gt; { tabs = tabs.filter(t =&gt; t.tabId !== id) },
+    focusDev: () =&gt; { tabs = tabs.map(t =&gt; ({ ...t, isActive: t.tabId === 'dev' })) } }
+}
+const write = ($: any, file_path: string) =&gt; $.tool.call({ tool: 'Write', file_path, content: 'x' })
+const edit = ($: any, file_path: string) =&gt; $.tool.call({ tool: 'Edit', file_path, old_string: 'a', new_string: 'b' })
+const of = (seen: { tools: Record&lt;string, unknown&gt;[] }, tool: string) =&gt;
+  seen.tools.filter(t =&gt; t.tool === `mcp__Claude_Browser__${tool}`)</code></pre>
+        <p>Event field names (<code>e.path</code>, <code>e.text</code>) follow the <code>fs.read</code>, <code>fs.stat</code>, <code>ui.toast</code>, <code>ui.log</code> argument types in the app-written <code>index.d.ts</code>; correct them there if they differ. The tests:</p>
+        <pre><code data-lang="ts">test('desktop: a spec write starts one server and opens it in a new reader tab', async ($, on) =&gt; {
+  const { seen } = standIns(on, { pane: true, spawn: 'ok' })
+  await write($, DOC); await edit($, DOC)
+  await write($, '/repo/src/a.html'); await write($, WHOLE)
+  expect(seen.spawns).toBe(1)
+  expect(of(seen, 'tabs_create').map(t =&gt; t.foreground)).toEqual([true])
+  expect(of(seen, 'navigate').map(t =&gt; [t.tabId, t.url])).toEqual([['r1', URL1]])
+})
+test('desktop: a different document navigates the same tab and brings it to the front')
+  // write DOC; focusDev(); write DOC2 → navigate [['r1', URL1], ['r1', URL2]]; tabs_select [{ tabId: 'r1' }]
+test('desktop: the same document again does not select or navigate')
+  // write DOC; focusDev(); edit DOC → navigate length 1, tabs_select length 0
+test('desktop: a closed reader tab is replaced by a new one')
+  // write DOC; closeTab('r1'); write DOC2 → tabs_create length 2, last navigate ['r2', URL2]
+test('desktop: never navigates a tab it did not open')
+  // writes of DOC, DOC2, DOC → every navigate has tabId starting 'r'; none has tabId 'dev' or none
+test('pane closed: navigate opens it and the active tab becomes the reader tab')
+  // browserOpen false and tabs_create answering { deny } → first navigate has no tabId and url URL1;
+  // a later DOC2 write navigates with the tabId the second tabs_context listed as active
+test('two concurrent first writes start one server')
+  // await Promise.all([write($, DOC), edit($, DOC2)]) → spawns 1
+test('the port the server prints is the one used')
+  // spawn 'ok', port 4521 → navigate url 'http://localhost:4521/s/repo/docs/superpowers/specs/2026-11-20-x-design.html'
+test('a refused Write shows nothing')
+  // tool.call stand-in answers Write with { deny: 'no' } (add a first matching on() for Write) → spawns 0
+test('CLI: one transcript line per document, with its link')
+  // pane false: write DOC, edit DOC, write DOC2 → logs length 2; logs[0] contains URL1; logs[1] contains URL2; navigate 0
+test('outcome: Node not on the path gives one notice naming Node and nothing else')
+  // spawn 'no-node': write DOC, write DOC2 → spawns 1, toasts length 1 containing 'Node', navigate 0, logs 0
+test('outcome: the server dies without a port: one notice, the next document tries again')
+  // spawn 'dies': write DOC, write DOC2 → spawns 2, toasts length 1, navigate 0
+test('outcome: a surface with no pane gets the CLI line')
+  // same as the CLI test, with tabs_context answering { result: {}, isError: true } instead of deny → logs length 1
+test('/reader PATH always navigates, even the shown document')
+  // pane true: write DOC; await $.command.run({ command: 'reader', args: DOC }) → navigate length 2; text contains DOC
+test('/reader in the CLI answers with the link')
+  // pane false: run reader with DOC → text contains URL1; logs length 0
+test('/reader with no path picks the newest document and skips node_modules')
+  // fs.list stand-in: /repo → docs (dir), node_modules (dir); /repo/docs → old.html mtime 1, new.html mtime 3;
+  // /repo/node_modules/docs → newer.html mtime 9; session.cwd stand-in '/repo' → navigate url ends '/docs/new.html'
+test('/reader with a non-document path says so')
+  // args '/repo/src/a.html' → text starts 'Not a spec-format document under docs/'</code></pre>
+        <p>Each commented test is written as code with exactly those assertions. The outcome row "the app does not load hooks modules" has no test: there is nothing loaded to test. If the kit does not raise <code>session.start</code> before <code>$.command.run</code>, raise it in the three command tests as the plugin-authoring skill's testing examples show.</p>
+      </li>
+      <li id="t6-s2"><input type="checkbox"> Write <code>plugin.json</code>, <code>hooks/hooks.json</code> and <code>tsconfig.json</code>, then run the tests and see them fail
+        <pre><code data-lang="sh">claude plugin test plugins/superpowers-reader</code></pre>
+        <p>Expected: FAIL, no hooks module (<code>register.ts</code> missing).</p>
+      </li>
+      <li id="t6-s3"><input type="checkbox"> Implement the module state, the functions above and <code>register</code> in <code>plugins/superpowers-reader/hooks/register.ts</code>, importing <code>docKind</code> and <code>startsWithArticle</code> from <code>'../reader/shape.mjs'</code></li>
+      <li id="t6-s4"><input type="checkbox"> Validate the plugin
+        <pre><code data-lang="sh">claude plugin validate plugins/superpowers-reader</code></pre>
+        <p>Expected: passes. If it refuses the <code>../reader/shape.mjs</code> import, copy <code>shape.mjs</code> to <code>hooks/shape.mjs</code>, import that, and add a Node test in <code>tests/reader/shape.test.mjs</code> asserting the two files are byte-identical.</p>
+      </li>
+      <li id="t6-s5"><input type="checkbox"> Run the tests and see them pass
+        <pre><code data-lang="sh">claude plugin test plugins/superpowers-reader</code></pre>
+        <p>Expected: 17 tests pass.</p>
+      </li>
+      <li id="t6-s6"><input type="checkbox"> Commit
+        <pre><code data-lang="sh">git add plugins/superpowers-reader/.claude-plugin plugins/superpowers-reader/hooks plugins/superpowers-reader/tsconfig.json plugins/superpowers-reader/tests
+git commit -m "feat(reader): hooks module shows written documents in the browser pane"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-7">
+    <h2>Task 7: Repo wiring</h2>
+    <p><strong>Files:</strong></p>
+    <ul>
+      <li>Modify: <code>.claude-plugin/marketplace.json</code> (description, <code>plugins</code> array)</li>
+      <li>Modify: <code>README.md:3-27</code> (plugin count, table, superspec line, install, overlay paragraphs), plus a <code>superpowers-reader</code> entry under <code>## Requirements</code> (line 29)</li>
+      <li>Modify: <code>tests/test_manifests.sh:19</code>, <code>:29</code>, and a README grep after <code>:38</code></li>
+      <li>Modify: <code>tests/run.sh</code></li>
+    </ul>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: the plugin folder from Tasks 2 to 6; the Node test files; <code>claude plugin test</code>.</li>
+      <li>Produces: <code>sh tests/run.sh</code> covering the reader.</li>
+    </ul>
+    <ol>
+      <li id="t7-s1"><input type="checkbox"> Make <code>tests/test_manifests.sh</code> expect the new plugin, and see it fail
+        <pre><code data-lang="sh">if names != ["supersonic", "superpowers-jev", "superpowers-html", "superpowers-reader"]: fail("plugins must be supersonic, superpowers-jev, superpowers-html, superpowers-reader; got %r" % names)</code></pre>
+        <p>Line 29's loop gains <code>superpowers-reader</code>. After line 38 add <code>grep -q 'install superpowers-reader@super' "$readme" || fail "README must give the reader's install line"</code>.</p>
+        <pre><code data-lang="sh">sh tests/test_manifests.sh</code></pre>
+        <p>Expected: <code>FAIL: plugins must be ... got [...]</code>.</p>
+      </li>
+      <li id="t7-s2"><input type="checkbox"> Add the marketplace entry and update its description
+        <pre><code data-lang="json">{
+  "name": "superpowers-reader",
+  "source": "./plugins/superpowers-reader",
+  "description": "Shows a just-written spec or plan (.html under docs/) in the desktop app's browser pane, styled by superspec's stylesheet. Needs Node; no install step; fails open."
+}</code></pre>
+        <p>The top-level description names four plugins, adding "superpowers-reader (shows a just-written spec or plan beside the chat)".</p>
+      </li>
+      <li id="t7-s3"><input type="checkbox"> Update <code>README.md</code>
+        <ul>
+          <li>"with three plugins" becomes "with four plugins"; the table gains a <code>superpowers-reader</code> row.</li>
+          <li>The install block gains <code>/plugin install superpowers-reader@super</code>.</li>
+          <li>A paragraph: the reader shows the document just written, in the browser pane in the desktop app and as a transcript link in the CLI; superspec stays the place for the document list, search, tabs, pairing and structure reports; the reader needs neither superspec running nor <code>superpowers-html</code> installed; it serves only spec-format <code>.html</code> under a <code>docs/</code> directory, on <code>localhost</code>, from port 4520 or the next free one; <code>/reader [path]</code> shows a document on demand.</li>
+          <li>The superspec line (line 11) keeps saying superspec is a local app, and adds that the reader plugin carries its stylesheet.</li>
+          <li>Under Requirements: <code>superpowers-reader</code> needs Node 20 or newer on the PATH, and a Claude Code that loads hooks modules (early access); without either it does nothing.</li>
+          <li>Only if Task 1 found P2 failing: "A document a subagent writes is not opened on its own; run <code>/reader</code> to show it."</li>
+          <li>The Tests section says <code>sh tests/run.sh</code> also runs the reader's Node tests and, when <code>claude</code> is on the path, its hooks-module tests.</li>
+        </ul>
+      </li>
+      <li id="t7-s4"><input type="checkbox"> Make <code>tests/run.sh</code> run the reader's tests, before its <code>exit</code>
+        <pre><code data-lang="sh">if command -v node &gt;/dev/null 2&gt;&amp;1; then
+  node --test "$root"/tests/reader/*.test.mjs || status=1
+else
+  echo "SKIP: reader tests (node not on PATH)"
+fi
+if command -v claude &gt;/dev/null 2&gt;&amp;1; then
+  claude plugin test "$root/plugins/superpowers-reader" || status=1
+fi</code></pre>
+      </li>
+      <li id="t7-s5"><input type="checkbox"> Run the whole suite and see it pass
+        <pre><code data-lang="sh">sh tests/run.sh</code></pre>
+        <p>Expected: <code>PASS: manifests</code>, <code>PASS: format links</code>, the Node tests and the plugin tests pass, exit status 0.</p>
+      </li>
+      <li id="t7-s6"><input type="checkbox"> Commit
+        <pre><code data-lang="sh">git add .claude-plugin/marketplace.json README.md tests/test_manifests.sh tests/run.sh
+git commit -m "feat: add superpowers-reader to the marketplace" -m "README, manifest checks and tests/run.sh cover the new plugin."</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-8">
+    <h2>Task 8: Live acceptance (controller-run)</h2>
+    <p>The spec's "What done looks like" items that need a live session. The controller runs this with the plugin installed from the worktree as a directory marketplace; nothing is committed unless a fix is needed, which goes back to the owning task.</p>
+    <p><strong>Files:</strong> none.</p>
+    <p><strong>Interfaces:</strong></p>
+    <ul>
+      <li>Consumes: everything above.</li>
+      <li>Produces: a pass or a list of failures, each named by the owning task.</li>
+    </ul>
+    <ol>
+      <li id="t8-s1"><input type="checkbox"> In a desktop session, write a new spec under <code>docs/superpowers/specs/</code>: it opens in the pane with no other action, in a tab of its own; a dev preview tab already open is left alone</li>
+      <li id="t8-s2"><input type="checkbox"> Edit it: the page changes within a few seconds and the scroll position holds; no second navigation happens</li>
+      <li id="t8-s3"><input type="checkbox"> Switch the app between light and dark: the page and its code colours follow</li>
+      <li id="t8-s4"><input type="checkbox"> Write <code>docs/notes/foo.html</code> in the spec format and a whole-page HTML file beside it: the first is shown, the second neither shown nor served</li>
+      <li id="t8-s5"><input type="checkbox"> Start a second session at the same time: its server takes another port and its links name it</li>
+      <li id="t8-s6"><input type="checkbox"> In a CLI session, write a spec: one transcript line with a working link; editing it adds no line</li>
+      <li id="t8-s7"><input type="checkbox"> End both sessions: no <code>server.mjs</code> process remains
+        <pre><code data-lang="sh">pgrep -fl superpowers-reader/reader/server.mjs</code></pre>
+        <p>Expected: no output.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-open-questions">
+    <h2>Open questions</h2>
+    <p>None. The spec first said the server exits when its standard input closes; the engine closes a child's standard input from the start, so the spec now says what this plan builds: exit on <code>SIGTERM</code>, <code>SIGINT</code>, <code>SIGHUP</code> and when the parent process goes away.</p>
+  </section>
+
+  <section id="sec-self-review">
+    <h2>Self-review</h2>
+    <ul>
+      <li>Spec coverage: goals map to Tasks 3 (server, address, port), 5 (theme, refresh, highlight), 6 (pane, CLI line, fail open, <code>/reader</code>), 7 (marketplace, README, tests); anti-goals map to Task 3's shape and CSP tests and Task 6's own-tab tests; "Prove first" is Task 1; "What done looks like" is covered by Tasks 3, 5, 6 and 8.</li>
+      <li>Type consistency: <code>docKind</code>, <code>startsWithArticle</code>, <code>MEDIA_EXT</code>, <code>createReaderServer</code>, <code>listenPreferred</code> and the <code>{"port": N}</code> line are named the same in every task.</li>
+      <li>Not tested automatically: <code>page.js</code> (no DOM without a package); it is checked live in t5-s5 and t8-s2.</li>
+    </ul>
+  </section>
+</article>

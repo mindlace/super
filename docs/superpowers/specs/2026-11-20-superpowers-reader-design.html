@@ -1,0 +1,322 @@
+<article>
+  <header>
+    <h1>superpowers-reader</h1>
+    <p>A plugin that shows a spec or plan beside the chat as soon as it is written, styled by superspec's stylesheet, with nothing to install but Node.</p>
+  </header>
+
+  <section id="sec-intent">
+    <h2>Intent</h2>
+    <p>When Claude writes a spec or a plan as HTML, the person has to go and find it: start superspec, pick the document from a list, and keep that tab beside the chat. The document they want is always the one that was just written.</p>
+    <p>This plugin puts that document in the desktop app's browser pane the moment it is written. It looks as it does in superspec, follows light and dark mode, and refreshes itself while Claude keeps editing.</p>
+    <p>The plugin carries a small static file server and nothing else. Installing it runs no build and fetches no packages.</p>
+  </section>
+
+  <section id="sec-goals">
+    <h2>Goals, non-goals, anti-goals</h2>
+    <section id="sec-goals-yes">
+      <h3>Goals</h3>
+      <ul>
+        <li>A new plugin, <code>superpowers-reader</code>, in this marketplace.</li>
+        <li>Install is free if Node is on the path: no <code>npm install</code>, no build step, no bundled dependencies.</li>
+        <li>After a <code>Write</code> or <code>Edit</code> of a spec-format <code>.html</code> file anywhere under a <code>docs/</code> directory, the document is shown in the browser pane. <code>docs/superpowers/specs</code> and <code>docs/superpowers/plans</code> are the usual places, not the only ones.</li>
+        <li>The page is painted by <code>spec.css</code>, the same file superspec uses, and follows the app's light or dark theme.</li>
+        <li>The page refreshes itself when the file changes and keeps the scroll position.</li>
+        <li>Images and video beside the document load, under the format's Media rules.</li>
+        <li>Code blocks are coloured by their <code>data-lang</code>, by a highlighter file the plugin carries.</li>
+        <li>In the Claude Code CLI, where there is no browser pane, each newly written document gets a line in the transcript with a link to it on the reader server.</li>
+        <li>A document's address reads as its path: <code>http://localhost:4520/s/Users/me/proj/docs/superpowers/specs/foo-design.html</code>.</li>
+        <li>The plugin fails open. If anything it needs is missing, the write still succeeds and the session carries on.</li>
+      </ul>
+    </section>
+    <section id="sec-goals-no">
+      <h3>Non-goals</h3>
+      <ul>
+        <li>A document list, search, tabs or spec-and-plan pairing. Superspec keeps those.</li>
+        <li>Markdown specs and plans. Only <code>.html</code> documents are shown.</li>
+        <li>Reporting structure problems (missing ids, duplicate ids). Superspec keeps that.</li>
+        <li>Heading anchor marks and the path bar.</li>
+        <li>Surfaces other than the desktop app and the CLI.</li>
+        <li>Opening the person's own browser for them from the CLI. The link is theirs to click.</li>
+        <li>Windows paths.</li>
+      </ul>
+    </section>
+    <section id="sec-goals-anti">
+      <h3>Anti-goals</h3>
+      <ul>
+        <li>An install step of any kind.</li>
+        <li>A server that outlives the session that started it.</li>
+        <li>Serving any file that is not under a <code>docs/</code> directory.</li>
+        <li>Wrapping an HTML file that is a whole page of its own, such as generated API documentation.</li>
+        <li>Running script that a document carries.</li>
+        <li>Changing a spec file, the spec format, or what <code>superpowers-html</code> writes.</li>
+        <li>Needing superspec to be running, or <code>superpowers-html</code> to be installed.</li>
+      </ul>
+    </section>
+  </section>
+
+  <section id="sec-constraints">
+    <h2>Constraints</h2>
+    <p>These were found by trying things in the session that produced this spec.</p>
+    <ul>
+      <li>A plugin's own pane cannot draw HTML or CSS. It draws from a fixed set of elements with the app's typography. A spike that translated the format into those elements kept the structure and lost the layout.</li>
+      <li>The app shows a local <code>.html</code> file as a static snapshot that is always told the theme is light. A page served from <code>http://127.0.0.1</code> or <code>http://localhost</code> in the same pane is told the real theme.</li>
+      <li>A plugin can run code on tool calls through a hooks module. That module has no Node and no DOM. It reaches files, HTTP, tools and child processes through the engine.</li>
+      <li>A hooks module can send the browser pane to an address by calling the pane's navigate tool after a <code>Write</code>. A spike did exactly that when this file was first written.</li>
+      <li>A child process a hooks module starts is killed when the module unloads or the session ends.</li>
+      <li>The hooks module API is marked early access and may change between releases.</li>
+      <li>When a plugin is installed from this marketplace, a symlink inside it becomes a regular file. <code>superpowers-html</code> already relies on this for <code>spec-format.md</code>.</li>
+      <li><code>spec.css</code> is self-contained: no imports, no web fonts, and everything is scoped under <code>.spec-doc</code>.</li>
+      <li><code>tests/test_manifests.sh</code> holds the exact list of marketplace plugins.</li>
+    </ul>
+  </section>
+
+  <section id="sec-approaches">
+    <h2>Approaches</h2>
+    <table id="tbl-approaches">
+      <caption>Ways of showing a just-written document beside the chat</caption>
+      <thead>
+        <tr><th scope="col">Approach</th><th scope="col">Outcome</th><th scope="col">Why</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Draw it in a plugin pane</th><td>Rejected</td><td>No stylesheet reaches a pane, so the layout cannot be kept.</td></tr>
+        <tr><th scope="row">Open a wrapped local file</th><td>Rejected</td><td>It is always light, never refreshes, and loses relative media.</td></tr>
+        <tr><th scope="row">Open superspec without its list</th><td>Rejected</td><td>Shipping superspec means a SvelteKit build and its packages.</td></tr>
+        <tr><th scope="row">A static server inside the plugin</th><td>Chosen</td><td>One Node file with no packages gives theme, refresh and media.</td></tr>
+      </tbody>
+    </table>
+    <aside data-kind="decision"><strong>Decision</strong> The owner chose a new plugin named <code>superpowers-reader</code> that carries as little of superspec as possible: its stylesheet and nothing that needs building.</aside>
+  </section>
+
+  <section id="sec-design">
+    <h2>Design</h2>
+    <figure id="fig-flow">
+      <svg class="diagram" viewBox="0 0 640 170" role="img" aria-labelledby="fig-flow-t">
+        <title id="fig-flow-t">How a written document reaches the browser pane</title>
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z"/></marker></defs>
+        <g class="node external" id="n-write"><rect x="10" y="20" width="140" height="44"/><text x="80" y="42">Write or Edit</text></g>
+        <g class="node missing" id="n-hook"><rect x="230" y="20" width="140" height="44"/><text x="300" y="42">hooks module</text></g>
+        <g class="node external" id="n-pane"><rect x="470" y="20" width="160" height="44"/><text x="550" y="42">browser pane</text></g>
+        <g class="node missing" id="n-server"><rect x="230" y="110" width="140" height="44"/><text x="300" y="132">reader server</text></g>
+        <g class="node" id="n-file"><rect x="10" y="110" width="140" height="44"/><text x="80" y="132">spec or plan file</text></g>
+        <g class="edge" data-from="n-write" data-to="n-hook"><path d="M150 42H228"/><text x="189" y="34">after write</text></g>
+        <g class="edge" data-from="n-hook" data-to="n-pane"><path d="M370 42H468"/><text x="419" y="34">navigate</text></g>
+        <g class="edge" data-from="n-hook" data-to="n-server"><path d="M300 64V108"/><text x="326" y="90">starts</text></g>
+        <g class="edge" data-from="n-pane" data-to="n-server"><path d="M550 64L372 126"/><text x="482" y="108">GET</text></g>
+        <g class="edge" data-from="n-server" data-to="n-file"><path d="M230 132H152"/><text x="191" y="124">reads</text></g>
+      </svg>
+      <figcaption>Figure 1. The hooks module starts the server once per session and points the pane at it. The pane then talks to the server directly.</figcaption>
+    </figure>
+
+    <section id="sec-files">
+      <h3>What the plugin holds</h3>
+      <table id="tbl-files">
+        <caption>Files under <code>plugins/superpowers-reader/</code></caption>
+        <thead>
+          <tr><th scope="col">Path</th><th scope="col">What it is</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row"><code>.claude-plugin/plugin.json</code></th><td>The manifest, in the shape the other plugins use.</td></tr>
+          <tr><th scope="row"><code>hooks/hooks.json</code></th><td>Names the hooks module.</td></tr>
+          <tr><th scope="row"><code>hooks/register.ts</code></th><td>The hooks module.</td></tr>
+          <tr><th scope="row"><code>reader/server.mjs</code></th><td>The static server, using only Node's built-in modules.</td></tr>
+          <tr><th scope="row"><code>reader/page.js</code></th><td>The script the page runs.</td></tr>
+          <tr><th scope="row"><code>reader/page.css</code></th><td>Rules for the page around the document, and the code colours.</td></tr>
+          <tr><th scope="row"><code>reader/vendor/highlight.min.js</code></th><td>The vendored highlighter, as its project publishes it.</td></tr>
+          <tr><th scope="row"><code>reader/vendor/LICENSE</code></th><td>The highlighter's licence.</td></tr>
+          <tr><th scope="row"><code>reader/spec.css</code></th><td>A symlink to <code>superspec/static/spec.css</code>.</td></tr>
+        </tbody>
+      </table>
+      <p>The symlink keeps one stylesheet in the repository. An installed copy holds a regular file.</p>
+    </section>
+
+    <section id="sec-server">
+      <h3>The reader server</h3>
+      <pre><code data-lang="sh">node reader/server.mjs
+# first line on stdout, then it serves until it is killed:
+{"port": 4520}</code></pre>
+      <ul>
+        <li>It listens on <code>127.0.0.1</code>. It asks for port 4520 first. If that port is taken, it takes one the operating system picks.</li>
+        <li>Links name the host as <code>localhost</code>.</li>
+        <li>It imports only <code>node:</code> modules.</li>
+        <li>It answers <code>GET</code> and <code>HEAD</code>. Any other method is a 405.</li>
+        <li>A request whose <code>Host</code> name is not <code>127.0.0.1</code> or <code>localhost</code> is a 403.</li>
+        <li>It exits on <code>SIGTERM</code>, <code>SIGINT</code> and <code>SIGHUP</code>, and when its parent process goes away, so it cannot outlive the session. It does not read standard input: the engine closes a child's standard input from the start.</li>
+        <li>It keeps no state and writes nothing to disk.</li>
+      </ul>
+      <table id="tbl-routes">
+        <caption>Routes</caption>
+        <thead>
+          <tr><th scope="col">Request</th><th scope="col">Answer</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row"><code>/s/&lt;file path&gt;.html</code></th><td>The page for that document. See <a href="#sec-page">The page</a>.</td></tr>
+          <tr><th scope="row"><code>/s/&lt;file path&gt;.html?fragment=1</code></th><td>The file's bytes, with an <code>ETag</code>.</td></tr>
+          <tr><th scope="row"><code>/s/&lt;dir&gt;/assets/&lt;file&gt;</code></th><td>A media file, with <code>Range</code> support.</td></tr>
+          <tr><th scope="row"><code>/_/spec.css</code></th><td>The stylesheet.</td></tr>
+          <tr><th scope="row"><code>/_/page.css</code>, <code>/_/page.js</code></th><td>The page's own files.</td></tr>
+          <tr><th scope="row"><code>/_/highlight.min.js</code></th><td>The vendored highlighter.</td></tr>
+          <tr><th scope="row">Anything else</th><td>404.</td></tr>
+        </tbody>
+      </table>
+      <p>The part of the address after <code>/s</code> is the file's absolute path. A relative <code>src</code> in a document therefore resolves to the right file with no rewriting.</p>
+      <aside data-kind="decision"><strong>Decision (builder's call)</strong> Port 4520 is preferred so that a link usually stays the same from one session to the next. Superspec keeps 4510. Each session still runs its own server, so a second session at the same time gets another port.</aside>
+    </section>
+
+    <section id="sec-paths">
+      <h3>Which files are served</h3>
+      <pre><code data-lang="text">document  &lt;any&gt;/docs/&lt;zero or more segments&gt;/&lt;name&gt;.html
+media     &lt;any&gt;/docs/&lt;zero or more segments&gt;/&lt;name&gt;.&lt;ext&gt;
+ext       png jpg jpeg gif webp mp4 webm</code></pre>
+      <ul>
+        <li>The path must have a segment named exactly <code>docs</code>. Everything below it is in reach; nothing else is.</li>
+        <li>A document must be in the spec format: its first element is <code>article</code>, after any white space or comments. An <code>.html</code> file that starts with a doctype, <code>html</code> or anything else is a 404. It is a page of its own and the reader does not wrap it.</li>
+        <li>The path is decoded and normalised before it is checked. A path that still holds <code>..</code> is a 404.</li>
+        <li>The file's real path, after symlinks are resolved, must match the same shape. Otherwise the answer is 404.</li>
+        <li>The file must be a regular file.</li>
+        <li>Every answer carries <code>X-Content-Type-Options: nosniff</code> and <code>Cache-Control: no-store</code>.</li>
+        <li>The path is not limited to one projects folder. The shape is the guard.</li>
+      </ul>
+    </section>
+
+    <section id="sec-page">
+      <h3>The page</h3>
+      <p>The server wraps the file's content, unchanged, in a small document.</p>
+      <pre><code data-lang="html">&lt;!doctype html&gt;
+&lt;html lang="en"&gt;
+  &lt;head&gt;
+    &lt;meta charset="utf-8"&gt;
+    &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+    &lt;title&gt;(the document's h1, or its file name)&lt;/title&gt;
+    &lt;link rel="stylesheet" href="/_/spec.css"&gt;
+    &lt;link rel="stylesheet" href="/_/page.css"&gt;
+    &lt;script src="/_/highlight.min.js" defer&gt;&lt;/script&gt;
+    &lt;script src="/_/page.js" defer&gt;&lt;/script&gt;
+  &lt;/head&gt;
+  &lt;body class="spec-doc"&gt;
+    &lt;main&gt;(the file's content)&lt;/main&gt;
+  &lt;/body&gt;
+&lt;/html&gt;</code></pre>
+      <p>The page answer carries this header.</p>
+      <pre><code data-lang="text">Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self';
+  img-src 'self'; media-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'</code></pre>
+      <aside data-kind="decision"><strong>Decision (builder's call)</strong> The page is made safe by that policy, not by a sanitizer. A sanitizer needs a package. Under the policy a script, an event handler or a <code>style</code> attribute in a document does nothing, and a remote <code>src</code> does not load.</aside>
+      <p>The script does five things.</p>
+      <ul>
+        <li>It colours every <code>pre</code> &gt; <code>code</code> block that has a <code>data-lang</code> the highlighter knows. A block with an unknown language, or with none, is left plain.</li>
+        <li>It disables every checkbox, so the page never looks editable.</li>
+        <li>It gives every <code>http</code> and <code>https</code> link <code>target="_blank"</code> and <code>rel="noopener"</code>, so a click does not replace the document.</li>
+        <li>Every two seconds, while the page is visible, it asks for <code>?fragment=1</code> with <code>If-None-Match</code>. On a changed answer it replaces the content of <code>main</code>, repeats the three steps above, and leaves the scroll position alone.</li>
+        <li>If that request answers 404, it shows one line above the document saying the file is gone, and keeps the last content.</li>
+      </ul>
+      <aside data-kind="decision"><strong>Decision</strong> The owner chose to vendor a highlighter. The builder's call is highlight.js: it is one prebuilt file, it marks tokens with classes, so it works under the policy above, and its GitHub light and dark colours are close to the ones superspec shows. Its colours go in <code>page.css</code>, light by default and dark under <code>prefers-color-scheme</code>.</aside>
+      <p>Two known differences from superspec. Markup outside the format is not removed: it is left inert and shown as the browser shows it. Code colours come from a different highlighter, so some tokens differ.</p>
+    </section>
+
+    <section id="sec-hook">
+      <h3>The hooks module</h3>
+      <ul>
+        <li>It listens to <code>Write</code> and <code>Edit</code> tool calls and lets each run first. It never changes a call or its result.</li>
+        <li>When the written file is a document under the rules in <a href="#sec-paths">Which files are served</a>, it shows that document. That includes the check that the file starts with <code>article</code>, so writing some other HTML file under <code>docs/</code> does nothing.</li>
+        <li>To show a document it first makes sure the server is running. What it does next depends on where the session runs.</li>
+        <li>In the desktop app it opens the document's address in the reader's own browser-pane tab.</li>
+        <li>In the CLI it writes one line to the transcript, naming the document and giving its address as a link. It does this once per document, not on every edit.</li>
+        <li>The reader's tab is one the module opened itself. It opens that tab the first time, reuses it afterwards, and opens a new one if the person closed it. It never navigates a tab it did not open, so a dev-server preview in the pane is left alone.</li>
+        <li>It brings the reader's tab to the front when it shows a different document, and not otherwise.</li>
+        <li>It starts the server at most once per session, on the first document, and reads the port from the first line the server prints.</li>
+        <li>It navigates only when the document differs from the one it last showed. The page refreshes itself, so navigating again would only lose the scroll position.</li>
+        <li>It registers a command, <code>/reader [path]</code>, that shows the given document. With no path it shows the document with the latest modification time under any <code>docs/</code> directory in the session's working directory. In the desktop app the command always navigates. In the CLI it answers with the link.</li>
+        <li>A notice is a short message shown to the person in the app. It is never text added to what Claude reads.</li>
+      </ul>
+      <aside data-kind="decision"><strong>Decision</strong> The owner chose any HTML under <code>docs/</code> over the two superpowers folders. The builder's call is the <code>article</code> check, which keeps the reader to spec-format documents now that the folder no longer says so.</aside>
+      <aside data-kind="decision"><strong>Decision (builder's call)</strong> The reader keeps to its own tab. Taking over whatever the pane is showing on every spec write would be the behaviour most likely to annoy.</aside>
+      <table id="tbl-outcomes">
+        <caption>What the person sees when something is missing</caption>
+        <thead>
+          <tr><th scope="col">Situation</th><th scope="col">Result</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Node is not on the path</th><td>One notice per session naming Node. Nothing else happens.</td></tr>
+          <tr><th scope="row">The server exits or never prints a port</th><td>One notice per session. The next document tries once more.</td></tr>
+          <tr><th scope="row">A surface that is neither the desktop app nor the CLI</th><td>The same transcript line as the CLI, if the surface shows one.</td></tr>
+          <tr><th scope="row">The app does not load hooks modules</th><td>Nothing. The plugin is inert.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="sec-repo">
+      <h3>Changes outside the plugin</h3>
+      <ul>
+        <li><code>.claude-plugin/marketplace.json</code> gains the plugin.</li>
+        <li><code>README.md</code> lists four plugins, adds the install line, and says how the reader relates to superspec.</li>
+        <li><code>tests/test_manifests.sh</code> expects the new plugin name.</li>
+        <li><code>tests/test_format_links.sh</code> checks the <code>spec.css</code> symlink as it checks the others.</li>
+        <li><code>tests/run.sh</code> runs the reader's tests.</li>
+      </ul>
+      <p>Superspec itself is not changed.</p>
+    </section>
+  </section>
+
+  <section id="sec-prove-first">
+    <h2>Proved live</h2>
+    <p>The design rests on three things a hooks module must be able to do. All three were seen working in a desktop app session on 2026-11-20, using the spike.</p>
+    <ul>
+      <li>It sent the browser pane to an address after a <code>Write</code>.</li>
+      <li>It started a Node child process and read the first line the child printed. The child was gone once the module stopped reading.</li>
+      <li>Its <code>Write</code> hook fired for a document a subagent wrote, with the subagent's id on the call.</li>
+    </ul>
+    <p>Not yet seen: what happens to the child when the whole session ends abruptly. The server's watch on its parent process covers that case.</p>
+  </section>
+
+  <section id="sec-spike">
+    <h2>The spike and the test tools</h2>
+    <p>A working spike of the hooks module exists outside the repository. It is the starting point for <code>hooks/register.ts</code>, not code to keep as it is: it opens superspec on a fixed port and navigates the active tab.</p>
+    <pre><code data-lang="text">/Users/mindlace/.claude/dev-mods/42007924-5295-45cb-9f9e-e7f18769383b/superspec-pane/
+  hooks/hooks.json      { "modules": ["./register.ts"] }
+  hooks/register.ts     the module
+  tests/open.test.ts    its tests
+  .claude-plugin/types/ the API's type declarations, written by the app</code></pre>
+    <ul>
+      <li>A hooks module's tests are <code>tests/*.test.ts</code> files that import from <code>claude-code/testing</code>. In a test, a hook stands in for the engine, so a tool call or an HTTP request is answered by the test.</li>
+      <li><code>claude plugin test &lt;plugin folder&gt;</code> runs them. No Node test runner or fake engine is needed.</li>
+      <li><code>claude plugin validate &lt;plugin folder&gt;</code> reads the module as the engine will and reports what it would refuse.</li>
+      <li><code>tests/run.sh</code> runs both only when <code>claude</code> is on the path, as <code>tests/test_manifests.sh</code> already does for validation.</li>
+      <li>The <code>plugin-authoring</code> skill in Claude Code documents the module API and has worked examples.</li>
+    </ul>
+  </section>
+
+  <section id="sec-tests">
+    <h2>What done looks like</h2>
+    <ul>
+      <li>Writing a spec in a session with the plugin installed opens it in the browser pane with no other action.</li>
+      <li>The two reference documents look the same in the reader as in superspec, apart from small differences in code colours, and heading anchors: <code>2026-11-13-html-spec-writers-design.html</code> here, and a long plan with tables and callouts.</li>
+      <li>Switching the app between light and dark changes the page, code colours included.</li>
+      <li>In a CLI session, writing a spec puts one line with a working link in the transcript, and editing the same spec adds no more lines.</li>
+      <li>With port 4520 taken, the server starts on another port and the link names that port.</li>
+      <li>Editing the file changes the page within a few seconds, and the scroll position holds.</li>
+      <li>A request for a file outside the allowed shape, through <code>..</code>, a symlink or a wrong <code>Host</code>, is refused. Each case has a test.</li>
+      <li>A spec-format file at <code>docs/notes/foo.html</code> is shown. A whole-page HTML file beside it is neither shown nor served.</li>
+      <li>A document holding a <code>script</code> element and an <code>onclick</code> attribute runs neither.</li>
+      <li>The server's tests run with <code>node --test</code> and need no packages.</li>
+      <li>The hooks module passes <code>claude plugin validate</code> and has tests for each row of <a href="#tbl-outcomes">the outcomes table</a>.</li>
+      <li><code>sh tests/run.sh</code> passes.</li>
+    </ul>
+  </section>
+
+  <section id="sec-builder">
+    <h2>Left to the builder</h2>
+    <ul>
+      <li>The lowest Node version to support, stated in the README. Nothing in the repository pins one.</li>
+      <li>The rules in <code>page.css</code>. Superspec's page also gets Tailwind's reset, which the reader does not have, so the reference documents decide what is needed.</li>
+      <li>Whether the server's tests live under <code>tests/</code> at the root or inside the plugin.</li>
+      <li>The wording of the notices and of the CLI's transcript line.</li>
+      <li>The highlight.js version, pinned and recorded beside the file, and which of its published builds to vendor. The common-languages build is enough if it covers <code>ts</code>, <code>js</code>, <code>json</code>, <code>sh</code>, <code>sql</code>, <code>html</code>, <code>css</code> and <code>py</code>. A language it lacks, such as <code>svelte</code>, is shown plain.</li>
+      <li>How the module tells the desktop app from the CLI.</li>
+      <li>How the refresh keeps the scroll position when content above the viewport changes height.</li>
+    </ul>
+  </section>
+
+  <section id="sec-questions">
+    <h2>Open question</h2>
+    <aside data-kind="question"><strong>Question</strong> The worktree holds an uncommitted change that gives superspec a no-list view at <code>?bare=1</code>. This design does not use it. Discard it, or keep it as its own small change?</aside>
+  </section>
+</article>
