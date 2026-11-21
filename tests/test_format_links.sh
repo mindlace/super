@@ -9,7 +9,8 @@ real() { python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"; 
 if [ "$#" -eq 0 ]; then
   set -- plugins/supersonic/skills/supercomposer/spec-format.md:docs/spec-format.md \
     plugins/superpowers-html/skills/html-docs/spec-format.md:docs/spec-format.md \
-    plugins/superpowers-html/hooks/run-hook.cmd:plugins/superpowers-jev/hooks/run-hook.cmd
+    plugins/superpowers-html/hooks/run-hook.cmd:plugins/superpowers-jev/hooks/run-hook.cmd \
+    plugins/superpowers-reader/reader/spec.css:superspec/static/spec.css
 fi
 for pair in "$@"; do
   link="${pair%%:*}"

@@ -1,0 +1,5 @@
+highlight.js 11.11.1
+build: common languages, highlight.min.js as published
+source: npm @highlightjs/cdn-assets@11.11.1 (package/highlight.min.js), equal to cdnjs highlight.js/11.11.1
+sha256: c4a399dd6f488bc97a3546e3476747b3e714c99c57b9473154c6fb8d259b9381
+licence: BSD-3-Clause, see LICENSE

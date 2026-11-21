@@ -16,7 +16,7 @@ def fail(msg):
 if m.get("name") != "super": fail("marketplace name must be 'super'")
 if not m.get("owner", {}).get("name"): fail("owner.name required")
 names = [p["name"] for p in m.get("plugins", [])]
-if names != ["supersonic", "superpowers-jev", "superpowers-html"]: fail("plugins must be supersonic, superpowers-jev, superpowers-html; got %r" % names)
+if names != ["supersonic", "superpowers-jev", "superpowers-html", "superpowers-reader"]: fail("plugins must be supersonic, superpowers-jev, superpowers-html, superpowers-reader; got %r" % names)
 for p in m["plugins"]:
     src = p.get("source", "")
     if not src.startswith("./") or ".." in src: fail("source must be ./relative: %r" % src)
@@ -26,7 +26,7 @@ for p in m["plugins"]:
 PY
 if command -v claude >/dev/null 2>&1; then
   claude plugin validate "$root" >/dev/null 2>&1 || fail "claude plugin validate $root"
-  for p in supersonic superpowers-jev superpowers-html; do
+  for p in supersonic superpowers-jev superpowers-html superpowers-reader; do
     claude plugin validate "$root/plugins/$p" >/dev/null 2>&1 || fail "claude plugin validate plugins/$p"
   done
 fi
@@ -36,6 +36,7 @@ readme="$root/README.md"
 grep -q 'subagentPromptCacheTtl' "$readme" || fail "README must document subagentPromptCacheTtl"
 grep -q '^## Requirements' "$readme" || fail "README needs a Requirements section"
 grep -q 'claude --bg' "$readme" || fail "README must mention claude --bg"
+grep -q 'install superpowers-reader@super' "$readme" || fail "README must give the reader's install line"
 if grep -rIl -e 'operator subagents' "$root/plugins/supersonic" "$root/.claude-plugin" "$readme" >/dev/null 2>&1; then
   fail "stale wording 'operator subagents'"
 fi
