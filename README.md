@@ -28,7 +28,7 @@ For local development, add the checkout as a directory marketplace instead:
 
 `superpowers-html` overlays superpowers 7.x the same way and makes the specs and plans it writes `.html` instead of markdown. Keep superpowers installed; a `.md` plan still runs as before.
 
-`superpowers-reader` shows the document Claude just wrote. In the desktop app it opens the document in its own tab in the browser pane. In the CLI it prints one transcript line with a link for each document. It needs neither superspec running nor `superpowers-html` installed. It uses superspec's stylesheet, so a document looks the same in both, but superspec remains the place for the document list, search, tabs, pairing and structure reports. `/reader [path]` shows a document on demand. The reader serves only spec-format `.html` files under a `docs/` directory, on `localhost`, from port 4520 or the next free port.
+`superpowers-reader` shows the document Claude just wrote. In the desktop app it opens the document in its own tab in the browser pane. In the CLI it prints one transcript line with a link for each document. It needs neither superspec running nor `superpowers-html` installed. It uses superspec's stylesheet, so a document looks the same in both, but superspec remains the place for the document list, search, tabs, pairing and structure reports. `/reader [path]` shows a document on demand. The reader serves only spec-format `.html` files under a `docs/` directory, and the images and video beside them (`png`, `jpg`, `jpeg`, `gif`, `webp`, `mp4`, `webm`), on `localhost`, from port 4520, or from a free port the operating system picks when 4520 is taken.
 
 ## Requirements
 
@@ -57,7 +57,7 @@ For local development, add the checkout as a directory marketplace instead:
 `superpowers-reader` needs:
 
 - Node 20 or newer on the PATH. There is nothing to install.
-- A Claude Code that loads hooks modules (early access). Without Node or without that, the plugin does nothing.
+- A Claude Code that loads hooks modules (early access). Without that, the plugin does nothing. Without Node, it shows one notice naming Node and does nothing else.
 
 ## Jev modes
 
@@ -107,7 +107,7 @@ The `jev` command is on the Bash tool's PATH only while Claude Code runs. To run
 
 ## Tests
 
-`sh tests/run.sh` runs the sh tests and the Python suite (stdlib `unittest`, with a local stub server). It also runs the reader's Node tests and, when `claude` is on the path, its hooks-module tests. The live smoke test runs only with `JEV_LIVE=1`.
+`sh tests/run.sh` runs the sh tests and the Python suite (stdlib `unittest`, with a local stub server). It also runs the reader's Node tests and, when `claude` is on the path, its hooks-module tests. The `claude plugin` checks (`claude plugin test` here, `claude plugin validate` in `tests/test_manifests.sh`) need a Claude Code version that loads hooks modules, and are skipped when `claude` is not on the path. The live smoke test runs only with `JEV_LIVE=1`.
 
 ## License
 
