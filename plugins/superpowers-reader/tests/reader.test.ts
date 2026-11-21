@@ -23,15 +23,19 @@ type Opts = {
   browserOpen?: boolean
   create?: 'ok' | 'deny'
   context?: 'ok' | 'error' | 'throw'
+  // Whether navigating with no tab makes its new tab the active one (default true).
+  opensActive?: boolean
 }
 function standIns(on: On, opts: Opts) {
   const seen = { spawns: 0, toasts: [] as string[], logs: [] as string[], tools: [] as Record<string, unknown>[] }
   let tabs: { tabId: string; isActive: boolean }[] = [{ tabId: 'dev', isActive: true }]
   let browserOpen = opts.browserOpen ?? true
   let made = 0
-  const addTab = () => {
+  const addTab = (isActive = true) => {
     const tabId = `r${++made}`
-    tabs = [...tabs.map(t => ({ ...t, isActive: false })), { tabId, isActive: true }]
+    tabs = isActive
+      ? [...tabs.map(t => ({ ...t, isActive: false })), { tabId, isActive: true }]
+      : [...tabs, { tabId, isActive: false }]
     return tabId
   }
   on('fs.read', (_, e) => ({ value: String(e.path) === WHOLE ? '<!doctype html><html>' : '<article><h1>x</h1></article>' }))
@@ -66,9 +70,9 @@ function standIns(on: On, opts: Opts) {
     if (e.tool === 'mcp__Claude_Browser__tabs_select')
       tabs = tabs.map(t => ({ ...t, isActive: t.tabId === e.tabId }))
     if (e.tool === 'mcp__Claude_Browser__navigate' && e.tabId === undefined) {
-      // Navigating with no tab opens the pane in a new, active tab.
+      // Navigating with no tab opens the pane in a new tab, active unless told otherwise.
       browserOpen = true
-      addTab()
+      addTab(opts.opensActive ?? true)
     }
     return { result: {} }
   })
@@ -156,6 +160,17 @@ test('pane closed: navigate opens it and the active tab becomes the reader tab',
   expect(of(seen, 'navigate').some(t => t.tabId === 'dev')).toBe(false)
 })
 
+test('pane closed: a tab that was already there is never adopted, even when it stays active', async ($, on) => {
+  const { seen } = standIns(on, { pane: true, spawn: 'ok', browserOpen: false, create: 'deny', opensActive: false })
+  await write($, DOC)
+  await write($, DOC2)
+  const navigated = of(seen, 'navigate').map(t => [t.tabId, t.url])
+  expect(navigated[0]).toEqual([undefined, URL1])
+  expect(navigated.some(([tabId]) => tabId === 'dev')).toBe(false)
+  // The tab the open made is the one adopted: the next document goes there.
+  expect(navigated).toEqual([[undefined, URL1], ['r1', URL2]])
+})
+
 test('pane open but no new tab: the dev tab is left alone and the CLI line stands in', async ($, on) => {
   const { seen } = standIns(on, { pane: true, spawn: 'ok', browserOpen: true, create: 'deny' })
   await write($, DOC)
@@ -168,6 +183,10 @@ test('two concurrent first writes start one server', async ($, on) => {
   const { seen } = standIns(on, { pane: true, spawn: 'ok' })
   await Promise.all([write($, DOC), edit($, DOC2)])
   expect(seen.spawns).toBe(1)
+  expect(of(seen, 'tabs_create').length).toBe(1)
+  const ids = of(seen, 'navigate').map(t => t.tabId)
+  expect(ids.length).toBe(2)
+  expect(ids.every(id => id === 'r1')).toBe(true)
 })
 
 test('the port the server prints is the one used', async ($, on) => {

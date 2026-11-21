@@ -248,10 +248,13 @@ async function showInPaneNow($: EngineInterface, url: string, isForced: boolean)
   // tab, which becomes the reader's. An open pane's tabs are never touched.
   if (context.browserOpen) return 'no-pane'
   if ((await browser($, 'navigate', { url })) === undefined) return 'no-pane'
-  const opened = await paneContext($)
-  const active = opened?.tabs.find(tab => tab.isActive)
-  if (active !== undefined) {
-    readerTab = active.tabId
+  // Adopt only a tab the open made: one not listed before it, the active one
+  // first. With none, the next document tries a new tab again.
+  const before = new Set(context.tabs.map(tab => tab.tabId))
+  const made = (await paneContext($))?.tabs.filter(tab => !before.has(tab.tabId)) ?? []
+  const adopted = made.find(tab => tab.isActive) ?? made[0]
+  if (adopted !== undefined) {
+    readerTab = adopted.tabId
     shownUrl = url
   }
 
