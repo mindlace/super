@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""UserPromptSubmit hook: name a conductor session after its package.
+
+A prompt of the form `/superconductor ... superconductor/<slug> ...` (or
+`/supersonic:superconductor ...`) sets the session title to
+`<slug>-conductor`, the name operators address the conductor by. Any other
+prompt produces no output. Fail-open: bad input prints nothing, exit 0.
+"""
+import json
+import re
+import sys
+
+COMMAND = re.compile(r"^\s*/(?:supersonic:)?superconductor(?:\s|$)")
+BRANCH = re.compile(r"(?<![\w/.-])superconductor/([A-Za-z0-9][A-Za-z0-9._-]*)")
+
+
+def title_for(prompt):
+    if not COMMAND.match(prompt):
+        return None
+    m = BRANCH.search(prompt)
+    if not m:
+        return None
+    return m.group(1).rstrip(".") + "-conductor"
+
+
+def main():
+    try:
+        prompt = json.load(sys.stdin).get("prompt") or ""
+    except Exception:
+        return
+    title = title_for(prompt)
+    if title:
+        json.dump(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "sessionTitle": title,
+                }
+            },
+            sys.stdout,
+        )
+
+
+if __name__ == "__main__":
+    main()

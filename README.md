@@ -42,7 +42,7 @@ For local development, add the checkout as a directory marketplace instead:
   ```
 
 - A trusted repo. `claude --bg` refuses to start in a directory whose workspace trust prompt has never been accepted, so open `claude` in the repo once, accept the prompt and exit before the first run.
-- A named conductor. Operators message the conductor by name, so start it as an interactive session with `claude -n <design-slug>-conductor`, then invoke `supersonic:superconductor` in it. Under any other name, operator messages do not reach it.
+- A named conductor. Operators message the conductor by name, so start it in an interactive session by typing `/superconductor work on superconductor/<design-slug>` (or `/supersonic:superconductor …`). The plugin's `UserPromptSubmit` hook sees the `superconductor/<design-slug>` branch in that prompt and names the session `<design-slug>-conductor`. If you start it any other way, run `/rename <design-slug>-conductor`. Under any other name, operator messages do not reach it.
 - On machines where `claude` adds a permission hook, launch lines carry `--permission-mode` and `--allowedTools`. The skills' launch lines already include both; keep them when you edit a line.
 - Conductor commands allowed without a prompt. A permission prompt in the conductor waits on you and holds every bound in the run, so allow its commands in the project's `.claude/settings.json`. With `<dir>` the installed `supersonic` plugin's `skills/superconductor` directory, the entries and what each one really admits:
   - `"Bash(sh <dir>/beat.sh:*)"`: the heartbeat, the timer and the fork time limit. Its `fork` subcommand runs whatever command follows it, so this entry admits any command.

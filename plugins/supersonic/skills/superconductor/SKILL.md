@@ -6,7 +6,9 @@ description: Use when executing or resuming a multi-spec build whose composition
 # Superconductor
 
 Conduct the score; supersonic:supercomposer composes it. You are the
-conductor: a session your partner starts as `claude -n <design-slug>-conductor`.
+conductor: a session your partner starts with `/superconductor work on
+superconductor/<design-slug>`, which the plugin's hook names
+`<design-slug>-conductor`.
 You consume a committed **composition package** — design doc, specs,
 traceability and coverage tables, and the build graph — start one operator
 session per build unit to plan and implement it via superpowers, admit units
@@ -47,8 +49,8 @@ re-reads.
   a message that only reports, so every message you send ends in an
   imperative (templates in `## Supervision`). Operators reach you by your
   name, `<design-slug>-conductor`: if this session runs under another name,
-  their messages do not reach you, so tell your partner to restart it with
-  `claude -n <design-slug>-conductor`.
+  their messages do not reach you, so tell your partner to run
+  `/rename <design-slug>-conductor`.
 - **Operators are sessions started from their assignment file.** Each one is
   a `claude --bg` session whose prompt is `operator-briefing.md` (in this
   skill's directory) verbatim plus its `## Your assignment` block (Phase 2).
