@@ -4,13 +4,14 @@ set -eu
 root="$(cd "$(dirname "$0")/.." && pwd)"
 d="$root/plugins/supersonic/skills"
 fail() { echo "FAIL: $1"; exit 1; }
-for f in superconductor/SKILL.md superconductor/operator-briefing.md superconductor/budget.sh superconductor/beat.sh supercomposer/SKILL.md supercomposer/composer-forks.md supercomposer/spec-format.md; do
+for f in superconductor/SKILL.md superconductor/operator-briefing.md superconductor/budget.sh superconductor/beat.sh superconductor/records.sh supercomposer/SKILL.md supercomposer/composer-forks.md supercomposer/spec-format.md; do
   test -f "$d/$f" || fail "missing $f"
 done
 test ! -e "$d/superconductor/executable_budget.sh" || fail "chezmoi executable_ prefix must be gone"
 mode=$(git -C "$root" ls-files -s plugins/supersonic/skills/superconductor/budget.sh | cut -c1-6)
 [ "$mode" = "100755" ] || fail "budget.sh must be committed 0755, got $mode"
 test -x "$d/superconductor/beat.sh" || fail "beat.sh missing or not executable"
+test -x "$d/superconductor/records.sh" || fail "records.sh missing or not executable"
 desc=$(sed -n 's/^description: //p' "$d/superconductor/SKILL.md")
 [ "${#desc}" -le 500 ] || fail "superconductor description over 500 chars"
 desc=$(sed -n 's/^description: //p' "$d/supercomposer/SKILL.md")
