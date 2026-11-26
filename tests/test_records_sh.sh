@@ -6,7 +6,7 @@ set -u
 root="$(cd "$(dirname "$0")/.." && pwd)"
 src="$root/plugins/supersonic/skills/superconductor/records.sh"
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/records-test.XXXXXX") || exit 1
-trap 'rm -rf "$tmp"' EXIT
+trap 'chmod -R u+w "$tmp" 2>/dev/null; rm -rf "$tmp"' EXIT
 fail() { echo "FAIL: records.sh: $1"; exit 1; }
 
 [ -f "$src" ] || fail "script missing: $src"
@@ -56,25 +56,48 @@ grep -q 'records.sh: not in a git repository' "$tmp/err" || fail "outside repo m
 # --- migrate ---
 old="${common%/.git}/.superpowers/superconductor/des"
 mkdir -p "$old/assignments" "$old/prompts" "$old/surveys"
+echo c > "$old/surveys/café.md"
 echo "dir $old here" > "$old/ledger.md"
 printf -- '- Ledger: %s/ledger.md\n' "$old" > "$old/assignments/u.md"
 echo p > "$old/prompts/p.md"
 echo s > "$old/surveys/s.md"
-git -C "$main" add -f ".superpowers/superconductor/des/surveys/s.md"
+git -C "$main" add -f ".superpowers/superconductor/des/surveys/s.md" ".superpowers/superconductor/des/surveys/café.md"
 git -C "$main" -c user.name=t -c user.email=t@t commit -q -m survey
 new="$tmp/h/superconductor/$key/des"
 m=$(cd "$pkg" && r migrate des) || fail "migrate exit"
-[ "$m" = "migrated 4 files from $old; 1 tracked left" ] || fail "migrate line: '$m'"
-for f in ledger.md assignments/u.md prompts/p.md surveys/s.md; do
+[ "$m" = "migrated 5 files from $old; 2 tracked left" ] || fail "migrate line: '$m'"
+for f in ledger.md assignments/u.md prompts/p.md surveys/s.md surveys/café.md; do
   [ -f "$new/$f" ] || fail "migrated $f missing"
 done
 grep -qF "$new" "$new/ledger.md" && ! grep -qF "$old" "$new/ledger.md" || fail "ledger path not rewritten"
 grep -qF "$new/ledger.md" "$new/assignments/u.md" && ! grep -qF "$old" "$new/assignments/u.md" || fail "assignment path not rewritten"
 [ -f "$old/surveys/s.md" ] || fail "tracked file removed from old"
+[ -f "$old/surveys/café.md" ] || fail "tracked non-ASCII file removed from old"
 [ ! -e "$old/prompts" ] || fail "prompts/ remains"
 [ ! -e "$old/ledger.md" ] || fail "old ledger remains"
 m2=$(cd "$pkg" && r migrate des); [ -z "$m2" ] || fail "second migrate printed '$m2'"
 m3=$(cd "$pkg" && r migrate other); [ -z "$m3" ] || fail "migrate other printed '$m3'"
+
+# failed rewrite: nothing is deleted, exit 1, the half copy is dropped
+oldb="${common%/.git}/.superpowers/superconductor/bad"
+mkdir -p "$oldb/assignments"
+echo x > "$oldb/ledger.md"; echo y > "$oldb/assignments/u.md"
+chmod 0444 "$oldb/assignments/u.md"
+(cd "$pkg" && r migrate bad) >/dev/null 2>&1; rc=$?
+chmod 0644 "$oldb/assignments/u.md"
+[ "$rc" != 0 ] || fail "failed rewrite exited 0"
+[ -f "$oldb/ledger.md" ] && [ -f "$oldb/assignments/u.md" ] || fail "failed rewrite deleted originals"
+[ ! -e "$tmp/h/superconductor/$key/bad" ] || fail "failed rewrite left the copy"
+
+# relative SUPERSONIC_HOME is rejected by every command, creating nothing
+for w in "$main" "$pkg"; do
+  for c in des "migrate des" check; do
+    (cd "$w" && SUPERSONIC_HOME=rel sh "$src" $c) >/dev/null 2>"$tmp/err"; rc=$?
+    [ "$rc" = 2 ] || fail "relative home '$c' exit $rc, want 2"
+    grep -q 'SUPERSONIC_HOME must be an absolute path' "$tmp/err" || fail "relative home message for '$c'"
+  done
+  [ ! -e "$w/rel" ] || fail "relative home created $w/rel"
+done
 
 # --- check ---
 settings="$HOME/.claude/settings.json"

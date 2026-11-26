@@ -24,6 +24,9 @@ home_dir() {
   printf '%s\n' "$h"
 }
 
+case "${SUPERSONIC_HOME:-/}" in /*) ;; *)
+  echo "records.sh: SUPERSONIC_HOME must be an absolute path" >&2; exit 2 ;; esac
+
 valid_slug() { printf '%s\n' "$1" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]*$'; }
 
 # Sets main (the main checkout) and rdir (the records directory), or exits 1.
@@ -68,9 +71,19 @@ migrate)
   mkdir -p "$rdir" && cp -R "$old/." "$rdir/" || { echo "records.sh: copy failed" >&2; exit 1; }
   for f in "$rdir/ledger.md" "$rdir"/assignments/*.md; do
     [ -f "$f" ] || continue
-    OLD=$old NEW=$rdir perl -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/g' "$f"
+    OLD=$old NEW=$rdir perl -e '
+      my ($f, $o, $n) = @ARGV;
+      open my $in, "<", $f or die "$f: $!\n"; local $/; my $t = <$in>; close $in;
+      $t =~ s/\Q$o\E/$n/g;
+      open my $out, ">", $f or die "$f: $!\n"; print $out $t; close $out or die "$f: $!\n";
+    ' "$f" "$old" "$rdir" || rewrite_failed=1
   done
-  tracked=$(git -C "$main" ls-files -- ".superpowers/superconductor/$2")
+  if [ -n "${rewrite_failed:-}" ]; then
+    chmod -R u+w "$rdir" 2>/dev/null; rm -rf "$rdir"
+    echo "records.sh: could not rewrite paths in the copy; nothing removed from $old" >&2
+    exit 1
+  fi
+  tracked=$(git -C "$main" -c core.quotePath=false ls-files -- ".superpowers/superconductor/$2")
   n=0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
