@@ -89,6 +89,17 @@ chmod 0644 "$oldb/assignments/u.md"
 [ -f "$oldb/ledger.md" ] && [ -f "$oldb/assignments/u.md" ] || fail "failed rewrite deleted originals"
 [ ! -e "$tmp/h/superconductor/$key/bad" ] || fail "failed rewrite left the copy"
 
+# failed copy: an unreadable file in the old dir; nothing is deleted, exit 1, the partial copy is dropped
+oldc="${common%/.git}/.superpowers/superconductor/cp"
+mkdir -p "$oldc"
+echo x > "$oldc/ledger.md"; echo y > "$oldc/secret.md"
+chmod 0000 "$oldc/secret.md"
+(cd "$pkg" && r migrate cp) >/dev/null 2>&1; rc=$?
+chmod 0644 "$oldc/secret.md"
+[ "$rc" != 0 ] || fail "failed copy exited 0"
+[ -f "$oldc/ledger.md" ] && [ -f "$oldc/secret.md" ] || fail "failed copy deleted originals"
+[ ! -e "$tmp/h/superconductor/$key/cp" ] || fail "failed copy left the partial copy"
+
 # relative SUPERSONIC_HOME is rejected by every command, creating nothing
 for w in "$main" "$pkg"; do
   for c in des "migrate des" check; do

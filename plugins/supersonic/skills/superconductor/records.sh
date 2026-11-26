@@ -68,7 +68,11 @@ migrate)
   resolve "$2"
   old="$main/.superpowers/superconductor/$2"
   [ ! -f "$rdir/ledger.md" ] && [ -f "$old/ledger.md" ] || exit 0
-  mkdir -p "$rdir" && cp -R "$old/." "$rdir/" || { echo "records.sh: copy failed" >&2; exit 1; }
+  mkdir -p "$rdir" && cp -R "$old/." "$rdir/" || {
+    chmod -R u+w "$rdir" 2>/dev/null; rm -rf "$rdir"
+    echo "records.sh: copy failed; nothing removed from $old" >&2
+    exit 1
+  }
   for f in "$rdir/ledger.md" "$rdir"/assignments/*.md; do
     [ -f "$f" ] || continue
     OLD=$old NEW=$rdir perl -e '

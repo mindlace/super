@@ -206,7 +206,7 @@ forbid 'skip steps 1-6'
 forbid 'skip steps 1-3'
 # After step 6 is done the fresh operator is an ordinary unit, restarted if it died (N-1).
 need 'until the ledger holds that replacement'"'"'s `- replacing <unit-slug> for <id>: step 6 done` line'
-need 'Once step 6 is done, the fresh operator is an ordinary unit: if it is dead, restart it here'
+need "Once Replacing an operator's step 6 is done, the fresh operator is an ordinary unit: if it is dead, restart it here"
 need 'once step 6 is done, it is an ordinary unit, which Phase 0 restarts like any other if it dies'
 need 'and step 6'"'"'s done line'
 # A rule commit with no ruling file is undone with a fixed subject, independent of revert config (I-2, N-4, N-5).
@@ -243,7 +243,7 @@ need 'It never waits longer'
 need 'so a `failed` entry still listed blocks nothing'
 need 'unless step 1'"'"'s stop left a `:live` entry listed or could not read the list'
 # Round 7: one definition of alive, asked through beat.sh, everywhere.
-need '- `alive` (a live entry is listed under its name): it launched. Launch nothing; record it and go on with step 5.'
+need '- `alive` (a live entry is listed under its name): it launched. Launch nothing; record it and go on with Phase 2'\''s Starting an operator, step 5.'
 need '- `failed` (only failed entries are listed): stop them'
 need 'Step 3 ledgers the `launching` line before the launch, so a launch a dead conductor made shows as a `launching` line on the report'
 need 'If the report shows its session `alive`, Phase 0 already launched it from its `launching` line: launch nothing. If it shows `failed`, stop the failed entries first'
@@ -520,4 +520,9 @@ need 'write question files under'
 need 'additionalDirectories'
 forbid '<project>/.superpowers/superconductor'
 forbid 'If `.superpowers/superconductor/<design-slug>/ledger.md` exists'
+need "Phase 2's Starting an operator, steps 4-5"
+need "go on with Phase 2's Starting an operator, step 5"
+need "Hand-back siblings, step 4, skips each notice"
+# Phase 0's reconciliation material nests under step 4
+grep -q '^   - \*\*Package worktree\.\*\*' "$skill" || { echo "FAIL: Phase 0 reconciliation not nested under step 4"; exit 1; }
 echo "PASS: SKILL.md structure"

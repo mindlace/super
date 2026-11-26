@@ -96,150 +96,150 @@ re-reads.
    <ledger path>: write question files under <ledger dir>/questions/ from
    now on. Reply ack."
 4. If `<ledger dir>/ledger.md` exists, reconcile it against reality before
-   anything else: `claude agents --json`, `git worktree list`,
-`git branch --list`, the integration branch's log, and each unit's SDD
-ledger under `.superpowers/sdd/` in its worktree. Reconcile the package
-worktree first: a restart merges the integration branch into the unit's
-branch, so that branch must hold only tested work.
+      anything else: `claude agents --json`, `git worktree list`,
+   `git branch --list`, the integration branch's log, and each unit's SDD
+   ledger under `.superpowers/sdd/` in its worktree. Reconcile the package
+   worktree first: a restart merges the integration branch into the unit's
+   branch, so that branch must hold only tested work.
 
-- **What the last conductor left running.** Run `sh <skill dir>/beat.sh
-  <ledger dir> resume`: it stops the last conductor's heartbeat timer,
-  whose exit would wake no one, and restarts every unit's beat file from
-  its branch head and drops every open status ask, so no ask or quiet spell
-  the dead conductor left is acted on. Then run its report
-  once, `sh <skill dir>/beat.sh <ledger dir>`: its lines give each unit's
-  session, rung and pending restart, and each fork's state, for the steps
-  below. Then take each fork
-  with a `- fork <name> started` line and no later `- fork <name> exited`
-  line:
-  - An amending fork (`rule-<id>`, `graph-<id>`) would race the package
-    worktree cleanup below and every merge, so stop it: `sh <skill
-    dir>/beat.sh <ledger dir> stop-fork <name>`, which sends TERM to its
-    process group, waits, escalates to KILL and clears a lock a killed
-    `git commit` left. Ledger `- fork <name> exited: stopped at resume`. A
-    fork stopped here counts as no attempt: the bullets below start it
-    again from what it left.
-  - A read-only fork (`review-…`, `checkpoint-<n>`) writes nothing to the
-    package: leave it running. If its output already exists, handle it as
-    When a fork exits (`## Composer forks`) now; otherwise the heartbeat
-    handles its exit.
-- **Package worktree.** If `git -C <package worktree> status` shows a merge
-  in progress, run `git -C <package worktree> merge --abort`. If it shows a
-  revert in progress, run `git -C <package worktree> revert --abort`, which
-  takes out the reverts that sequence already committed; routing its ruling
-  again (Routing, below), or the Questions bullet for an `unrule` revert,
-  does that revert again. Uncommitted edits there are
-  a dead fork's: discard them (`git -C <package worktree> checkout -- .` and `git
-  -C <package worktree> clean -fd`). Revert commits of cut work at the
-  branch's head (subject `Revert "…"`, which Replacing an operator, step 4,
-  guarantees by running with `revert.reference` off) with no `- reverted`
-  line were never tested (a
-  `docs(<design-slug>): unrule <id>` commit is not one: the Questions
-  bullet ledgers it): run the suite and ledger the
-  `- reverted` line with its result; a failing suite is a question
-  (`## Composer forks`, Replacing an operator, step 4). A merge commit on
-  the integration branch with no `## Integration` line was never tested:
-  run the suite (`## Integration`, step 2) and ledger it if it passes. Such
-  a merge is the branch's head, since each merge is ledgered before the
-  next: if the suite fails, take it out with `git -C <package worktree>
-  reset --hard <merge sha>^1` and send the fix round as `## Integration`,
-  step 4, says.
+   - **What the last conductor left running.** Run `sh <skill dir>/beat.sh
+     <ledger dir> resume`: it stops the last conductor's heartbeat timer,
+     whose exit would wake no one, and restarts every unit's beat file from
+     its branch head and drops every open status ask, so no ask or quiet spell
+     the dead conductor left is acted on. Then run its report
+     once, `sh <skill dir>/beat.sh <ledger dir>`: its lines give each unit's
+     session, rung and pending restart, and each fork's state, for the steps
+     below. Then take each fork
+     with a `- fork <name> started` line and no later `- fork <name> exited`
+     line:
+     - An amending fork (`rule-<id>`, `graph-<id>`) would race the package
+       worktree cleanup below and every merge, so stop it: `sh <skill
+       dir>/beat.sh <ledger dir> stop-fork <name>`, which sends TERM to its
+       process group, waits, escalates to KILL and clears a lock a killed
+       `git commit` left. Ledger `- fork <name> exited: stopped at resume`. A
+       fork stopped here counts as no attempt: the bullets below start it
+       again from what it left.
+     - A read-only fork (`review-…`, `checkpoint-<n>`) writes nothing to the
+       package: leave it running. If its output already exists, handle it as
+       When a fork exits (`## Composer forks`) now; otherwise the heartbeat
+       handles its exit.
+   - **Package worktree.** If `git -C <package worktree> status` shows a merge
+     in progress, run `git -C <package worktree> merge --abort`. If it shows a
+     revert in progress, run `git -C <package worktree> revert --abort`, which
+     takes out the reverts that sequence already committed; routing its ruling
+     again (Routing, below), or the Questions bullet for an `unrule` revert,
+     does that revert again. Uncommitted edits there are
+     a dead fork's: discard them (`git -C <package worktree> checkout -- .` and `git
+     -C <package worktree> clean -fd`). Revert commits of cut work at the
+     branch's head (subject `Revert "…"`, which Replacing an operator, step 4,
+     guarantees by running with `revert.reference` off) with no `- reverted`
+     line were never tested (a
+     `docs(<design-slug>): unrule <id>` commit is not one: the Questions
+     bullet ledgers it): run the suite and ledger the
+     `- reverted` line with its result; a failing suite is a question
+     (`## Composer forks`, Replacing an operator, step 4). A merge commit on
+     the integration branch with no `## Integration` line was never tested:
+     run the suite (`## Integration`, step 2) and ledger it if it passes. Such
+     a merge is the branch's head, since each merge is ledgered before the
+     next: if the suite fails, take it out with `git -C <package worktree>
+     reset --hard <merge sha>^1` and send the fix round as `## Integration`,
+     step 4, says.
 
-A unit whose newest `## Units` line reads `launching` was ledgered by Phase
-2, Starting an operator, step 3, and its launch may never have happened.
-The report prints a line for it, and its `session` field decides
-(`## Supervision`, Heartbeat):
-- `alive` (a live entry is listed under its name): it launched. Launch
-  nothing; record it and go on with step 5.
-- `failed` (only failed entries are listed): stop them (`## Supervision`,
-  Stopping an operator, with `failed`), then launch it with steps 4-5.
-- `absent`: launch it with steps 4-5.
-- `unknown` (the session list is unreadable): launch nothing now; the
-  heartbeat's `launching` rule (`## Supervision`, Heartbeat) finishes it on
-  a later beat.
+   A unit whose newest `## Units` line reads `launching` was ledgered by Phase
+   2, Starting an operator, step 3, and its launch may never have happened.
+   The report prints a line for it, and its `session` field decides
+   (`## Supervision`, Heartbeat):
+   - `alive` (a live entry is listed under its name): it launched. Launch
+     nothing; record it and go on with Phase 2's Starting an operator, step 5.
+   - `failed` (only failed entries are listed): stop them (`## Supervision`,
+     Stopping an operator, with `failed`), then launch it with Phase 2's Starting an operator, steps 4-5.
+   - `absent`: launch it with Phase 2's Starting an operator, steps 4-5.
+   - `unknown` (the session list is unreadable): launch nothing now; the
+     heartbeat's `launching` rule (`## Supervision`, Heartbeat) finishes it on
+     a later beat.
 
-When you launch it, keep its assignment as written,
-except that `Plan:` names a plan its own SDD workspace already holds
-(`## Supervision`, Operator death, step 1); step 5 takes its status from
-the assignment's `Admitted:` line. This is a first launch, not a restart,
-and counts no death. Launch no member of a family that a ruling still to
-be routed replaces (below): routing stops and cuts it. For a hand-back
-sibling `<unit-slug>-<k>`, also finish Hand-back siblings, steps 3-4
-(`## Supervision`), unless `<unit-slug>`'s line no longer lists the
-sibling's rows under `produces:`; step 4 skips each notice a `notified`
-line records.
+   When you launch it, keep its assignment as written,
+   except that `Plan:` names a plan its own SDD workspace already holds
+   (`## Supervision`, Operator death, step 1); Phase 2's Starting an operator, step 5, takes its status from
+   the assignment's `Admitted:` line. This is a first launch, not a restart,
+   and counts no death. Launch no member of a family that a ruling still to
+   be routed replaces (below): routing stops and cuts it. For a hand-back
+   sibling `<unit-slug>-<k>`, also finish Hand-back siblings, steps 3-4
+   (`## Supervision`), unless `<unit-slug>`'s line no longer lists the
+   sibling's rows under `produces:`; Hand-back siblings, step 4, skips each notice a `notified`
+   line records.
 
-Then, for every unit whose ledger status is planning or admitted, or
-whose fix round is open (`## Integration`, step 4):
+   Then, for every unit whose ledger status is planning or admitted, or
+   whose fix round is open (`## Integration`, step 4):
 
-- **The report shows its session alive** (listed under its name and not
-  `failed`; Phase 0's first report): live. Keep it. Never
-  start a second session under a live name. Send it the resume status ask
-  (`## Supervision`) and record it (`sh <skill dir>/beat.sh <ledger dir> asked
-  <unit-slug>`); its reply and the messages it sends again may carry a
-  `plan ready`, hand-back, question or `complete` the last conductor never
-  saw, and the heartbeat finds its unreported rows.
-- **The report shows it `absent` or `failed`: dead.** Handle it at once, without asking, as
-  `## Supervision`, Operator death, says, on the rung that report prints
-  for it, so a death the last conductor was already handling resumes on
-  the same rung. A restart refreshes its assignment's
-  `Plan:` from the plan it already wrote, brings its branch up to date,
-  launches it with the same name in its existing worktree, and sends it
-  again the relays, notices and fix round it was sent. Its SDD ledger
-  makes mid-plan resume cheap. Restart no member of a family that a
-  ruling still to be routed (Routing, below) replaces, until the ledger
-  holds that replacement's `- replacing <unit-slug> for <id>: step 6 done`
-  line: its `## Affected units` names a member's `first task that no longer
-  holds`, and routing replaces the family. Reading that ruling for this is
-  part of routing it. Once step 6 is done, the fresh operator is an
-  ordinary unit: if it is dead, restart it here.
+   - **The report shows its session alive** (listed under its name and not
+     `failed`; Phase 0's first report): live. Keep it. Never
+     start a second session under a live name. Send it the resume status ask
+     (`## Supervision`) and record it (`sh <skill dir>/beat.sh <ledger dir> asked
+     <unit-slug>`); its reply and the messages it sends again may carry a
+     `plan ready`, hand-back, question or `complete` the last conductor never
+     saw, and the heartbeat finds its unreported rows.
+   - **The report shows it `absent` or `failed`: dead.** Handle it at once, without asking, as
+     `## Supervision`, Operator death, says, on the rung that report prints
+     for it, so a death the last conductor was already handling resumes on
+     the same rung. A restart refreshes its assignment's
+     `Plan:` from the plan it already wrote, brings its branch up to date,
+     launches it with the same name in its existing worktree, and sends it
+     again the relays, notices and fix round it was sent. Its SDD ledger
+     makes mid-plan resume cheap. Restart no member of a family that a
+     ruling still to be routed (Routing, below) replaces, until the ledger
+     holds that replacement's `- replacing <unit-slug> for <id>: step 6 done`
+     line: its `## Affected units` names a member's `first task that no longer
+     holds`, and routing replaces the family. Reading that ruling for this is
+     part of routing it. Once Replacing an operator's step 6 is done, the fresh operator is an
+     ordinary unit: if it is dead, restart it here.
 
-Then reconcile the rest of what a conductor that ended mid-run can leave
-behind. The package worktree has one writer at a time (`## Composer forks`,
-One writer): Phase 0 finishes all routing, the build-graph forks it runs
-included, before it starts or restarts any other fork that writes the
-package worktree, and before it merges anything, a row report or
-`complete` in a status reply included.
+   Then reconcile the rest of what a conductor that ended mid-run can leave
+   behind. The package worktree has one writer at a time (`## Composer forks`,
+   One writer): Phase 0 finishes all routing, the build-graph forks it runs
+   included, before it starts or restarts any other fork that writes the
+   package worktree, and before it merges anything, a row report or
+   `complete` in a status reply included.
 
-- **Routing.** Route each ruling the last conductor did not finish, one at
-  a time in the order its questions were filed (`## Composer forks`, When an
-  adjudication fork exits). A ruling with a `routing <id>` line and no
-  `routed <id>` line is routed again from the top: every step skips what the
-  ledger shows done (Routing again). A question whose `rulings/<id>.md`
-  exists but whose `## Questions` line does not yet end with its `(commit
-  <sha|none>, changes contract: yes|no)` part is a ruling whose fork exited
-  while no conductor ran: route it. A question line that ends with that
-  part and has no `routing <id>` line was routed in full.
-- **Questions.** Once routing is finished, take each question with no
-  `rulings/<id>.md`, one at a time in the order filed. If its fork committed
-  before it died, take that commit out first, so the fork rules on the
-  package without its own half-made amendment. That commit is the one
-  `git -C <package worktree> log -1 --format=%H
-  --grep='^docs(<design-slug>): rule <id>$'` prints (the subject the
-  adjudication fork commits with, matched whole), unless `git -C <package
-  worktree> log --format=%H --grep='^docs(<design-slug>): unrule <id>$'
-  <that sha>..HEAD` prints a commit that already undid it, or the ledger
-  has a `routed unrule-<id>` line: that ruling took the amendment out.
-  Otherwise undo it, before anything else merges in Phase 0, with `git -C
-  <package worktree> revert --no-commit <that sha>`, then `git -C <package
-  worktree> commit -m "docs(<design-slug>): unrule <id>"`, and ledger `-
-  unruled <that sha> for <id>: no ruling file` unless that line is there.
-  If the revert conflicts, run `git -C <package worktree> revert --abort`.
-  If `## Questions` lists `unrule-<id>`, it is queued like any question.
-  Otherwise write `<ledger dir>/questions/unrule-<id>.md` in the question
-  form, its `## Question` reading "Commit `<that sha>` amended the package
-  for question `<id>` and has no ruling; take its amendment out as
-  current-state text.", file it, and start that fork first. `<id>`'s fork
-  waits until `unrule-<id>` is routed. Then start `<id>`'s adjudication
-  fork again.
-- **Merge reviews.** For each `## Integration` merge line with neither a
-  `No drift @ <sha>` line nor a `merge-<unit-slug>-<short-sha>` question,
-  start its merge-review fork.
+   - **Routing.** Route each ruling the last conductor did not finish, one at
+     a time in the order its questions were filed (`## Composer forks`, When an
+     adjudication fork exits). A ruling with a `routing <id>` line and no
+     `routed <id>` line is routed again from the top: every step skips what the
+     ledger shows done (Routing again). A question whose `rulings/<id>.md`
+     exists but whose `## Questions` line does not yet end with its `(commit
+     <sha|none>, changes contract: yes|no)` part is a ruling whose fork exited
+     while no conductor ran: route it. A question line that ends with that
+     part and has no `routing <id>` line was routed in full.
+   - **Questions.** Once routing is finished, take each question with no
+     `rulings/<id>.md`, one at a time in the order filed. If its fork committed
+     before it died, take that commit out first, so the fork rules on the
+     package without its own half-made amendment. That commit is the one
+     `git -C <package worktree> log -1 --format=%H
+     --grep='^docs(<design-slug>): rule <id>$'` prints (the subject the
+     adjudication fork commits with, matched whole), unless `git -C <package
+     worktree> log --format=%H --grep='^docs(<design-slug>): unrule <id>$'
+     <that sha>..HEAD` prints a commit that already undid it, or the ledger
+     has a `routed unrule-<id>` line: that ruling took the amendment out.
+     Otherwise undo it, before anything else merges in Phase 0, with `git -C
+     <package worktree> revert --no-commit <that sha>`, then `git -C <package
+     worktree> commit -m "docs(<design-slug>): unrule <id>"`, and ledger `-
+     unruled <that sha> for <id>: no ruling file` unless that line is there.
+     If the revert conflicts, run `git -C <package worktree> revert --abort`.
+     If `## Questions` lists `unrule-<id>`, it is queued like any question.
+     Otherwise write `<ledger dir>/questions/unrule-<id>.md` in the question
+     form, its `## Question` reading "Commit `<that sha>` amended the package
+     for question `<id>` and has no ruling; take its amendment out as
+     current-state text.", file it, and start that fork first. `<id>`'s fork
+     waits until `unrule-<id>` is routed. Then start `<id>`'s adjudication
+     fork again.
+   - **Merge reviews.** For each `## Integration` merge line with neither a
+     `No drift @ <sha>` line nor a `merge-<unit-slug>-<short-sha>` question,
+     start its merge-review fork.
 
-Then run one beat (`## Supervision`, Heartbeat), which starts the
-heartbeat timer if anything can move, post your partner one summary of the
-true state (not a question), and continue from whichever phase the ledger
-shows incomplete.
+   Then run one beat (`## Supervision`, Heartbeat), which starts the
+   heartbeat timer if anything can move, post your partner one summary of the
+   true state (not a question), and continue from whichever phase the ledger
+   shows incomplete.
 
 ## Phase 1 — Package intake
 
@@ -476,7 +476,7 @@ is done: go on from step 2.
      this step's command and the longer list, same name, worktree and
      model, unless the stop left a live entry listed or could not read the
      list (Stopping an operator): then launch nothing this time, and the
-     next beat finds the unit `restart pending` and launches it then. Then record its session (step 5's `launched`), run
+     next beat finds the unit `restart pending` and launches it then. Then record its session (Phase 2's Starting an operator, step 5's `launched`), run
      `sh <skill dir>/beat.sh <ledger dir> seen <unit-slug>` and send it again what it was sent (Heartbeat, Resends),
      which ends with its `resent to` line; until then the report shows it
      `restart pending`, and a death in between launches it again with no
@@ -579,7 +579,7 @@ yourself for anything it prints.
     field, exactly as Phase 0's `launching` paragraph says: `absent`,
     launch it (Phase 2, Starting an operator, steps 4-5); `failed`, stop the
     failed entries (Stopping an operator, with `failed`), then launch it;
-    `alive`, launch nothing and record it (step 5); `unknown`, act on the
+    `alive`, launch nothing and record it (Phase 2's Starting an operator, step 5); `unknown`, act on the
     next beat. The report decides afresh each time, so this is safe to run
     again after a death. Its worktree
     is the one its `## Units` line names (`worktree <path>, start`), else
