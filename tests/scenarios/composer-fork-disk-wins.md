@@ -2,7 +2,7 @@
 
 You were started from the checkpoint of the `simstep` package to rule on one question. You are
 already in the package worktree `/work/simstep-pkg`; the ledger dir is
-`/work/simstep-pkg/.superpowers/superconductor/simstep`.
+`/Users/p/.supersonic/superconductor/-work-sim/simstep`.
 
 From the checkpoint's own cold read of the package, earlier in this session:
 
