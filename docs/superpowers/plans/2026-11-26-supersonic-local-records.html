@@ -1,0 +1,259 @@
+<article>
+  <header>
+    <h1>Supersonic run records outside the repo: implementation plan</h1>
+    <p>Moves every composer and conductor record to <code>${SUPERSONIC_HOME:-~/.supersonic}/superconductor/&lt;repo-key&gt;/&lt;design-slug&gt;/</code> through one shipped script, and commits only the design doc, the specs and the build graph.</p>
+    <aside data-kind="note"><strong>For agentic workers</strong> REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps are checklist items; progress is kept in the workspace ledger, not in the plan.</aside>
+  </header>
+
+  <section id="sec-overview">
+    <h2>Overview</h2>
+    <dl>
+      <dt>Goal</dt>
+      <dd>The only files supersonic commits to a project are the design doc, the specs and the build graph (plus operators' own plans); every other record goes to one per-design directory outside the repo that survives <code>git clean -fdx</code> and a deleted clone.</dd>
+      <dt>Architecture</dt>
+      <dd>A new script, <code>plugins/supersonic/skills/superconductor/records.sh</code>, prints and creates the records directory, migrates an old in-repo one, and reports whether user settings cover the records home. Both skills call it once and carry the printed path as <code>&lt;ledger dir&gt;</code>, which every downstream command already takes as a value. <code>beat.sh</code> stops deriving the project from the ledger dir's position and reads it from the ledger's <code>Package worktree:</code> line instead.</dd>
+      <dt>Tech Stack</dt>
+      <dd>POSIX <code>sh</code> and <code>perl</code> with <code>JSON::PP</code> (stock macOS, as <code>beat.sh</code>), git 2.31 or newer; skill text in Markdown; grep-style shell tests run by <code>sh tests/run.sh</code>.</dd>
+      <dt>Spec</dt>
+      <dd><code>docs/superpowers/specs/2026-11-26-supersonic-local-records-design.html</code></dd>
+    </dl>
+  </section>
+
+  <section id="sec-global-constraints">
+    <h2>Global Constraints</h2>
+    <ul>
+      <li>Records directory: <code>&lt;home&gt;/superconductor/&lt;repo-key&gt;/&lt;design-slug&gt;/</code>. <code>&lt;home&gt;</code> is <code>$SUPERSONIC_HOME</code> when set, else <code>~/.supersonic</code>.</li>
+      <li><code>&lt;repo-key&gt;</code> is the output of <code>git rev-parse --path-format=absolute --git-common-dir</code> with its trailing <code>/.git</code> removed, with every non-alphanumeric character replaced by <code>-</code> (<code>/Users/a/Projects/sfhousing</code> becomes <code>-Users-a-Projects-sfhousing</code>). Every worktree of one repository, including nested package worktrees, maps to the same key.</li>
+      <li>Nothing goes under <code>~/.claude/</code> (nor <code>${CLAUDE_PLUGIN_DATA}</code>): a protected path stalls operators in acceptEdits.</li>
+      <li>The directory's contents and layout are unchanged: <code>ledger.md</code>, <code>assignments/</code>, <code>prompts/</code>, <code>questions/</code>, <code>rulings/</code>, <code>checkpoint-*.json</code>, <code>surveys/</code>, <code>timer</code>.</li>
+      <li>The composer commits exactly the design doc, the specs and the build graph. Survey reports, fresh-eyes reports, amendments' notes, briefs, the composer's helper scripts and the ledger are never committed. The conductor never copies records into a branch and never commits them.</li>
+      <li>No local git repo in the records directory.</li>
+      <li>The handoff is unchanged: the package is committed on <code>superconductor/&lt;design-slug&gt;</code> and the conductor adopts that branch.</li>
+      <li>Out of scope: <code>.superpowers/jev/</code>, <code>.superpowers/sdd/</code>, cleaning records already committed in other projects, and this repo's own <code>.gitignore</code> line <code>.superpowers/</code> (<code>tests/test_manifests.sh:34</code> requires it; leave it).</li>
+      <li>The settings line the skills and README offer is exactly <code>{ "permissions": { "additionalDirectories": ["~/.supersonic"] } }</code>, in <code>~/.claude/settings.json</code>, or <code>$CLAUDE_CONFIG_DIR/settings.json</code> when that is set. The skills edit it only after the user says yes.</li>
+      <li>Skill text is a prompt: write it as current state, no "previously" or "changed from".</li>
+      <li>supersonic version 0.7.0 in <code>plugins/supersonic/.claude-plugin/plugin.json</code>. <code>.claude-plugin/marketplace.json</code> carries no version field; leave it.</li>
+      <li>Conventional Commits; no Claude or AI attribution anywhere. Never compound <code>cd ... &amp;&amp; cmd</code>.</li>
+    </ul>
+  </section>
+
+  <section id="sec-review-focus">
+    <h2>Review Focus</h2>
+    <ul>
+      <li>A repo whose path holds a space, a dot or a hyphen: the key encodes every one of them to <code>-</code> and the directory is created. Test: <a href="#t1-s1">t1-s1</a> (encoding).</li>
+      <li>The composer in its own worktree, the conductor in the main checkout and a package worktree nested under <code>.claude/worktrees/</code> of another worktree all print the same directory, so the conductor finds the composer's ledger. Test: <a href="#t1-s1">t1-s1</a> (shared key).</li>
+      <li>A run started before 0.7.0 and resumed after: the old in-repo ledger is moved, tracked files stay, untracked copies go, paths inside the copied ledger and assignments point at the new directory, and a second resume does nothing. Tests: <a href="#t1-s1">t1-s1</a> (migrate), <a href="#t2-s1">t2-s1</a> (live operators are told).</li>
+      <li>User settings that are missing, lack <code>permissions</code>, hold invalid JSON, name <code>~/.supersonic</code> or a parent of it, or live under <code>$CLAUDE_CONFIG_DIR</code>: the check answers <code>yes</code> only when the records home is covered. Test: <a href="#t1-s1">t1-s1</a> (check).</li>
+      <li><code>beat.sh</code> with a ledger dir outside the project: units without a <code>worktree</code> field still resolve to <code>&lt;main checkout&gt;/.claude/worktrees/&lt;design-slug&gt;-&lt;unit&gt;</code>. Test: <a href="#t2-s1">t2-s1</a> (fixture moved out of the project).</li>
+    </ul>
+  </section>
+
+  <section id="sec-file-structure">
+    <h2>File Structure</h2>
+    <table id="tbl-file-structure">
+      <caption>Files this plan creates or changes</caption>
+      <thead>
+        <tr><th scope="col">Path</th><th scope="col">Responsibility</th><th scope="col">Task</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row"><code>plugins/supersonic/skills/superconductor/records.sh</code> (new, 0755)</th><td>Records path, migration of an old in-repo dir, settings check.</td><td>1</td></tr>
+        <tr><th scope="row"><code>tests/test_records_sh.sh</code> (new)</th><td>Fixture tests for <code>records.sh</code>.</td><td>1</td></tr>
+        <tr><th scope="row"><code>tests/test_supersonic_layout.sh</code></th><td>Requires <code>records.sh</code> present and executable.</td><td>1</td></tr>
+        <tr><th scope="row"><code>plugins/supersonic/skills/superconductor/beat.sh</code></th><td>Project from the ledger's <code>Package worktree:</code> line; usage comment.</td><td>2</td></tr>
+        <tr><th scope="row"><code>plugins/supersonic/skills/superconductor/SKILL.md</code></th><td>Phase 0 setup, records dir, migration; hard rule; ledger format.</td><td>2</td></tr>
+        <tr><th scope="row"><code>tests/test_beat_sh.sh</code>, <code>tests/test_skill_md.sh</code>, <code>tests/test_operator_briefing.sh</code>, <code>tests/scenarios/*.md</code></th><td>Fixture moved; new asserts; scenario paths.</td><td>2</td></tr>
+        <tr><th scope="row"><code>plugins/supersonic/skills/supercomposer/SKILL.md</code>, <code>composer-forks.md</code></th><td>C0 setup and records dir; ledger rule; surveys; C5 commit list; fork commands.</td><td>3</td></tr>
+        <tr><th scope="row"><code>tests/test_supercomposer_md.sh</code></th><td>New asserts.</td><td>3</td></tr>
+        <tr><th scope="row"><code>README.md</code>, <code>plugins/supersonic/.claude-plugin/plugin.json</code>, <code>tests/test_manifests.sh</code></th><td>Install note, allow entry, version 0.7.0.</td><td>4</td></tr>
+      </tbody>
+    </table>
+    <aside data-kind="decision"><strong>Builder's call</strong> The script is <code>records.sh</code> beside <code>beat.sh</code>, so the conductor names it as <code>&lt;skill dir&gt;/records.sh</code> and the composer as <code>&lt;supersonic plugin dir&gt;/skills/superconductor/records.sh</code>, the form <code>composer-forks.md:31</code> already uses for <code>beat.sh</code>.</aside>
+    <aside data-kind="decision"><strong>Builder's call</strong> Migration is a <code>records.sh</code> subcommand, not prose: copying, deleting only untracked originals and rewriting paths are mechanical, and a script is testable.</aside>
+  </section>
+
+  <section id="sec-task-1">
+    <h2>Task 1: records.sh</h2>
+    <ul>
+      <li>Create: <code>plugins/supersonic/skills/superconductor/records.sh</code> (mode 0755; <code>git add --chmod=+x</code>)</li>
+      <li>Create: <code>tests/test_records_sh.sh</code></li>
+      <li>Modify: <code>tests/test_supersonic_layout.sh:7-13</code> (add <code>superconductor/records.sh</code> to the file list and a <code>test -x</code> line like <code>beat.sh</code>'s)</li>
+    </ul>
+    <p><strong>Interfaces</strong></p>
+    <ul>
+      <li>Consumes: nothing.</li>
+      <li>Produces, for tasks 2 and 3 (run from any directory inside the repository's main checkout or any of its worktrees):
+        <ul>
+          <li><code>sh records.sh &lt;design-slug&gt;</code>: creates the records directory (<code>mkdir -p</code>) and prints its absolute path as the only stdout line; exit 0. A slug that is empty or not <code>^[A-Za-z0-9][A-Za-z0-9._-]*$</code> exits 2 with a usage line on stderr and creates nothing. Outside a git repository: exit 1, <code>records.sh: not in a git repository</code> on stderr.</li>
+          <li><code>sh records.sh migrate &lt;design-slug&gt;</code>: when <code>&lt;records dir&gt;/ledger.md</code> is absent and <code>&lt;main checkout&gt;/.superpowers/superconductor/&lt;design-slug&gt;/ledger.md</code> exists, copies that whole directory into the records directory, replaces every occurrence of the old directory's absolute path with the new one in the copies of <code>ledger.md</code> and <code>assignments/*.md</code>, deletes the copied originals that <code>git -C &lt;main checkout&gt; ls-files</code> does not list, removes directories left empty, and prints exactly one line <code>migrated &lt;n&gt; files from &lt;old dir&gt;; &lt;k&gt; tracked left</code>. Otherwise it prints nothing. Exit 0 either way.</li>
+          <li><code>sh records.sh check</code>: prints three lines, <code>home: &lt;absolute records home&gt;</code>, <code>settings: &lt;settings file&gt;</code> (<code>$CLAUDE_CONFIG_DIR/settings.json</code> when set, else <code>$HOME/.claude/settings.json</code>) and <code>covered: yes</code> or <code>covered: no</code>; exit 0. Covered means some entry of <code>permissions.additionalDirectories</code>, with a leading <code>~</code> expanded to <code>$HOME</code> and trailing slashes removed, equals the home or is a parent of it. A missing file, missing key or invalid JSON is <code>no</code>. Needs no git repository.</li>
+        </ul>
+      </li>
+    </ul>
+    <aside data-kind="decision"><strong>Builder's call</strong> When the common dir does not end in <code>/.git</code> (a bare repo or a submodule), the key encodes the common dir as it is: there is no main checkout to strip to, and the key stays stable.</aside>
+    <aside data-kind="decision"><strong>Builder's call</strong> Migration rewrites old paths in the copied <code>ledger.md</code> and assignment files, so a restart launched from a migrated assignment gets <code>Ledger:</code> and <code>--add-dir</code> for the new directory.</aside>
+    <ol>
+      <li id="t1-s1"><input type="checkbox"> Write <code>tests/test_records_sh.sh</code> in the style of <code>tests/test_beat_sh.sh</code> (<code>set -u</code>, a <code>mktemp -d</code> fixture removed on exit, <code>fail()</code> printing <code>FAIL: records.sh: …</code>, a final <code>echo "PASS: records.sh"</code>). Run every case with <code>HOME</code> and <code>SUPERSONIC_HOME</code> pointed into the fixture, never the real home. The fixture repo is <code>"$tmp/my proj.x"</code> with one commit, a worktree <code>"$main/.claude/worktrees/pkg"</code>, and a nested worktree <code>"$pkg/.claude/worktrees/unit"</code>. Expected key: <code>git -C "$main" rev-parse --path-format=absolute --git-common-dir</code>, minus <code>/.git</code>, through <code>sed 's/[^A-Za-z0-9]/-/g'</code> (compare against git's output, not <code>$tmp</code>, because macOS resolves <code>/var</code> to <code>/private/var</code>). Cases:
+        <ul>
+          <li><em>encoding</em>: from <code>$main</code> with <code>SUPERSONIC_HOME="$tmp/h"</code>, output is <code>$tmp/h/superconductor/&lt;expected key&gt;/des</code>, the directory exists, and the key matches <code>^-[A-Za-z0-9-]*$</code> with no <code>.</code> or space left.</li>
+          <li><em>shared key</em>: the same output from <code>$pkg</code> and from <code>$pkg/.claude/worktrees/unit</code>.</li>
+          <li><em>default home</em>: with <code>SUPERSONIC_HOME</code> unset and <code>HOME="$tmp/home"</code>, output starts <code>$tmp/home/.supersonic/superconductor/</code>.</li>
+          <li><em>bad input</em>: slugs <code>''</code>, <code>a/b</code> and <code>..</code> exit 2 and create nothing under <code>$tmp/h</code>; run from <code>$tmp</code> (not a repo) exits 1.</li>
+          <li><em>migrate</em>: in <code>$main/.superpowers/superconductor/des/</code> create <code>ledger.md</code> containing the old dir's absolute path, <code>assignments/u.md</code> with a line <code>- Ledger: &lt;old dir&gt;/ledger.md</code>, <code>prompts/p.md</code>, and a committed <code>surveys/s.md</code>. Running <code>migrate des</code> from <code>$pkg</code> prints <code>migrated 4 files from &lt;old dir&gt;; 1 tracked left</code>; all four exist in the new dir; the new <code>ledger.md</code> and <code>assignments/u.md</code> name the new dir and not the old; in the old dir only <code>surveys/s.md</code> remains and <code>prompts/</code> is gone. A second <code>migrate des</code> prints nothing. With no old ledger, <code>migrate other</code> prints nothing.</li>
+          <li><em>check</em>: no settings file gives <code>covered: no</code>; <code>{"permissions":{"additionalDirectories":["~/.supersonic"]}}</code> with default home gives <code>covered: yes</code>; <code>["~"]</code> gives <code>yes</code>; <code>["~/.supersonic-old"]</code> gives <code>no</code>; <code>not json</code> gives <code>no</code>; with <code>CLAUDE_CONFIG_DIR="$tmp/cfg"</code> the <code>settings:</code> line names <code>$tmp/cfg/settings.json</code> and only that file counts; <code>SUPERSONIC_HOME="$tmp/elsewhere"</code> with that absolute path listed gives <code>yes</code> and the <code>home:</code> line names it.</li>
+        </ul>
+      </li>
+      <li id="t1-s2"><input type="checkbox"> Add <code>records.sh</code> to <code>tests/test_supersonic_layout.sh</code>, then run both tests and see them fail.
+        <pre><code data-lang="sh">sh tests/test_records_sh.sh
+sh tests/test_supersonic_layout.sh</code></pre>
+        Expected: <code>FAIL: records.sh: …</code> (script missing) and <code>FAIL: missing superconductor/records.sh</code>.</li>
+      <li id="t1-s3"><input type="checkbox"> Implement <code>records.sh</code>: an <code>sh</code> dispatcher for <code>&lt;slug&gt;</code>, <code>migrate &lt;slug&gt;</code> and <code>check</code>, with <code>perl -MJSON::PP</code> for the settings read (the same pattern as <code>beat.sh:56</code>). Header comment: a usage block like <code>beat.sh:6-30</code>, stating the path rule from Global Constraints. The main checkout is the common dir minus <code>/.git</code>.</li>
+      <li id="t1-s4"><input type="checkbox"> Run the tests and see them pass.
+        <pre><code data-lang="sh">sh tests/test_records_sh.sh
+sh tests/test_supersonic_layout.sh</code></pre>
+        Expected: <code>PASS: records.sh</code> and <code>PASS: supersonic layout</code>.</li>
+      <li id="t1-s5"><input type="checkbox"> Commit.
+        <pre><code data-lang="sh">git add --chmod=+x plugins/supersonic/skills/superconductor/records.sh
+git add tests/test_records_sh.sh tests/test_supersonic_layout.sh
+git commit -m "feat(supersonic): records.sh resolves the run's records directory outside the repo"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-2">
+    <h2>Task 2: Conductor, beat.sh and operators</h2>
+    <ul>
+      <li>Modify: <code>plugins/supersonic/skills/superconductor/beat.sh:6</code> (usage comment), <code>:155-160</code> (<code>load</code>), <code>:176-179</code> (<code>wt</code>)</li>
+      <li>Modify: <code>plugins/supersonic/skills/superconductor/SKILL.md:34-37</code> (hard rules), <code>:62-77</code> (Phase 0 opening), <code>:1237-1239</code> (Ledger format)</li>
+      <li>Modify: <code>tests/test_beat_sh.sh:26</code>, <code>:122</code>; <code>tests/test_skill_md.sh</code> (before the final <code>echo</code>); <code>tests/test_operator_briefing.sh</code></li>
+      <li>Modify: the <code>tests/scenarios/briefing-*.md</code> and <code>conductor-*.md</code> inputs that name <code>.superpowers/superconductor</code>, not the <code>*-results.md</code> files</li>
+    </ul>
+    <p><strong>Interfaces</strong></p>
+    <ul>
+      <li>Consumes: <code>records.sh &lt;design-slug&gt;</code>, <code>records.sh migrate &lt;design-slug&gt;</code>, <code>records.sh check</code> (Task 1).</li>
+      <li>Produces: <code>beat.sh &lt;dir&gt;</code> works for a ledger dir anywhere, given a ledger with a <code>Package worktree:</code> line. The skill's <code>&lt;ledger dir&gt;</code> is the records directory.</li>
+    </ul>
+    <aside data-kind="warning"><strong>Spec/code contradiction</strong> The spec says <code>beat.sh &lt;dir&gt;</code> carries the new location "without further logic". It does not: <code>beat.sh:159</code> derives <code>$project</code> by stripping three path components from the ledger dir, and <code>wt</code> (<code>beat.sh:179</code>) builds conventional unit worktrees from it. Outside the repo that yields <code>&lt;home&gt;/superconductor</code>. This task fixes it.</aside>
+    <ol>
+      <li id="t2-s1"><input type="checkbox"> Update the tests.
+        <ul>
+          <li><code>tests/test_beat_sh.sh:26</code>: <code>d="$tmp/records home/superconductor/key/des"</code> (outside <code>$proj</code>, with a space); <code>:122</code>: drop the <code>! -path '*/.superpowers/superconductor/*'</code> clause (the ledger is no longer under <code>$proj</code>). No other assertion changes: the units <code>web</code>, <code>db</code> and <code>ops</code> have no <code>worktree</code> field, so they now prove the project comes from <code>Package worktree:</code>.</li>
+          <li><code>tests/test_skill_md.sh</code>: <code>need 'sh &lt;skill dir&gt;/records.sh check'</code>, <code>need 'sh &lt;skill dir&gt;/records.sh &lt;design-slug&gt;'</code>, <code>need 'sh &lt;skill dir&gt;/records.sh migrate &lt;design-slug&gt;'</code>, <code>need 'never copied into a branch'</code>, <code>need 'write question files under'</code>, <code>need 'additionalDirectories'</code>, <code>forbid '&lt;project&gt;/.superpowers/superconductor'</code>, <code>forbid 'If `.superpowers/superconductor/&lt;design-slug&gt;/ledger.md` exists'</code>.</li>
+          <li><code>tests/test_operator_briefing.sh</code>: <code>forbid '.superpowers/superconductor'</code>.</li>
+        </ul>
+      </li>
+      <li id="t2-s2"><input type="checkbox"> Run them and see them fail.
+        <pre><code data-lang="sh">sh tests/test_beat_sh.sh
+sh tests/test_skill_md.sh</code></pre>
+        Expected: a <code>FAIL: beat.sh: …</code> line about a conventional unit (its worktree is not found), and <code>FAIL: SKILL.md missing: sh &lt;skill dir&gt;/records.sh check</code>. <code>test_operator_briefing.sh</code> already passes: the briefing names no path (<code>operator-briefing.md:6-8</code> takes the ledger dir from the <code>Ledger:</code> line), so it needs no text change.</li>
+      <li id="t2-s3"><input type="checkbox"> Change <code>beat.sh</code>. In <code>load</code>, after reading the ledger, set <code>$project</code> from the pre-section line <code>Package worktree: &lt;path&gt;</code> (<code>$sec{""}</code>): <code>run("git", "-C", $pkg, "rev-parse", "--path-format=absolute", "--git-common-dir")</code> with a trailing <code>/.git</code> removed. With no such line, <code>wt</code> returns only the <code>worktree</code> field and otherwise an empty string. Line 6 becomes <code># Usage (&lt;dir&gt; is the ledger dir, the records directory records.sh prints):</code>.</li>
+      <li id="t2-s4"><input type="checkbox"> Change <code>SKILL.md</code>. Exact text where wording matters:
+        <ul>
+          <li>Hard rules, after the "Append to the ledger" bullet (<code>:34-37</code>), a new bullet:
+            <blockquote>- **Records stay out of git.** `&lt;ledger dir&gt;` is the run's records directory, outside the repo (Phase 0). Nothing in it is ever copied into a branch or committed: not the ledger, assignments, prompts, questions, rulings, checkpoints or surveys. The only package files a branch carries are the design doc, the specs and the build graph.</blockquote>
+          </li>
+          <li>Phase 0, replacing the opening sentence at <code>:64-65</code> ("If `.superpowers/superconductor/&lt;design-slug&gt;/ledger.md` exists in the target project for this design, reconcile it…"), and moving the <code>&lt;skill dir&gt;</code> definition now at <code>:76-77</code> up to here:
+            <blockquote>`&lt;skill dir&gt;` is this skill's directory, where `beat.sh`, `budget.sh` and `records.sh` live.<br><br>
+            1. **Setup.** Run `sh &lt;skill dir&gt;/records.sh check`. If it prints `covered: yes`, or this session's additional working directories already include the `home:` it prints, go on. Otherwise tell your partner once: "Supersonic keeps its run records in &lt;home&gt;, outside the repo. Adding it to `permissions.additionalDirectories` in &lt;settings file&gt; lets this session, its forks and its operators write there without a prompt each time. May I add it?" On yes, add the entry to that array in that file, creating the file, the `permissions` object or the array as needed and keeping every other key: `~/.supersonic` when the home is the default, else the home's absolute path. On no, say "Then each write there asks you first; answer those prompts as they come." and go on.<br>
+            2. **Records directory.** Run `sh &lt;skill dir&gt;/records.sh &lt;design-slug&gt;`. The path it prints is `&lt;ledger dir&gt;` for the whole run, and `&lt;ledger dir&gt;/ledger.md` is the ledger.<br>
+            3. **Old records.** Run `sh &lt;skill dir&gt;/records.sh migrate &lt;design-slug&gt;`. It moves a ledger dir an earlier version kept in the main checkout, leaving files git tracks for the project's own cleanup. If it prints a line, ledger it under `## Supervision` as `- records &lt;that line&gt;`, and once step 4's report shows which operators are alive, send each one: "Your ledger is now &lt;ledger path&gt;: write question files under &lt;ledger dir&gt;/questions/ from now on. Reply ack."<br>
+            4. If `&lt;ledger dir&gt;/ledger.md` exists, reconcile it against reality before anything else: …</blockquote>
+            (step 4 continues with the existing text from "<code>claude agents --json</code>, <code>git worktree list</code>, …" on.)</li>
+          <li>Ledger format, <code>:1239</code>: replace <code>`&lt;project&gt;/.superpowers/superconductor/&lt;design-slug&gt;/ledger.md`:</code> with <code>`&lt;ledger dir&gt;/ledger.md`, in the records directory Phase 0 resolves:</code>.</li>
+        </ul>
+      </li>
+      <li id="t2-s5"><input type="checkbox"> Update the scenario fixtures (manual LLM scenarios, not run by <code>tests/run.sh</code>): in each input <code>tests/scenarios/*.md</code>, replace <code>/Users/p/sim/.superpowers/superconductor/simstep</code> with <code>/Users/p/.supersonic/superconductor/-Users-p-sim/simstep</code>; Task 3 owns the composer scenarios that name <code>/work/simstep-pkg/.superpowers/superconductor/simstep</code>. Leave <code>*-results.md</code> as the record of past runs.</li>
+      <li id="t2-s6"><input type="checkbox"> Run the tests and see them pass.
+        <pre><code data-lang="sh">sh tests/test_beat_sh.sh
+sh tests/test_skill_md.sh
+sh tests/test_operator_briefing.sh
+grep -ln '/Users/p/sim/\.superpowers' tests/scenarios/*.md | grep -v results</code></pre>
+        Expected: the three <code>PASS:</code> lines, and no output from the grep.</li>
+      <li id="t2-s7"><input type="checkbox"> Commit.
+        <pre><code data-lang="sh">git add plugins/supersonic/skills/superconductor/beat.sh plugins/supersonic/skills/superconductor/SKILL.md tests/test_beat_sh.sh tests/test_skill_md.sh tests/test_operator_briefing.sh tests/scenarios
+git commit -m "feat(supersonic): conductor keeps its records outside the repo"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-3">
+    <h2>Task 3: Composer and its forks</h2>
+    <ul>
+      <li>Modify: <code>plugins/supersonic/skills/supercomposer/SKILL.md:29-32</code> (ledger hard rule), <code>:35-44</code> (C0), <code>:61-64</code> (C1 step 3), <code>:216-218</code> (C5 step 1)</li>
+      <li>Modify: <code>plugins/supersonic/skills/supercomposer/composer-forks.md:22-27</code> (<code>--add-dir</code> note), <code>:61</code> (checkpoint command), <code>:78-79</code> (<code>&lt;survey dir&gt;</code>), <code>:136</code> (adjudication <code>git add</code>)</li>
+      <li>Modify: <code>tests/test_supercomposer_md.sh</code>; <code>tests/scenarios/composer-*.md</code> (not <code>composer-results.md</code>)</li>
+    </ul>
+    <p><strong>Interfaces</strong></p>
+    <ul>
+      <li>Consumes: <code>records.sh &lt;design-slug&gt;</code> and <code>records.sh check</code> (Task 1), called as <code>sh &lt;supersonic plugin dir&gt;/skills/superconductor/records.sh</code>.</li>
+      <li>Produces: the composer's ledger at <code>&lt;ledger dir&gt;/ledger.md</code>, the same directory the conductor's Phase 0 resolves (same repo key, same slug).</li>
+    </ul>
+    <aside data-kind="decision"><strong>Builder's call</strong> The composer fixes the design slug at C0 (the <code>&lt;topic&gt;</code> its design doc's file name and the branch <code>superconductor/&lt;design-slug&gt;</code> will carry), because the ledger must exist from the first state change.</aside>
+    <aside data-kind="decision"><strong>Builder's call</strong> The checkpoint command gains <code>--add-dir="&lt;ledger dir&gt;"</code>: it reads the survey notes, which now live outside the package worktree.</aside>
+    <ol>
+      <li id="t3-s1"><input type="checkbox"> Add to <code>tests/test_supercomposer_md.sh</code>: the loop at <code>:147</code> covers <code>'Checkpoint'</code> as well; <code>grep -qF '.superpowers/superconductor'</code> on <code>$skill</code> and <code>$forks</code> fails; <code>$flat</code> must contain <code>records.sh check</code>, <code>records.sh &lt;design-slug&gt;</code>, <code>the design doc, the specs and the build graph</code> and <code>never committed</code>; <code>$flat</code> must not contain <code>survey reports worth</code>; <code>$forks</code> must contain <code>&lt;ledger dir&gt;/surveys</code>.</li>
+      <li id="t3-s2"><input type="checkbox"> Run it and see it fail.
+        <pre><code data-lang="sh">sh tests/test_supercomposer_md.sh</code></pre>
+        Expected: a <code>FAIL:</code> line, for example <code>FAIL: ## Checkpoint must pass --add-dir="&lt;ledger dir&gt;"</code> or the stale <code>.superpowers/superconductor</code> path.</li>
+      <li id="t3-s3"><input type="checkbox"> Change <code>supercomposer/SKILL.md</code>:
+        <ul>
+          <li>Hard rule (<code>:29-32</code>):
+            <blockquote>- **Append to the shared ledger after every state change** (`&lt;ledger dir&gt;/ledger.md`, in the records directory C0 resolves, outside the repo — one ledger serves composition and conduction; composition entries are the package's birth record). Nothing in `&lt;ledger dir&gt;` is ever committed: the only files this skill and its forks commit are the design doc, the specs and the build graph.</blockquote>
+          </li>
+          <li>C0, appended to the fresh-composition branch (forks skip it: they run headless and get <code>--add-dir</code>): the same Setup step as Task 2's Phase 0 step 1, with <code>sh &lt;supersonic plugin dir&gt;/skills/superconductor/records.sh check</code>, then:
+            <blockquote>Fix the design slug now: the `&lt;topic&gt;` of the design doc's file name, which C5 also uses for the branch `superconductor/&lt;design-slug&gt;`. Run `sh &lt;supersonic plugin dir&gt;/skills/superconductor/records.sh &lt;design-slug&gt;`; the path it prints is `&lt;ledger dir&gt;`. `&lt;supersonic plugin dir&gt;` is this plugin's installed directory.</blockquote>
+          </li>
+          <li>C1 step 3, first sentence: "Each agent writes its report to `&lt;ledger dir&gt;/surveys/&lt;agent&gt;.md`, and its brief requires: …".</li>
+          <li>C5 step 1:
+            <blockquote>1. **Commit the package**: the design doc and the specs, nothing else (the build-graph fork commits the build graph in step 4). Survey reports, fresh-eyes reports, briefs, helper scripts you wrote for yourself and the ledger stay in `&lt;ledger dir&gt;` and are never committed. The ledger records: package contents and commit, settled decisions, open decisions, coverage and traceability pointers.</blockquote>
+          </li>
+        </ul>
+      </li>
+      <li id="t3-s4"><input type="checkbox"> Change <code>composer-forks.md</code>: add <code>--add-dir="&lt;ledger dir&gt;"</code> after <code>--allowedTools="Read,Grep,Glob"</code> in the checkpoint command; the note at <code>:23-26</code> says the flag declares "the one directory outside the cwd that the checkpoint reads and the adjudication and merge-review forks write to"; <code>&lt;survey dir&gt;</code> becomes <code>&lt;ledger dir&gt;/surveys</code>; the adjudication prompt's "`git add` the files" becomes "`git add` the package files you amended (never anything under &lt;ledger dir&gt;)". Then in <code>tests/scenarios/composer-*.md</code> replace <code>/work/simstep-pkg/.superpowers/superconductor/simstep</code> with <code>/Users/p/.supersonic/superconductor/-work-sim/simstep</code>.</li>
+      <li id="t3-s5"><input type="checkbox"> Run the tests and see them pass.
+        <pre><code data-lang="sh">sh tests/test_supercomposer_md.sh
+grep -rn '\.superpowers/superconductor' plugins/supersonic</code></pre>
+        Expected: <code>PASS: supercomposer SKILL.md structure</code>; the grep prints only the migration source in <code>superconductor/SKILL.md</code> and <code>records.sh</code>.</li>
+      <li id="t3-s6"><input type="checkbox"> Commit.
+        <pre><code data-lang="sh">git add plugins/supersonic/skills/supercomposer tests/test_supercomposer_md.sh tests/scenarios
+git commit -m "feat(supersonic): composer commits only the package and keeps records outside the repo"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-task-4">
+    <h2>Task 4: README and version</h2>
+    <ul>
+      <li>Modify: <code>README.md</code> (<code>## Requirements</code>, the <code>supersonic</code> list and its allow entries, around <code>:39-58</code>)</li>
+      <li>Modify: <code>plugins/supersonic/.claude-plugin/plugin.json:3</code></li>
+      <li>Modify: <code>tests/test_manifests.sh</code> (before <code>echo "PASS: manifests"</code>)</li>
+    </ul>
+    <p><strong>Interfaces</strong></p>
+    <ul>
+      <li>Consumes: the records path, the settings line and <code>records.sh</code>'s subcommands (Tasks 1-3).</li>
+      <li>Produces: nothing later tasks use.</li>
+    </ul>
+    <ol>
+      <li id="t4-s1"><input type="checkbox"> In <code>tests/test_manifests.sh</code>, require that the README contains <code>"additionalDirectories": ["~/.supersonic"]</code> and <code>Bash(sh &lt;dir&gt;/records.sh:*)</code>, and that <code>plugins/supersonic/.claude-plugin/plugin.json</code> has <code>"version": "0.7.0"</code>.</li>
+      <li id="t4-s2"><input type="checkbox"> Run it and see it fail.
+        <pre><code data-lang="sh">sh tests/test_manifests.sh</code></pre>
+        Expected: a <code>FAIL:</code> line naming the README's <code>additionalDirectories</code> line.</li>
+      <li id="t4-s3"><input type="checkbox"> Add a <code>supersonic</code> requirement bullet to the README, after the 1-hour cache bullet:
+        <blockquote>- A records directory outside the repo. Each run's ledger, prompts, questions, rulings and survey reports live in `~/.supersonic/superconductor/&lt;repo-key&gt;/&lt;design-slug&gt;/` (set `SUPERSONIC_HOME` to move it); supersonic commits only the design doc, the specs and the build graph. So the conductor, its forks and its operators write there without prompts, add it to `~/.claude/settings.json`:<br>
+        ```json<br>{ "permissions": { "additionalDirectories": ["~/.supersonic"] } }<br>```<br>
+        Both skills check for it at the start and offer to add it. A run begun before 0.7.0 moves its records there when the conductor resumes it.</blockquote>
+        and to the allow-entry list: <code>- `"Bash(sh &lt;dir&gt;/records.sh:*)"`: prints and creates the records directory, moves an old in-repo one and reads the user settings; it writes only under the records home and deletes only the untracked files it moved.</code> Set <code>"version": "0.7.0"</code> in <code>plugin.json</code>.</li>
+      <li id="t4-s4"><input type="checkbox"> Run the whole suite and see it pass.
+        <pre><code data-lang="sh">sh tests/run.sh</code></pre>
+        Expected: every <code>PASS:</code> line, no <code>FAIL:</code>, exit 0 (the reader and <code>claude</code> steps may print <code>SKIP:</code>).</li>
+      <li id="t4-s5"><input type="checkbox"> Commit.
+        <pre><code data-lang="sh">git add README.md plugins/supersonic/.claude-plugin/plugin.json tests/test_manifests.sh
+git commit -m "docs(supersonic): records directory setup; release 0.7.0"</code></pre>
+      </li>
+    </ol>
+  </section>
+
+  <section id="sec-open-questions">
+    <h2>Open questions</h2>
+    <p>None for the partner. The calls made here are marked <em>Builder's call</em> above.</p>
+  </section>
+</article>
