@@ -8,7 +8,9 @@ const startsWithArticle: (text: string) => boolean = isArticle
 // After a Write or Edit of a spec-format .html under a docs/ directory, start
 // the reader's server once per session and show the document: in the desktop
 // app, in a browser-pane tab this module opened; elsewhere, as one transcript
-// line with its link. Every failure leaves the write as it was.
+// line with its link. Either way the model that wrote it is told the link
+// beside the tool's result, and a subagent's report carries the links of the
+// documents it wrote. Every failure leaves the write and the report as they were.
 
 const NODE_NOTICE = 'superpowers-reader needs Node on the PATH to show documents.'
 const SERVER_NOTICE = 'superpowers-reader could not start its server. The next document will try again.'
@@ -23,6 +25,7 @@ let hasWarnedServer = false // one server notice per session
 let readerTab: string | undefined // the pane tab this module opened
 let shownUrl = '' // the URL last navigated in readerTab
 const logged = new Set<string>() // paths given a CLI transcript line
+const byAgent = new Map<string, Map<string, string>>() // agent id -> path -> URL, until its report
 let paneTurn: Promise<unknown> = Promise.resolve() // one pane conversation at a time
 
 type Tab = { tabId: string; isActive: boolean }
@@ -339,9 +342,50 @@ async function newestDoc($: EngineInterface): Promise<string | undefined> {
   return undefined
 }
 
-async function onWritten($: EngineInterface, given: string): Promise<void> {
-  if (typeof given !== 'string' || given === '') return
-  await show($, await absolute($, given), 'write')
+function liveNote(url: string): string {
+  return (
+    `superpowers-reader: this document is live at ${url} (it refreshes on change). ` +
+    'When you name this document to the user or in a report to another agent, give this URL, not the file path.'
+  )
+}
+
+function remember(agentId: string, path: string, url: string): void {
+  const docs = byAgent.get(agentId) ?? new Map<string, string>()
+  docs.set(path, url)
+  byAgent.set(agentId, docs)
+}
+
+// Shows a written document and answers its URL, recorded against the subagent
+// that wrote it (none on the main loop).
+async function onWritten($: EngineInterface, given: unknown, agentId: string | undefined): Promise<string | undefined> {
+  if (typeof given !== 'string' || given === '') return undefined
+  const path = await absolute($, given)
+  const { url } = await show($, path, 'write')
+  if (url !== undefined && typeof agentId === 'string' && agentId !== '') remember(agentId, path, url)
+
+  return url
+}
+
+// The tool's result with the link note after any context it carries: what the
+// model reads beside the result. Untouched when there is no link.
+function withNote<R extends { context?: readonly string[] }>(ran: R, url: string | undefined): R {
+  if (url === undefined) return ran
+
+  return { ...ran, context: [...(ran.context ?? []), liveNote(url)] }
+}
+
+// The report's text with a list of the agent's document links it does not
+// already give, or undefined when there is nothing to add.
+function withLinks(text: string, docs: Map<string, string>): string | undefined {
+  const lines = [...docs]
+    .filter(([, url]) => !text.includes(url))
+    .map(([path, url]) => `- ${path.slice(path.lastIndexOf('/') + 1)}: ${url}`)
+  if (lines.length === 0) return undefined
+  const head =
+    'superpowers-reader: documents this agent wrote are live (they refresh on change); ' +
+    'give these URLs, not file paths, when naming them to the user or in a report:'
+
+  return `${text}${text === '' ? '' : '\n\n'}${head}\n${lines.join('\n')}`
 }
 
 export const register: Register = on => {
@@ -373,15 +417,36 @@ export const register: Register = on => {
 
   on('tool.call', { tool: 'Write' }, async ($, e, next) => {
     const ran = await next(e)
-    if (ran.deny === undefined && ran.isError !== true) await onWritten($, e.file_path).catch(() => {})
+    if (ran.deny !== undefined || ran.isError === true) return ran
 
-    return ran
+    return withNote(ran, await onWritten($, e.file_path, e.agentId).catch(() => undefined))
   }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: 'Edit' }, async ($, e, next) => {
     const ran = await next(e)
-    if (ran.deny === undefined && ran.isError !== true) await onWritten($, e.file_path).catch(() => {})
+    if (ran.deny !== undefined || ran.isError === true) return ran
 
-    return ran
+    return withNote(ran, await onWritten($, e.file_path, e.agentId).catch(() => undefined))
   }).catch(($, e, next) => next(e))
+
+  // A subagent's report: add the links of the documents it wrote, so the loop
+  // that waits for it (and through it the person) gets them whatever the
+  // agent wrote. A nested agent's links go on to its parent's report as well.
+  on('agent.report', async ($, e, next) => {
+    const answered = await next(e)
+    try {
+      const docs = byAgent.get(e.agentId)
+      if (docs === undefined) return answered
+      byAgent.delete(e.agentId)
+      if (typeof e.parentAgentId === 'string' && e.parentAgentId !== '') {
+        for (const [path, url] of docs) remember(e.parentAgentId, path, url)
+      }
+      if (answered.consumed !== undefined) return answered
+      const text = withLinks(answered.text, docs)
+
+      return text === undefined ? answered : { ...answered, text }
+    } catch {
+      return answered
+    }
+  })
 }

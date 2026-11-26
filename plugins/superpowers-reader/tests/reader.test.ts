@@ -9,6 +9,9 @@ const URL2 = 'http://localhost:4520/s/repo/docs/notes/a%20b%231.html'
 const DOC_X = '/repo/docs/notes/x.html'
 const URL_X = 'http://localhost:4520/s/repo/docs/notes/x.html'
 const SHOW_PANE = 'mcp__ccd_view__show_pane'
+const NOTE = (url: string) =>
+  `superpowers-reader: this document is live at ${url} (it refreshes on change). ` +
+  'When you name this document to the user or in a report to another agent, give this URL, not the file path.'
 // As a session sees them: pretty-printed JSON, then a line of prose.
 const TABS_CONTEXT_TEXT = (tabs: { tabId: string; isActive: boolean }[], browserOpen = true) =>
   `${JSON.stringify(
@@ -92,8 +95,21 @@ function standIns(on: On, opts: Opts) {
     focusDev: () => { tabs = tabs.map(t => ({ ...t, isActive: t.tabId === 'dev' })) },
   }
 }
-const write = ($: any, file_path: string) => $.tool.call({ tool: 'Write', file_path, content: 'x' })
-const edit = ($: any, file_path: string) => $.tool.call({ tool: 'Edit', file_path, old_string: 'a', new_string: 'b' })
+const write = ($: any, file_path: string, agentId?: string) =>
+  $.tool.call({ tool: 'Write', file_path, content: 'x', ...(agentId === undefined ? {} : { agentId }) })
+const edit = ($: any, file_path: string, agentId?: string) =>
+  $.tool.call({ tool: 'Edit', file_path, old_string: 'a', new_string: 'b', ...(agentId === undefined ? {} : { agentId }) })
+const report = ($: any, agentId: string, text: string, parentAgentId?: string): Promise<{ text?: string; consumed?: string }> =>
+  $.agent.report({
+    agentId,
+    ...(parentAgentId === undefined ? {} : { parentAgentId }),
+    subagentType: 'plan-drafter',
+    provider: { plugin: 'engine', tier: 'core' },
+    status: 'completed',
+    text,
+  })
+// Stands in for core beneath agent.report: delivers the text as given.
+const reportBottom = (on: On) => on('agent.report', (_, e) => ({ text: e.text, review: 'off' as const }))
 const reader = ($: any, args: string): Promise<{ text?: string }> =>
   $.command.run({
     command: 'reader',
@@ -152,7 +168,7 @@ for (const reveal of ['deny', 'throw'] as const) {
   test(`desktop: a reveal that answers ${reveal} changes nothing`, async ($, on) => {
     const { seen } = standIns(on, { pane: true, spawn: 'ok', reveal })
     const ran = await write($, DOC)
-    expect(ran).toEqual({ result: {} })
+    expect(ran).toEqual({ result: {}, context: [NOTE(URL1)] })
     // Still counted as shown: no transcript line, and an edit does not navigate again.
     await edit($, DOC)
     expect(seen.logs.length).toBe(0)
@@ -248,7 +264,8 @@ test('a refused Write shows nothing', async ($, on) => {
 test('a broken pane never changes the write or its result', async ($, on) => {
   const { seen } = standIns(on, { pane: true, spawn: 'ok', context: 'throw' })
   const ran = await write($, DOC)
-  expect(ran).toEqual({ result: {} })
+  // The result is untouched; the link the CLI line gives is added for the model.
+  expect(ran).toEqual({ result: {}, context: [NOTE(URL1)] })
   expect(of(seen, 'navigate').length).toBe(0)
 })
 
@@ -370,4 +387,95 @@ test('a path that climbs out of docs with .. is normalised before the shape chec
   expect(seen.spawns).toBe(0)
   const ran = await reader($, 'docs/../src/a.html')
   expect(ran.text).toBe('Not a spec-format document under docs/: /repo/src/a.html')
+})
+
+test('the model is told the link on every write and edit of a document shown in the pane', async ($, on) => {
+  standIns(on, { pane: true, spawn: 'ok' })
+  expect(await write($, DOC)).toEqual({ result: {}, context: [NOTE(URL1)] })
+  expect(await edit($, DOC)).toEqual({ result: {}, context: [NOTE(URL1)] })
+  expect(await edit($, DOC2)).toEqual({ result: {}, context: [NOTE(URL2)] })
+})
+
+test('CLI: the model is told the link on every write and edit, not only with the first line', async ($, on) => {
+  const { seen } = standIns(on, { pane: false, spawn: 'ok' })
+  expect(await write($, DOC)).toEqual({ result: {}, context: [NOTE(URL1)] })
+  expect(await edit($, DOC)).toEqual({ result: {}, context: [NOTE(URL1)] })
+  expect(seen.logs.length).toBe(1)
+})
+
+test('the link note goes after any context from beneath', async ($, on) => {
+  on('tool.call', { tool: 'Write' }, () => ({ result: {}, context: ['beneath'] }))
+  standIns(on, { pane: false, spawn: 'ok' })
+  expect(await write($, DOC)).toEqual({ result: {}, context: ['beneath', NOTE(URL1)] })
+})
+
+test('a write that is not a document, or that errored, is returned untouched', async ($, on) => {
+  standIns(on, { pane: true, spawn: 'ok' })
+  expect(await write($, '/repo/src/a.html')).toEqual({ result: {} })
+  expect(await write($, WHOLE)).toEqual({ result: {} })
+})
+
+test('an errored Write is returned untouched and shows nothing', async ($, on) => {
+  on('tool.call', { tool: 'Write' }, () => ({ result: 'boom', isError: true as const, text: 'boom' }))
+  const { seen } = standIns(on, { pane: true, spawn: 'ok' })
+  expect(await write($, DOC)).toEqual({ result: 'boom', isError: true, text: 'boom' })
+  expect(seen.spawns).toBe(0)
+})
+
+for (const spawn of ['no-node', 'dies'] as const) {
+  test(`fail open: with no server (${spawn}) the result is untouched`, async ($, on) => {
+    standIns(on, { pane: true, spawn })
+    expect(await write($, DOC)).toEqual({ result: {} })
+  })
+}
+
+test('subagent: the report it hands back carries the links of the documents it wrote', async ($, on) => {
+  reportBottom(on)
+  standIns(on, { pane: false, spawn: 'ok' })
+  expect(await write($, DOC, 'a1')).toEqual({ result: {}, context: [NOTE(URL1)] })
+  await edit($, DOC, 'a1'); await write($, DOC2, 'a1')
+  const ran = await report($, 'a1', 'Plan written to docs/superpowers/specs/2026-11-20-x-design.html.')
+  expect(ran.text).toBe(
+    'Plan written to docs/superpowers/specs/2026-11-20-x-design.html.\n\n' +
+      'superpowers-reader: documents this agent wrote are live (they refresh on change); ' +
+      'give these URLs, not file paths, when naming them to the user or in a report:\n' +
+      `- 2026-11-20-x-design.html: ${URL1}\n` +
+      `- a b#1.html: ${URL2}`,
+  )
+  // Handed over once: a later report of the same agent adds nothing.
+  expect((await report($, 'a1', 'again')).text).toBe('again')
+})
+
+test('subagent: a report that already gives every link is left as it is', async ($, on) => {
+  reportBottom(on)
+  standIns(on, { pane: false, spawn: 'ok' })
+  await write($, DOC, 'a1')
+  const text = `The plan is live at ${URL1}`
+  expect((await report($, 'a1', text)).text).toBe(text)
+})
+
+test('subagent: only its own documents, and none for the main conversation or an agent that wrote none', async ($, on) => {
+  reportBottom(on)
+  standIns(on, { pane: false, spawn: 'ok' })
+  await write($, DOC)
+  await write($, DOC2, 'a2')
+  expect((await report($, 'a1', 'done')).text).toBe('done')
+  const ran = await report($, 'a2', 'done')
+  expect(ran.text?.includes(URL2)).toBe(true)
+  expect(ran.text?.includes(URL1)).toBe(false)
+})
+
+test('subagent: a nested agent\'s links reach its parent\'s report too', async ($, on) => {
+  reportBottom(on)
+  standIns(on, { pane: false, spawn: 'ok' })
+  await write($, DOC, 'child')
+  expect((await report($, 'child', 'child done', 'parent')).text?.includes(URL1)).toBe(true)
+  expect((await report($, 'parent', 'parent done')).text?.includes(URL1)).toBe(true)
+})
+
+test('subagent: a consumed report stays consumed', async ($, on) => {
+  on('agent.report', () => ({ consumed: 'kept' }))
+  standIns(on, { pane: false, spawn: 'ok' })
+  await write($, DOC, 'a1')
+  expect(await report($, 'a1', 'done')).toEqual({ consumed: 'kept' })
 })

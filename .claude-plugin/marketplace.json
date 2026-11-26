@@ -25,7 +25,7 @@
     {
       "name": "superpowers-reader",
       "source": "./plugins/superpowers-reader",
-      "description": "Shows a just-written spec or plan (.html under docs/) in the desktop app's browser pane, styled by superspec's stylesheet. Needs Node; no install step; fails open."
+      "description": "Shows a just-written spec or plan (.html under docs/) in the desktop app's browser pane, styled by superspec's stylesheet, and tells Claude its link. Needs Node; no install step; fails open."
     }
   ]
 }

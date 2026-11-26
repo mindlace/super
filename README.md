@@ -7,7 +7,7 @@ A Claude Code plugin marketplace with four plugins.
 | `supersonic` | `supersonic:superconductor` conducts a multi-spec build through named `claude --bg` operator sessions admitted by dependency, and sends design questions to one-shot forks of a frozen composer checkpoint. `supersonic:supercomposer` composes the design package it executes. |
 | `superpowers-jev` | Optional [TypeSafe](https://typesafe.ai) Jev typed judgments at 11 decision points in superpowers and supersonic. Shadow mode by default. Fails open. |
 | `superpowers-html` | Overlays superpowers 7.x so specs and plans are written as `.html` in the supersonic spec format. Fails open. |
-| `superpowers-reader` | Shows the spec or plan Claude just wrote in the desktop app's browser pane, or as a transcript link in the CLI. Needs Node 20 or newer; no install step. Fails open. |
+| `superpowers-reader` | Shows the spec or plan Claude just wrote in the desktop app's browser pane, or as a transcript link in the CLI, and gives Claude the link to pass on. Needs Node 20 or newer; no install step. Fails open. |
 
 `superspec/` is a local SvelteKit app for reading superpowers specs and plans across `~/Projects`. It is not a plugin yet, and the `superpowers-reader` plugin carries its stylesheet. See `superspec/README.md`.
 
@@ -28,7 +28,7 @@ For local development, add the checkout as a directory marketplace instead:
 
 `superpowers-html` overlays superpowers 7.x the same way and makes the specs and plans it writes `.html` instead of markdown. Keep superpowers installed; a `.md` plan still runs as before.
 
-`superpowers-reader` shows the document Claude just wrote. In the desktop app it opens the document in its own tab in the browser pane. In the CLI it prints one transcript line with a link for each document. It needs neither superspec running nor `superpowers-html` installed. It uses superspec's stylesheet, so a document looks the same in both, but superspec remains the place for the document list, search, tabs, pairing and structure reports. `/reader [path]` shows a document on demand. The reader serves only spec-format `.html` files under a `docs/` directory, and the images and video beside them (`png`, `jpg`, `jpeg`, `gif`, `webp`, `mp4`, `webm`), on `localhost`, from port 4520, or from a free port the operating system picks when 4520 is taken.
+`superpowers-reader` shows the document Claude just wrote. In the desktop app it opens the document in its own tab in the browser pane. In the CLI it prints one transcript line with a link for each document. Either way, each time Claude writes or edits a document the reader adds its link to what Claude reads after the write, so Claude gives you the link rather than the file path. When a subagent wrote the document, the reader also adds the link to the report that subagent hands back. It needs neither superspec running nor `superpowers-html` installed. It uses superspec's stylesheet, so a document looks the same in both, but superspec remains the place for the document list, search, tabs, pairing and structure reports. `/reader [path]` shows a document on demand. The reader serves only spec-format `.html` files under a `docs/` directory, and the images and video beside them (`png`, `jpg`, `jpeg`, `gif`, `webp`, `mp4`, `webm`), on `localhost`, from port 4520, or from a free port the operating system picks when 4520 is taken.
 
 ## Requirements
 

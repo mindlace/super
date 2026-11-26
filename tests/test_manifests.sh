@@ -45,4 +45,5 @@ grep -q "at $jev_n decision points" "$readme" || fail "README Jev count must be 
 grep -qF '"additionalDirectories": ["~/.supersonic"]' "$readme" || fail "README must document additionalDirectories [\"~/.supersonic\"]"
 grep -qF 'Bash(sh <dir>/records.sh:*)' "$readme" || fail "README must document the records.sh allow entry"
 grep -qF '"version": "0.7.0"' "$root/plugins/supersonic/.claude-plugin/plugin.json" || fail "supersonic plugin.json must be version 0.7.0"
+grep -qF '"version": "0.2.0"' "$root/plugins/superpowers-reader/.claude-plugin/plugin.json" || fail "superpowers-reader plugin.json must be version 0.2.0"
 echo "PASS: manifests"
