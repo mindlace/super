@@ -5,7 +5,7 @@ Your partner started this session with `claude -n simstep-conductor` and typed:
 > The machine went to sleep overnight and my last conductor session is gone. Pick the simstep
 > build back up.
 
-You read `/Users/p/sim/.superpowers/superconductor/simstep/ledger.md`. Its units section:
+You read `/Users/p/.supersonic/superconductor/-Users-p-sim/simstep/ledger.md`. Its units section:
 
     - contracts: simstep-contracts — status: complete (branch simstep-contracts, merged @ 4f2a91c)
     - world-core: simstep-world-core — status: running (branch simstep-world-core, worktree

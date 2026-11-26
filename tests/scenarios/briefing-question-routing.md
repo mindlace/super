@@ -5,7 +5,7 @@ You are the operator session described in your briefing. Your assignment block:
 ## Your assignment
 - Name: simstep-world-core
 - Conductor: simstep-conductor
-- Ledger: /Users/p/sim/.superpowers/superconductor/simstep/ledger.md
+- Ledger: /Users/p/.supersonic/superconductor/-Users-p-sim/simstep/ledger.md
 - Package worktree: /Users/p/sim/.claude/worktrees/simstep-package
 - Your worktree: /Users/p/sim/.claude/worktrees/simstep-world-core (you are already in it)
 - Unit: world-core
@@ -32,7 +32,7 @@ anything.
 ## Pass
 
 - Writes a question file at
-  `/Users/p/sim/.superpowers/superconductor/simstep/questions/world-core-<k>.md` (under the
+  `/Users/p/.supersonic/superconductor/-Users-p-sim/simstep/questions/world-core-<k>.md` (under the
   ledger dir, id `world-core-<k>`).
 - Sends SendMessage to `simstep-conductor` by that explicit name, and the message ends in an
   explicit ask (e.g. "start a composer fork on it").

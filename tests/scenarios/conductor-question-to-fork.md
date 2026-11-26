@@ -2,7 +2,7 @@
 
 You are `simstep-conductor`, conducting the `simstep` build. The package worktree is
 `/Users/p/sim/.claude/worktrees/simstep-package` (integration branch `superconductor/simstep`);
-the ledger is `/Users/p/sim/.superpowers/superconductor/simstep/ledger.md`.
+the ledger is `/Users/p/.supersonic/superconductor/-Users-p-sim/simstep/ledger.md`.
 
 Ledger excerpt:
 
@@ -16,7 +16,7 @@ Ledger excerpt:
 
 No fork is running. A message arrives from `simstep-world-score`:
 
-> question world-score-1: /Users/p/sim/.superpowers/superconductor/simstep/questions/world-score-1.md — leaderboard: snapshot per tick or recompute on read? Get it ruled on and send me the ruling.
+> question world-score-1: /Users/p/.supersonic/superconductor/-Users-p-sim/simstep/questions/world-score-1.md — leaderboard: snapshot per tick or recompute on read? Get it ruled on and send me the ruling.
 
 The file says:
 

@@ -33,6 +33,11 @@ re-reads.
   this session at any moment; the ledger plus git is the only memory that
   survives. On resume, trust the ledger, git and `claude agents --json` over
   recollection.
+- **Records stay out of git.** `<ledger dir>` is the run's records directory,
+  outside the repo (Phase 0). Its contents are never copied into a branch and
+  never committed: not the ledger, assignments, prompts, questions, rulings,
+  checkpoints or surveys. The only package files a branch carries are the
+  design doc, the specs and the build graph.
 - **Messages are hints; state is the truth.** Every wait has a bound. An
   operator message, an idle notice or a fork's exit tells you to look
   sooner, but nothing waits on one arriving: the heartbeat (`## Supervision`)
@@ -61,9 +66,34 @@ re-reads.
 
 ## Phase 0 — Resume check
 
-If `.superpowers/superconductor/<design-slug>/ledger.md` exists in the
-target project for this design, reconcile it against reality before
-anything else: `claude agents --json`, `git worktree list`,
+`<skill dir>` is this skill's directory, where `beat.sh`, `budget.sh` and
+`records.sh` live.
+
+1. **Setup.** Run `sh <skill dir>/records.sh check`. If it prints
+   `covered: yes`, or this session's additional working directories already
+   include the `home:` it prints, go on. Otherwise tell your partner once:
+   "Supersonic keeps its run records in <home>, outside the repo. Adding it
+   to `permissions.additionalDirectories` in <settings file> lets this
+   session, its forks and its operators write there without a prompt each
+   time. May I add it?" On yes, add the entry to that array in that file,
+   creating the file, the `permissions` object or the array as needed and
+   keeping every other key: `~/.supersonic` when the home is the default,
+   else the home's absolute path. On no, say "Then each write there asks you
+   first; answer those prompts as they come." and go on.
+2. **Records directory.** Run `sh <skill dir>/records.sh <design-slug>`. The
+   path it prints is `<ledger dir>` for the whole run, and
+   `<ledger dir>/ledger.md` is the ledger.
+3. **Old records.** Run `sh <skill dir>/records.sh migrate <design-slug>`.
+   It moves a ledger dir an earlier version kept in the main checkout,
+   leaving files git tracks for the project's own cleanup. If it exits
+   non-zero, tell your partner what it printed and stop before step 4
+   (nothing was deleted). If it prints a line, ledger it under
+   `## Supervision` as `- records <that line>`, and once step 4's report
+   shows which operators are alive, send each one: "Your ledger is now
+   <ledger path>: write question files under <ledger dir>/questions/ from
+   now on. Reply ack."
+4. If `<ledger dir>/ledger.md` exists, reconcile it against reality before
+   anything else: `claude agents --json`, `git worktree list`,
 `git branch --list`, the integration branch's log, and each unit's SDD
 ledger under `.superpowers/sdd/` in its worktree. Reconcile the package
 worktree first: a restart merges the integration branch into the unit's
@@ -73,8 +103,7 @@ branch, so that branch must hold only tested work.
   <ledger dir> resume`: it stops the last conductor's heartbeat timer,
   whose exit would wake no one, and restarts every unit's beat file from
   its branch head and drops every open status ask, so no ask or quiet spell
-  the dead conductor left is acted on. (`<skill dir>` is this skill's
-  directory, where `beat.sh` and `budget.sh` live.) Then run its report
+  the dead conductor left is acted on. Then run its report
   once, `sh <skill dir>/beat.sh <ledger dir>`: its lines give each unit's
   session, rung and pending restart, and each fork's state, for the steps
   below. Then take each fork
@@ -1236,7 +1265,7 @@ still listed (`## Supervision`, Stopping an operator), and stop the heartbeat ti
 
 ## Ledger format
 
-`<project>/.superpowers/superconductor/<design-slug>/ledger.md`:
+`<ledger dir>/ledger.md`, in the records directory Phase 0 resolves:
 
     # Superconductor ledger — design: <design doc path>
     Package worktree: <absolute path>

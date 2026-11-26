@@ -23,7 +23,7 @@ b() { sh "$src" "$@"; }
 ago() { perl -e '$t=time-shift; utime $t,$t,@ARGV' "$@"; }
 
 # --- fixture project with a space in its path: ledger, unit worktrees, a stub claude ----
-proj="$tmp/my proj"; d="$proj/.superpowers/superconductor/des"
+proj="$tmp/my proj"; d="$tmp/records home/superconductor/key/des"
 mkdir -p "$d/assignments" "$d/prompts" "$tmp/bin"
 git init -q "$proj"; git -C "$proj" commit -q --allow-empty -m init
 git -C "$proj" worktree add -q "$proj/pkg" -b superconductor/des
@@ -119,7 +119,7 @@ printf '%s' "$agents" > "$tmp/agents.json"
 
 # 3. Quiet for one beat (STALL_BEATS=1): ask due; a planning unit with its plan ledgered is not asked.
 for u in api web db ops; do ago 610 "$d/assignments/$u.beat"; done
-find "$proj" -type f ! -path '*/.git/*' ! -path '*/.superpowers/superconductor/*' -exec perl -e '$t=time-5000; utime $t,$t,@ARGV' {} +
+find "$proj" -type f ! -path '*/.git/*' -exec perl -e '$t=time-5000; utime $t,$t,@ARGV' {} +
 out=$(b "$d")
 [ "$(field api evidence)" = no ] || fail "quiet worktree shows evidence: $(line 'unit api')"
 [ "$(field api ask)" = due ] || fail "api should be due after a quiet beat: $(line 'unit api')"

@@ -5,7 +5,7 @@ You are the operator session described in your briefing. Your assignment block:
 ## Your assignment
 - Name: simstep-map-stream
 - Conductor: simstep-conductor
-- Ledger: /Users/p/sim/.superpowers/superconductor/simstep/ledger.md
+- Ledger: /Users/p/.supersonic/superconductor/-Users-p-sim/simstep/ledger.md
 - Package worktree: /Users/p/sim/.claude/worktrees/simstep-package
 - Your worktree: /Users/p/sim/.claude/worktrees/simstep-map-stream (you are already in it)
 - Unit: map-stream

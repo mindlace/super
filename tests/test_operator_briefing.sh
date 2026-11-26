@@ -92,6 +92,7 @@ require 'send `plan ready` and end your turn'
 require '.html'
 forbid 'superpowers-html'
 
+forbid '.superpowers/superconductor'
 forbid 'with a pointer to'
 forbid 'message `main`'
 forbid 'to `main`'
