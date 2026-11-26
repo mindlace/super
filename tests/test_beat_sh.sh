@@ -433,4 +433,11 @@ done
 stretch=$(sed -n 's/.*background `sleep \([0-9]*\)`.*/\1/p' "$briefing" | head -n 1)
 [ -n "$stretch" ] && [ "$stretch" -lt "$(k BEAT)" ] || fail "the operator's stretch ($stretch s) must be shorter than BEAT"
 
+# The project comes from the ledger's `Package worktree:` line: a conventional unit (no
+# `worktree` field) is found at <main checkout>/.claude/worktrees/<design>-<unit>, though the
+# ledger dir lies outside the project. `seen` records that worktree's head.
+b "$d" seen db >/dev/null 2>&1
+want=$(git -C "$proj/.claude/worktrees/des-db" rev-parse HEAD)
+[ "$(cat "$d/assignments/db.beat")" = "$want" ] || fail "a conventional unit's worktree must be found from Package worktree: $(cat "$d/assignments/db.beat")"
+
 echo "PASS: beat.sh"
