@@ -83,6 +83,9 @@ re-reads.
 2. **Records directory.** Run `sh <skill dir>/records.sh <design-slug>`. The
    path it prints is `<ledger dir>` for the whole run, and
    `<ledger dir>/ledger.md` is the ledger.
+   `<project>` is the main checkout of the package worktree: `git -C <package
+   worktree> rev-parse --path-format=absolute --git-common-dir` without its
+   trailing `/.git`.
 3. **Old records.** Run `sh <skill dir>/records.sh migrate <design-slug>`.
    It moves a ledger dir an earlier version kept in the main checkout,
    leaving files git tracks for the project's own cleanup. If it exits
