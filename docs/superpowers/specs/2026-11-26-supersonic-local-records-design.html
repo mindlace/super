@@ -1,0 +1,96 @@
+<article>
+  <header>
+    <h1>Supersonic run records live outside the repo</h1>
+    <p>Move the composer's and conductor's working records from the project's main checkout to <code>~/.supersonic/</code>, and commit only the design, the specs and the build graph.</p>
+  </header>
+
+  <section id="sec-why">
+    <h2>Why</h2>
+    <p>Today both skills keep their working records in <code>&lt;project&gt;/.superpowers/superconductor/&lt;design-slug&gt;/</code>, and <code>&lt;project&gt;</code> resolves to the main checkout. That directory is not ignored. The result in sfhousing:</p>
+    <ul>
+      <li>The owner keeps <code>main</code> synced with <code>origin/main</code> and never edits it, yet the main checkout filled with about 37 untracked files: checkpoints, prompts, assignments, questions, rulings and helper scripts.</li>
+      <li>The composer committed <code>ledger.md</code> and its surveys on the package branch. The conductor kept writing its own copy in the main checkout. When the feature merged, <code>git pull</code> refused to overwrite the local ledger.</li>
+      <li>Earlier runs committed hundreds of these records to the repo (248 prompts for one design).</li>
+    </ul>
+    <p>The owner wants the records kept for process analysis and forensics, but not in the source repo: outside version control except the design, the specs and the build graph, and not dependent on the state of any clone.</p>
+  </section>
+
+  <section id="sec-goals">
+    <h2>Goals and non-goals</h2>
+    <ul>
+      <li><strong>Goal.</strong> The only files supersonic commits to a project are the design doc, the specs and the build graph. Operators still commit their implementation plans, as now.</li>
+      <li><strong>Goal.</strong> Every other record the composer, the conductor, their forks and operators write goes to one local directory per design. It survives crashes, a closed laptop, <code>git clean -fdx</code> and deleting the clone.</li>
+      <li><strong>Goal.</strong> Someone who installs supersonic can write there without permission prompts. The skills set this up, with the user approving.</li>
+      <li><strong>Non-goal.</strong> Changing the handoff. The composer still ends with the package committed on <code>superconductor/&lt;design-slug&gt;</code>, and the conductor still adopts that branch as its integration branch.</li>
+      <li><strong>Non-goal.</strong> Versioning the records. No local git repo in the records directory: <code>ledger.md</code> is already an append-only log, and concurrent writers would contend for git's index lock.</li>
+      <li><strong>Non-goal.</strong> Cleaning up records already committed in existing projects such as sfhousing. That is a separate change in each project.</li>
+      <li><strong>Non-goal.</strong> <code>superpowers-jev</code>'s <code>.superpowers/jev/</code> log and superpowers' own <code>.superpowers/sdd/</code> workspaces. Both are out of scope; SDD's workspace is already git-ignored by its own script.</li>
+      <li><strong>Anti-goal.</strong> Anything under <code>~/.claude/</code>. Claude Code treats every <code>.claude</code> path as protected: non-Markdown writes prompt in <code>acceptEdits</code> and no allow rule pre-approves them, so a background operator would stall. This rules out both the per-project folder and <code>${CLAUDE_PLUGIN_DATA}</code>.</li>
+    </ul>
+  </section>
+
+  <section id="sec-approaches">
+    <h2>Approaches</h2>
+    <table id="tbl-approaches">
+      <caption>Where the records could live</caption>
+      <thead>
+        <tr><th scope="col">Approach</th><th scope="col">Trade-off</th><th scope="col">Outcome</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Same path, git-ignored</th><td>Smallest change, but records still sit in the main checkout and die with the clone or <code>git clean -fdx</code>.</td><td>Rejected: forensics would depend on the repo's state.</td></tr>
+        <tr><th scope="row">Claude's per-project folder, or <code>${CLAUDE_PLUGIN_DATA}</code></th><td>Lives with the sessions, but under <code>~/.claude/</code>, a protected path that prompts on every non-Markdown write.</td><td>Rejected: operators in <code>acceptEdits</code> would stall.</td></tr>
+        <tr><th scope="row"><code>~/.supersonic/</code></th><td>Outside the repo and outside the protected tree. Needs one <code>additionalDirectories</code> entry in user settings.</td><td><strong>Chosen.</strong> Named for supersonic so it does not pose as part of superpowers.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="sec-design">
+    <h2>Design</h2>
+
+    <section id="sec-location">
+      <h3>The records directory</h3>
+      <p>The records directory for a design is <code>&lt;home&gt;/superconductor/&lt;repo-key&gt;/&lt;design-slug&gt;/</code>, where:</p>
+      <ul>
+        <li><code>&lt;home&gt;</code> is <code>$SUPERSONIC_HOME</code> when set, else <code>~/.supersonic</code>. The variable exists for tests.</li>
+        <li><code>&lt;repo-key&gt;</code> is the absolute path of the repository's main checkout, from <code>git rev-parse --path-format=absolute --git-common-dir</code> with its trailing <code>/.git</code> removed, with every non-alphanumeric character replaced by <code>-</code>. This is the same encoding Claude Code uses for its project folders, so <code>/Users/a/Projects/sfhousing</code> becomes <code>-Users-a-Projects-sfhousing</code>. Every worktree of one repository, including nested package worktrees, maps to the same key.</li>
+      </ul>
+      <p>One small script, shipped with the plugin, prints this path for a given design slug and creates it. Both skills call it once and record the absolute path. Everything downstream (the ledger, <code>beat.sh &lt;dir&gt;</code>, each assignment's <code>Ledger:</code> line, <code>--add-dir</code>) already takes the path as a value, so it carries the new location. One exception: <code>beat.sh</code> today derives the project by stripping path parts off the ledger dir, which fails once the ledger is outside the repo; it reads the project from the ledger's <code>Package worktree:</code> line instead.</p>
+      <p>The directory's contents and layout are unchanged: <code>ledger.md</code>, <code>assignments/</code>, <code>prompts/</code>, <code>questions/</code>, <code>rulings/</code>, <code>checkpoint-*.json</code>, <code>surveys/</code>, <code>timer</code>, and so on.</p>
+    </section>
+
+    <section id="sec-composer">
+      <h3>What the composer commits</h3>
+      <p>Phase C5's commit lists exactly the design doc, the specs and the build graph. Survey reports, fresh-eyes reports, amendments, briefs, helper scripts the composer writes for itself, and the ledger go in the records directory and are never committed. The skill says so where it today says "survey reports worth keeping" and "ledger records", and its forks follow the same rule.</p>
+    </section>
+
+    <section id="sec-conductor">
+      <h3>The conductor and operators</h3>
+      <ul>
+        <li>Every place that names <code>&lt;project&gt;/.superpowers/superconductor/&lt;design-slug&gt;/</code> names the records directory instead: superconductor Phase 0 and the ledger format, supercomposer's ledger rule, <code>composer-forks.md</code>, <code>operator-briefing.md</code> where it applies, and <code>beat.sh</code>'s usage comment.</li>
+        <li>The conductor never copies records into a branch, and never commits them.</li>
+        <li><strong>Old runs.</strong> On resume, when the records directory has no ledger but <code>&lt;main checkout&gt;/.superpowers/superconductor/&lt;design-slug&gt;/ledger.md</code> exists, the conductor copies that whole directory into the records directory and deletes the copied files that git does not track. Tracked files stay for the project's own cleanup. It records one ledger line saying so.</li>
+      </ul>
+    </section>
+
+    <section id="sec-setup">
+      <h3>Setup for anyone who installs supersonic</h3>
+      <p>A plugin cannot change user permissions by itself, so the skills check and offer:</p>
+      <ul>
+        <li>At the start of supercomposer (C0) and superconductor (Phase 0), the skill checks whether <code>~/.supersonic</code> (or <code>$SUPERSONIC_HOME</code>) is covered by <code>permissions.additionalDirectories</code> in the user's settings, or by the session's own <code>--add-dir</code>.</li>
+        <li>If it is not, the skill tells the user once why it is needed and asks to add it to the user settings file (<code>~/.claude/settings.json</code>, or under <code>$CLAUDE_CONFIG_DIR</code>). The user approves that one edit. If they decline, the skill continues and the user answers write prompts as they come; the skill says this.</li>
+        <li>The README's install section states the requirement and shows the settings line, so a reader can add it before the first run.</li>
+      </ul>
+      <pre><code data-lang="json">{ "permissions": { "additionalDirectories": ["~/.supersonic"] } }</code></pre>
+    </section>
+  </section>
+
+  <section id="sec-builder">
+    <h2>Left to the builder</h2>
+    <ul>
+      <li>The script's name and where it lives. It must be reachable from both skills (for example in <code>superconductor/</code>, with supercomposer naming its path).</li>
+      <li>How the setup check reads the settings files: user settings, and <code>$CLAUDE_CONFIG_DIR</code> when set.</li>
+      <li>Updating tests: <code>tests/test_beat_sh.sh</code>, the scenario fixtures under <code>tests/scenarios/</code> that name the old path, and new tests for the path script (key encoding, worktrees sharing one key, <code>$SUPERSONIC_HOME</code>).</li>
+      <li>The plugin version bump (0.6.0 to 0.7.0) and the README.</li>
+    </ul>
+  </section>
+</article>

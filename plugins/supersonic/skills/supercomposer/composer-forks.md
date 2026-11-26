@@ -21,7 +21,7 @@ To run one:
    "No conversation found" was started from the wrong cwd.
 3. `--allowedTools="..."` and `--add-dir="..."` keep their equals sign: both flags are
    variadic, and without `=` they swallow the prompt. `--add-dir="<ledger dir>"` declares
-   the one directory outside the cwd that the adjudication and merge-review forks write to
+   the one directory outside the cwd that the checkpoint reads and the adjudication and merge-review forks write to
    (a plain `Write` allow also wrote outside the cwd in the drill; the flag makes it
    explicit). Forks run as background Bash commands, so whoever started one is told when
    it exits.
@@ -59,7 +59,7 @@ touch it, each as a new session.
 Command, with cwd = `<package worktree>`, as a background Bash command; when it exits,
 the second line prints the id, or fails if there is none:
 
-    <time limit> env -C "<package worktree>" claude -p --model <model> --output-format json --allowedTools="Read,Grep,Glob" "$(cat <prompt file>)" > <ledger dir>/checkpoint-<n>.json
+    <time limit> env -C "<package worktree>" claude -p --model <model> --output-format json --allowedTools="Read,Grep,Glob" --add-dir="<ledger dir>" "$(cat <prompt file>)" > <ledger dir>/checkpoint-<n>.json
     python3 -c 'import json,sys; print(json.load(sys.stdin)["session_id"])' < <ledger dir>/checkpoint-<n>.json
 
 Append the id under the ledger's `## Checkpoints` heading as
@@ -76,7 +76,7 @@ Prompt:
 
     Read the package cold, from the files themselves: the design doc <design doc>, every spec
     it lists, the contracts spec, the build graph if there is one, and the survey notes in
-    <survey dir>. Where a decision rests on code, read that code. Read for the decisions, the
+    <ledger dir>/surveys. Where a decision rests on code, read that code. Read for the decisions, the
     interface rows and the partner's reasons beside them: sessions forked from you will rule
     on questions about this package without anyone to ask.
 
@@ -133,7 +133,7 @@ Prompt:
        it replaces, of plan tasks or of code already written. Git holds the history. Before
        committing, reread each amended passage as someone who never saw the earlier text:
        every sentence must make sense to them and say what the system does. Then
-       `git add` the files, `git commit -m "docs(<design-slug>): rule <id>"`, and take the
+       `git add` the package files you amended (never anything under <ledger dir>), `git commit -m "docs(<design-slug>): rule <id>"`, and take the
        short sha from `git rev-parse --short HEAD`.
     5. Write <ledger dir>/rulings/<id>.md in exactly this form:
 

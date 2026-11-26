@@ -2,7 +2,7 @@
 
 You were started from the checkpoint of the `simstep` package to rule on one question. You are
 already in the package worktree `/work/simstep-pkg`; the ledger dir is
-`/work/simstep-pkg/.superpowers/superconductor/simstep`. Package HEAD is `7c1e0a2`.
+`/Users/p/.supersonic/superconductor/-work-sim/simstep`. Package HEAD is `7c1e0a2`.
 
 The question file, `questions/world-score-1.md`:
 

@@ -28,9 +28,11 @@ deliberation rides in it.
   doc↔code contradiction found is a finding to surface, never silently
   resolved toward the doc.
 - **Append to the shared ledger after every state change**
-  (`.superpowers/superconductor/<design-slug>/ledger.md` — one ledger serves
-  composition and conduction; composition entries are the package's birth
-  record).
+  (`<ledger dir>/ledger.md`, in the records directory C0 resolves, outside the
+  repo — one ledger serves composition and conduction; composition entries are
+  the package's birth record). Nothing in `<ledger dir>` is ever committed: the
+  only files this skill and its forks commit are the design doc, the specs and
+  the build graph.
 
 ## Phase C0 — Mode
 
@@ -38,6 +40,27 @@ If you were started from one of the prompts in `composer-forks.md` (it names
 a question to rule on, a merge to review, or the build graph to write), you
 are a **composer fork**: follow that prompt and `## Composer forks` below,
 and skip C1–C5. Otherwise this is **fresh composition**: C1 through C5.
+
+In fresh composition, C0 also sets up the records:
+
+1. **Setup.** Run `sh <supersonic plugin dir>/skills/superconductor/records.sh
+   check`. If it prints `covered: yes`, or this session's additional working
+   directories already include the `home:` it prints, go on. Otherwise tell
+   your partner once: "Supersonic keeps its run records in <home>, outside the
+   repo. Adding it to `permissions.additionalDirectories` in <settings file>
+   lets this session, its forks and its operators write there without a prompt
+   each time. May I add it?" On yes, add the entry to that array in that file,
+   creating the file, the `permissions` object or the array as needed and
+   keeping every other key: `~/.supersonic` when the home is the default, else
+   the home's absolute path. On no, say "Then each write there asks you first;
+   answer those prompts as they come." and go on.
+2. **Records directory.** Fix the design slug now: the `<topic>` of the design
+   doc's file name, which C5 also uses for the branch
+   `superconductor/<design-slug>`. Run `sh <supersonic plugin dir>/skills/superconductor/records.sh
+   <design-slug>`; the path it prints is `<ledger dir>`. `<supersonic plugin
+   dir>` is this plugin's installed directory.
+
+Forks skip both steps: they run headless and get `--add-dir`.
 
 Once a package is committed, nobody comes back to this session. Every later
 design question, merge review and graph rewrite runs in a fork of the
@@ -58,7 +81,8 @@ checkpoint made in C5.
    inventory item → surveyed-by-agent-X | excluded-with-reason.
    An item with neither is a plan defect. The scopes come from the
    inventory, never from your prior map of the system.
-3. **Provenance in every survey report.** Each agent's brief requires: a
+3. **Provenance in every survey report.** Each agent writes its report to
+   `<ledger dir>/surveys/<agent>.md`, and its brief requires: a
    "files read / dirs listed / NOT examined" appendix; claims marked
    verified-at-`file:line` vs inferred. Treat *unexamined* as unknown —
    never as absent.
@@ -213,9 +237,12 @@ indices in traceability-table order.
 
 ## Phase C5 — Handoff
 
-1. **Commit the package** (design doc, specs, tables, survey reports worth
-   keeping). Ledger records: package contents and commit, settled
-   decisions, open decisions, coverage and traceability pointers.
+1. **Commit the package**: the design doc and the specs, nothing else (the
+   build-graph fork commits the build graph in step 4). Survey reports,
+   fresh-eyes reports, briefs, helper scripts you wrote for yourself and the
+   ledger stay in `<ledger dir>` and are never committed. The ledger records:
+   package contents and commit, settled decisions, open decisions, coverage and
+   traceability pointers.
 2. **Integration branch and package worktree.** Create the branch
    `superconductor/<design-slug>` at that commit and one worktree of it, per
    the project's worktree convention. This is the package worktree: the

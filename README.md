@@ -41,12 +41,21 @@ For local development, add the checkout as a directory marketplace instead:
   {"subagentPromptCacheTtl": "1h"}
   ```
 
+- A records directory outside the repo. Each run's ledger, prompts, questions, rulings and survey reports live in `~/.supersonic/superconductor/<repo-key>/<design-slug>/` (set `SUPERSONIC_HOME` to move it; it must be an absolute path, since a relative one is rejected, and it must be set in the environment of every session that runs either skill: the composer, the conductor and the forks and operators they start. Otherwise the conductor looks in `~/.supersonic` and does not find the composer's ledger). Supersonic commits only the design doc, the specs and the build graph. So the conductor, its forks and its operators write there without prompts, add it to `~/.claude/settings.json`:
+
+  ```json
+  { "permissions": { "additionalDirectories": ["~/.supersonic"] } }
+  ```
+
+  When `CLAUDE_CONFIG_DIR` is set, the file is `$CLAUDE_CONFIG_DIR/settings.json`. The conductor checks at the start of a run, and the composer at the start of a fresh composition; each offers to add the entry. A run begun before 0.7.0 moves its records there when the conductor resumes it.
+
 - A trusted repo. `claude --bg` refuses to start in a directory whose workspace trust prompt has never been accepted, so open `claude` in the repo once, accept the prompt and exit before the first run.
 - A named conductor. Operators message the conductor by name, so start it in an interactive session by typing `/superconductor work on superconductor/<design-slug>` (or `/supersonic:superconductor …`). The plugin's `UserPromptSubmit` hook sees the `superconductor/<design-slug>` branch in that prompt and names the session `<design-slug>-conductor`. If you start it any other way, run `/rename <design-slug>-conductor`. Under any other name, operator messages do not reach it.
 - On machines where `claude` adds a permission hook, launch lines carry `--permission-mode` and `--allowedTools`. The skills' launch lines already include both; keep them when you edit a line.
 - Conductor commands allowed without a prompt. A permission prompt in the conductor waits on you and holds every bound in the run, so allow its commands in the project's `.claude/settings.json`. With `<dir>` the installed `supersonic` plugin's `skills/superconductor` directory, the entries and what each one really admits:
   - `"Bash(sh <dir>/beat.sh:*)"`: the heartbeat, the timer and the fork time limit. Its `fork` subcommand runs whatever command follows it, so this entry admits any command.
   - `"Bash(sh <dir>/budget.sh:*)"`: reads the usage figures; nothing else.
+  - `"Bash(sh <dir>/records.sh:*)"`: prints and creates the records directory, moves an old in-repo one and reads the user settings; it writes only under the records home. When it moves an old in-repo records directory it removes the untracked files it moved and the directories that leaves empty, and on a failed copy or rewrite it removes its own partial copy and touches nothing else.
   - `"Bash(claude agents:*)"`, `"Bash(claude stop:*)"`: list and stop sessions.
   - `"Bash(git:*)"`: every git command, and through aliases and `-c` options, any command.
   - `"Bash(env -C:*)"`: operator launches; it admits any command run with `env -C`.

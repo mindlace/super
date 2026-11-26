@@ -3,7 +3,7 @@
 You were started from the checkpoint of the `simstep` package for a merge review. You are
 already in the package worktree `/work/simstep-pkg`, on the integration branch
 `superconductor/simstep`; the ledger dir is
-`/work/simstep-pkg/.superpowers/superconductor/simstep`.
+`/Users/p/.supersonic/superconductor/-work-sim/simstep`.
 
 Unit `world-score` merged into the integration branch at `4f9d21b`. It needs rows S3, S4 and
 S7 and produces W1.

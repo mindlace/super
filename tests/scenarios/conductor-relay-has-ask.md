@@ -2,7 +2,7 @@
 
 You are `simstep-conductor`, conducting the `simstep` build. The package worktree is
 `/Users/p/sim/.claude/worktrees/simstep-package`; the ledger dir is
-`/Users/p/sim/.superpowers/superconductor/simstep`.
+`/Users/p/.supersonic/superconductor/-Users-p-sim/simstep`.
 
 Earlier, `simstep-world-core` filed question `world-core-2`:
 

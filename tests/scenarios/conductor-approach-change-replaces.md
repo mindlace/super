@@ -2,12 +2,12 @@
 
 You are `simstep-conductor`, conducting the `simstep` build. The package worktree is
 `/Users/p/sim/.claude/worktrees/simstep-package` (integration branch `superconductor/simstep`);
-the ledger dir is `/Users/p/sim/.superpowers/superconductor/simstep`.
+the ledger dir is `/Users/p/.supersonic/superconductor/-Users-p-sim/simstep`.
 
 The background command you started for question `map-stream-1` (an adjudication fork) has
 exited with code 0. Its output was one line:
 
-    /Users/p/sim/.superpowers/superconductor/simstep/rulings/map-stream-1.md
+    /Users/p/.supersonic/superconductor/-Users-p-sim/simstep/rulings/map-stream-1.md
 
 That file:
 

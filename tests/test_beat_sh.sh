@@ -23,7 +23,7 @@ b() { sh "$src" "$@"; }
 ago() { perl -e '$t=time-shift; utime $t,$t,@ARGV' "$@"; }
 
 # --- fixture project with a space in its path: ledger, unit worktrees, a stub claude ----
-proj="$tmp/my proj"; d="$proj/.superpowers/superconductor/des"
+proj="$tmp/my proj"; d="$tmp/records home/superconductor/key/des"
 mkdir -p "$d/assignments" "$d/prompts" "$tmp/bin"
 git init -q "$proj"; git -C "$proj" commit -q --allow-empty -m init
 git -C "$proj" worktree add -q "$proj/pkg" -b superconductor/des
@@ -119,7 +119,7 @@ printf '%s' "$agents" > "$tmp/agents.json"
 
 # 3. Quiet for one beat (STALL_BEATS=1): ask due; a planning unit with its plan ledgered is not asked.
 for u in api web db ops; do ago 610 "$d/assignments/$u.beat"; done
-find "$proj" -type f ! -path '*/.git/*' ! -path '*/.superpowers/superconductor/*' -exec perl -e '$t=time-5000; utime $t,$t,@ARGV' {} +
+find "$proj" -type f ! -path '*/.git/*' -exec perl -e '$t=time-5000; utime $t,$t,@ARGV' {} +
 out=$(b "$d")
 [ "$(field api evidence)" = no ] || fail "quiet worktree shows evidence: $(line 'unit api')"
 [ "$(field api ask)" = due ] || fail "api should be due after a quiet beat: $(line 'unit api')"
@@ -432,5 +432,12 @@ for p in "(${stall_m} minutes)" "asked ${stall_m} to $((stall_m + beat_m)) minut
 done
 stretch=$(sed -n 's/.*background `sleep \([0-9]*\)`.*/\1/p' "$briefing" | head -n 1)
 [ -n "$stretch" ] && [ "$stretch" -lt "$(k BEAT)" ] || fail "the operator's stretch ($stretch s) must be shorter than BEAT"
+
+# The project comes from the ledger's `Package worktree:` line: a conventional unit (no
+# `worktree` field) is found at <main checkout>/.claude/worktrees/<design>-<unit>, though the
+# ledger dir lies outside the project. `seen` records that worktree's head.
+b "$d" seen db >/dev/null 2>&1
+want=$(git -C "$proj/.claude/worktrees/des-db" rev-parse HEAD)
+[ "$(cat "$d/assignments/db.beat")" = "$want" ] || fail "a conventional unit's worktree must be found from Package worktree: $(cat "$d/assignments/db.beat")"
 
 echo "PASS: beat.sh"

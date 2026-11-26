@@ -144,7 +144,7 @@ for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork' 'Build-graph fork'
   fi
 done
 # Forks that write the ledger declare it with --add-dir in its equals form.
-for h in 'Adjudication fork' 'Merge-review fork'; do
+for h in 'Checkpoint' 'Adjudication fork' 'Merge-review fork'; do
   section "$h" | grep -qF -- '--add-dir="<ledger dir>"' \
     || { echo "FAIL: ## $h must pass --add-dir=\"<ledger dir>\""; exit 1; }
 done
@@ -180,6 +180,15 @@ printf '%s\n' "$flat" | grep -qF 'git -C <package worktree>' \
 for s in '`Package worktree: <absolute path>`' '`Build graph: <build-graph path> @ <sha>`'; do
   printf '%s\n' "$flat" | grep -qF -- "$s" || { echo "FAIL: C5 must ledger the header line $s"; exit 1; }
 done
+# Records live outside the repo; only the package is committed.
+for f in "$skill" "$forks"; do
+  grep -qF '.superpowers/superconductor' "$f" && { echo "FAIL: stale in-repo records path in $f"; exit 1; }
+done
+for s in 'records.sh check' 'records.sh <design-slug>' 'the design doc, the specs and the build graph' 'never committed'; do
+  printf '%s\n' "$flat" | grep -qF -- "$s" || { echo "FAIL: SKILL.md must say: $s"; exit 1; }
+done
+printf '%s\n' "$flat" | grep -qF 'survey reports worth' && { echo "FAIL: survey reports are never committed"; exit 1; }
+grep -qF '<ledger dir>/surveys' "$forks" || { echo "FAIL: composer-forks.md must name <ledger dir>/surveys"; exit 1; }
 desc_len=$(printf '%s' "$desc" | wc -c | tr -d ' ')
 [ "$desc_len" -le 500 ] || { echo "FAIL: description is $desc_len chars (max 500)"; exit 1; }
 echo "PASS: supercomposer SKILL.md structure"

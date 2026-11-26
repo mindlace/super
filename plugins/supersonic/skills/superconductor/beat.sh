@@ -3,7 +3,7 @@
 # single source the skill quotes. The report reads state and prints facts; it sends nothing
 # and decides nothing the skill does not define here as arithmetic. Stock macOS: sh + perl.
 #
-# Usage (<dir> is the ledger dir, <project>/.superpowers/superconductor/<design-slug>):
+# Usage (<dir> is the ledger dir, the records directory records.sh prints):
 #   beat.sh <dir>                       report: unit, row, transcript, fork, question and timer lines, then "beat:"
 #   beat.sh <dir> seen <unit-slug>      progress seen (a message handled, a restart): rewrite its beat file
 #   beat.sh <dir> asked <unit-slug>     a status ask was sent: record it
@@ -156,13 +156,18 @@ my ($dir, $design, $project, %sec, @order);
 sub load {
   $dir = shift;
   ($design = $dir) =~ s{.*/}{};
-  ($project = $dir) =~ s{/[^/]+/[^/]+/[^/]+$}{};
   open(my $L, "<", "$dir/ledger.md") or die "beat.sh: no ledger.md in $dir\n";
   my $cur;
   while (my $l = <$L>) { chomp $l;
     if ($l =~ /^## (.+)$/) { $cur = $1; push @order, $cur; next }
     push @{ $sec{$cur // "" } }, $l; }
   close $L;
+  # The project is the main checkout of the package worktree the ledger names.
+  my ($pkg) = map { /^Package worktree:\s*(.+?)\s*$/ ? $1 : () } @{ $sec{""} || [] };
+  if (defined $pkg) {
+    my ($g) = run("git", "-C", $pkg, "rev-parse", "--path-format=absolute", "--git-common-dir");
+    ($project = $g // "") =~ s{/\.git/?$}{};
+  }
 }
 my (%unit, @slugs);
 sub units {
@@ -176,6 +181,7 @@ sub status { my ($st) = ($unit{$_[0]} // "") =~ /status: ([a-z]+)/; $st // "-" }
 # The unit's worktree: the Units line's `worktree <path>, start` field, else the convention.
 sub wt { my $u = shift;
   return $1 if ($unit{$u} // "") =~ /\bworktree (\/.+?), start /;
+  return "" unless defined $project && length $project;
   return "$project/.claude/worktrees/$design-$u"; }
 sub head { my ($h) = run("git", "-C", shift, "rev-parse", "HEAD"); $h // "" }
 sub writebeat { my ($u, $h) = @_; mkdir "$dir/assignments";
